@@ -77,7 +77,7 @@ src/
     *.css            # Component styles (scoped with plugin prefix)
 console-extensions.json # Plugin extension declarations
 package.json           # Plugin metadata in consolePlugin section
-tsconfig.json          # TypeScript config (strict: false currently)
+tsconfig.json          # TypeScript config (strict: true)
 webpack.config.ts      # Module federation + build config
 locales/               # i18n translation files
 charts/                # Helm chart for deployment
@@ -104,12 +104,12 @@ integration-tests/     # Cypress e2e tests
 
 ## TypeScript Configuration
 
-Current config has `strict: false` but enforces:
+Current config has `strict: true` and enforces:
 - `noUnusedLocals: true`
 - All files should use `.tsx` extension
 - Target: ES2020
 
-**Modernization opportunity:** When touching files, consider enabling stricter TypeScript checks.
+**Modernization opportunity:** When touching files, consider refining strictness options if needed.
 
 ## Common Development Tasks
 
@@ -177,7 +177,7 @@ helm upgrade -i my-plugin charts/openshift-console-plugin \
 4. **Module federation requires exact module mapping** - `exposedModules` must match `$codeRef` values
 5. **PatternFly CSS variables only** - hex colors break dark mode
 6. **No webpack HMR for extensions** - changes to `console-extensions.json` require restart
-7. **TypeScript not in strict mode** - legacy choice, can be modernized
+7. **TypeScript strict mode enabled** - keep types clean to avoid regressions
 8. **React 17, not 18** - matches console's React version
 
 ## Extension Points
