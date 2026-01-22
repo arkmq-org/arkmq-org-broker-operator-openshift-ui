@@ -187,13 +187,41 @@ best practice is to prefix your CSS classnames with your plugin name to avoid
 conflicts. Please don't disable these rules without understanding how they can
 break console styles!
 
-## Reporting
+## latest
 
-Steps to generate reports
+With all prerequisites in place and the webpack server running:
 
-1. In command prompt, navigate to root folder and execute the command `yarn run cypress-merge`
-2. Then execute command `yarn run cypress-generate`
-The cypress-report.html file is generated and should be in (/integration-tests/screenshots) directory
+1. **Start the Console**: In a second terminal, start the OpenShift console:
+
+   ```bash
+   yarn start-console
+   ```
+
+2. **Run Tests**: In a third terminal, choose one of the following options:
+
+**Interactive Mode with UI** (recommended for development and debugging):
+
+```bash
+KUBEADMIN_PASSWORD=kubeadmin yarn pw:ui
+```
+
+Opens Playwright's UI Mode with a visual timeline, DOM snapshots, network inspection, and step-by-step debugging capabilities.
+
+**Headed Mode** (browser visible, without UI):
+
+```bash
+KUBEADMIN_PASSWORD=kubeadmin yarn pw:headed
+```
+
+Runs tests with a visible browser window but without the interactive debugger.
+
+**Headless Mode** (for CI or quick runs):
+
+```bash
+KUBEADMIN_PASSWORD=kubeadmin yarn pw:test
+```
+
+Runs tests in the terminal without opening a browser window.
 
 ## References
 

@@ -1,0 +1,274 @@
+name: CI
+
+env:
+  IMAGE_NAME: arkmq-org-broker-operator-openshift-ui
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    branches: [main]
+  schedule:
+    - cron: '6 0 * * *'
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: 'Snapshot'
+        required: false
+        default: false
+        type: boolean
+
+# cancels the old active workflow if new workflow is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+
+      # Initializes the CodeQL tools for scanning.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Get cache and install dependencies
+        uses: ./.github/actions/cache-restore
+
+      - name: Extract translations
+        run: yarn i18n && git diff --exit-code locales/en/plugin__activemq-artemis-self-provisioning-plugin.json
+
+      - name: Build project
+        run: yarn run build
+
+      - name: Check for uncommited changes
+        run: git diff --quiet --exit-code
+
+      - name: Set outputs
+        id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Check outputs
+        run: |
+          echo ${{ steps.vars.outputs.sha_short }}
+          echo ${{ steps.vars.outputs.date }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build the image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: dev.latest dev.${{ steps.vars.outputs.date }}.${{ steps.vars.outputs.sha_short }}
+          # If this is a PR, we only build for AMD64. For PRs we only do a sanity check test to ensure Docker builds  work.
+          # If this is not a PR (e.g. a tag or merge commit), also build for ARM64
+          platforms: linux/amd64${{github.event_name!='pull_request' && ',linux/arm64' || ''}}
+          context: .
+          dockerfiles: |
+            ./Dockerfile
+          labels: |
+            quay.expires-after=90d
+            git-sha=$GITHUB_SHA
+
+      - name: Push the dev image to quay.io
+        # Only login if not a PR, as PRs only trigger a Docker build and not a push
+        if: ${{ github.event_name != 'pull_request' }}
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: quay.io/${{ secrets.QUAY_NAMESPACE }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+
+      - name: Set up CRC
+        uses: crc-org/crc-github-action@v1.0.1
+        with:
+          version: 2.54.0
+          pull-secret: ${{ secrets.CRC_PULL_SECRET }}
+          cache: false
+          preset: openshift
+
+      - name: Wait for OLM to be ready
+        run: |
+          echo "Waiting for Operator Lifecycle Manager APIs to become available..."
+          timeout=300
+          interval=10
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            if oc api-resources | grep -q "operators.coreos.com"; then
+              echo "OLM APIs are available."
+              break
+            fi
+            echo "Waiting for OLM APIs..."
+            sleep $interval
+            elapsed=$((elapsed + interval))
+            if [ $elapsed -ge $timeout ]; then
+              echo "::error::Timed out waiting for OLM APIs to become available."
+              oc api-resources
+              exit 1
+            fi
+          done
+
+      - name: Get Kubeadmin Password
+        id: get_password
+        run: |
+          sudo usermod -a -G libvirt $USER
+          creds=$(sudo -su $USER crc start)
+          password=$(echo "$creds" | grep -A 1 "Username: kubeadmin" | grep -oP "(?<=Password: ).*")
+          if [ -z "$password" ]; then
+            echo "::error::Could not extract kubeadmin password from crc start output."
+            exit 1
+          fi
+          echo "password=$password" >> $GITHUB_OUTPUT
+          echo "Kubeadmin password set as step output."
+
+      - name: Install cert-manager
+        run: |
+          oc apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.2/cert-manager.yaml
+          oc wait pod --all --for=condition=Ready --namespace=cert-manager --timeout=30m
+
+      - name: Install trust-manager
+        run: |
+          helm repo add jetstack https://charts.jetstack.io --force-update
+          helm upgrade trust-manager jetstack/trust-manager --install \
+            --namespace cert-manager \
+            --set secretTargets.enabled=true \
+            --set secretTargets.authorizedSecretsAll=true\
+            --wait  \
+            --timeout 30m
+
+      - name: Install ActiveMQ Artemis Broker Operator
+        run: |
+          helm install my-arkmq-org-broker-operator oci://quay.io/arkmq-org/helm-charts/arkmq-org-broker-operator --version 0.0.0-dev.latest
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=arkmq-org-broker-operator -n default --timeout=30m
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start plugin server
+        run: |
+          # Start the plugin development server in the background
+          yarn start &
+
+          # Wait for the plugin server to be ready
+          echo "Waiting for plugin server to start..."
+          curl --retry 300 --retry-connrefused --retry-delay 5 --retry-max-time 600 --head http://localhost:9001 > /dev/null \
+            && echo "Plugin server is up and running." \
+            || (echo "::error::Timed out waiting for the plugin server to start." && exit 1)
+
+      - name: Clean up after infrastructure setup
+        run: |
+          echo "=== Disk space before infrastructure cleanup ==="
+          df -h
+
+          # Clean APT cache (CRC and dependencies downloaded packages here)
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /var/lib/apt/lists/*
+
+          # Clean journal logs accumulated during CRC setup
+          sudo journalctl --vacuum-size=100M
+
+          # Clean temp files
+          sudo rm -rf /tmp/* 2>/dev/null || true
+
+          # Clean npm/yarn cache that might have accumulated
+          npm cache clean --force || true
+          yarn cache clean || true
+
+          # Clean any Docker build cache from operator installations
+          docker system prune -f || true
+
+          # Clean Podman storage (CRC uses Podman internally)
+          sudo podman system prune -f || true
+
+          echo "=== Disk space after infrastructure cleanup ==="
+          df -h
+          echo "=== Ready for test runs ==="
+
+      - name: Run Playwright tests for console version 4.20
+        env:
+          KUBEADMIN_PASSWORD: ${{ steps.get_password.outputs.password }}
+        run: |
+          ./test_utils/prepare_env.sh
+          yarn start-console "4.20" &
+          ./test_utils/wait_console.sh
+          yarn pw:test
+          export CONSOLE_CONTAINER=$(docker ps -aq --filter ancestor=quay.io/openshift/origin-console:4.20)
+          ./test_utils/teardown.sh
+
+      - name: Upload Playwright test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+
+      - name: Upload Playwright reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/

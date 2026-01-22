@@ -18,3 +18,4 @@ objects:
     secret: ${OAUTH_SECRET}
     redirectURIs:
     - ${REDIRECT_URL}
+
