@@ -7,3 +7,4 @@ oc get secrets -n default --field-selector type=kubernetes.io/service-account-to
 oc extract cm/kube-apiserver-server-ca -n openshift-kube-apiserver --confirm
 chmod o+r ca-bundle.crt
 chmod g+r ca-bundle.crt
+
