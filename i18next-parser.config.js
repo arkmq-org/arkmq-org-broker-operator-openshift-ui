@@ -9,7 +9,7 @@ module.exports = {
   locales: ['en'],
   namespaceSeparator: '~',
   reactNamespace: false,
-  defaultNamespace: 'plugin__console-plugin-template',
+  defaultNamespace: 'plugin__arkmq-org-broker-operator-openshift-ui',
   useKeysAsDefaultValue: true,
 
   // see below for more details
