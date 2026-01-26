@@ -47,23 +47,23 @@ This plugin uses webpack module federation to load at runtime into the OpenShift
 - **NO hex colors** - use PatternFly CSS variables (e.g., `var(--pf-v6-global-palette--blue-500)`)
 - **NO naked element selectors** (like `table`, `div`) - prevents overwriting console styles
 - **NO `.pf-` or `.co-` prefixed classes** - these are reserved for PatternFly and console
-- **Prefix all custom classes** with plugin name (e.g., `console-plugin-template__nice`)
+- **Prefix all custom classes** with plugin name (e.g., `plugin__arkmq-org-broker-operator-openshift-ui`)
 
 Don't disable these rules without understanding they protect against layout breakage!
 
 ## Internationalization (i18n)
 
-**Namespace Convention:** `plugin__<plugin-name>` (e.g., `plugin__console-plugin-template`)
+**Namespace Convention:** `plugin__<plugin-name>` (e.g., `plugin__arkmq-org-broker-operator-openshift-ui`)
 
 ### In React Components:
 ```tsx
-const { t } = useTranslation('plugin__console-plugin-template');
+const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
 return <h1>{t('Hello, World!')}</h1>;
 ```
 
 ### In console-extensions.json:
 ```json
-"name": "%plugin__console-plugin-template~My Label%"
+"name": "%plugin__arkmq-org-broker-operator-openshift-ui~My Label%"
 ```
 
 **After adding/changing messages:** Run `yarn i18n` to update locale files in `/locales`
@@ -135,7 +135,7 @@ Current config has `strict: true` and enforces:
   "type": "console.navigation/href",
   "properties": {
     "id": "my-nav-item",
-    "name": "%plugin__console-plugin-template~My Page%",
+    "name": "%plugin__plugin__arkmq-org-broker-operator-openshift-ui~My Page%",
     "href": "/my-page",
     "perspective": "admin",
     "section": "home"
