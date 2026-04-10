@@ -4,3 +4,7 @@
 .devcontainer/dev.env
 playwright-report/
 test-results/
+
+# Prevent compiled files in src (TypeScript project)
+src/**/*.js
+src/**/*.js.map

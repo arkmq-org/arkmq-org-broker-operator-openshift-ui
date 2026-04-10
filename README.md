@@ -170,6 +170,124 @@ namespace. For example:
 Running `yarn i18n` updates the JSON files in the `locales` folder of the
 plugin template when adding or changing messages.
 
+## Certificate Management for BrokerService and BrokerApp
+
+This project includes a certificate management script for setting up the required PKI infrastructure
+to deploy BrokerService and BrokerApp resources.
+
+### Prerequisites
+
+Before using the certificate management script, ensure you have:
+
+- `kubectl` configured and connected to your cluster
+- `cert-manager` installed in your cluster
+- `trust-manager` installed in your cluster (with `secretTargets.enabled=true`)
+- Appropriate permissions to create cluster-wide resources
+- The ArkMQ operator installed in your cluster
+
+#### Installing the ArkMQ Operator
+
+Install the operator using Helm:
+
+```bash
+helm install my-arkmq-org-broker-operator \
+  oci://quay.io/arkmq-org/helm-charts/arkmq-org-broker-operator \
+  --version 0.0.0-dev.latest
+```
+
+#### Installing cert-manager
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
+kubectl wait deployment --for=condition=Available -n cert-manager --timeout=600s \
+  cert-manager cert-manager-cainjector cert-manager-webhook
+```
+
+#### Installing trust-manager
+
+```bash
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm upgrade trust-manager jetstack/trust-manager --install \
+  --namespace cert-manager \
+  --set secretTargets.enabled=true \
+  --set secretTargets.authorizedSecretsAll=true \
+  --wait
+```
+
+### Quick Start
+
+1. **Setup PKI Infrastructure** (one-time setup):
+
+   ```bash
+   yarn chain-of-trust setup
+   ```
+
+   This creates:
+   - Self-signed root ClusterIssuer and CA certificate
+   - CA-signed ClusterIssuer for issuing broker certificates
+   - Trust bundle that distributes the CA to all namespaces
+   - Operator certificate in the operator's namespace
+
+2. **Create BrokerService Certificate**:
+
+   ```bash
+   yarn chain-of-trust create-service-cert --name messaging-service --namespace my-namespace
+   ```
+
+   This creates a certificate with the correct DNS names for the BrokerService.
+
+3. **Create BrokerApp Certificate**:
+
+   ```bash
+   yarn chain-of-trust create-app-cert --name first-app --namespace my-namespace
+   ```
+
+   This creates a certificate for the BrokerApp to authenticate with the service.
+
+4. **Cleanup** (removes all PKI resources):
+
+   ```bash
+   yarn chain-of-trust cleanup
+   ```
+
+### Usage Examples
+
+**Setup with explicit namespace:**
+```bash
+yarn chain-of-trust setup --namespace my-operator-namespace
+```
+
+**Create certificates in different namespaces:**
+```bash
+# Service in namespace X
+yarn chain-of-trust create-service-cert --name messaging-service --namespace service-namespace
+
+# App in namespace Y
+yarn chain-of-trust create-app-cert --name first-app --namespace app-namespace
+```
+
+**Get help:**
+```bash
+yarn chain-of-trust --help
+```
+
+### What Gets Created
+
+The `setup` command creates:
+- `ClusterIssuer/root-issuer` - Self-signed root issuer
+- `Certificate/root-cert` (in cert-manager namespace) - Root CA certificate
+- `ClusterIssuer/broker-ca-issuer` - CA issuer for signing broker certificates
+- `Bundle/activemq-artemis-manager-ca` - Trust bundle distributed to all namespaces
+- `Certificate/activemq-artemis-manager-cert` - Operator certificate
+
+The `create-service-cert` command creates:
+- `Certificate/<service-name>-broker-cert` - Service certificate with proper DNS names
+- `Secret/<service-name>-broker-cert` - Secret containing the certificate
+
+The `create-app-cert` command creates:
+- `Certificate/<app-name>-app-cert` - App certificate
+- `Secret/<app-name>-app-cert` - Secret containing the certificate
+
 ## Linting
 
 This project adds prettier, eslint, and stylelint. Linting can be run with
@@ -187,7 +305,13 @@ best practice is to prefix your CSS classnames with your plugin name to avoid
 conflicts. Please don't disable these rules without understanding how they can
 break console styles!
 
-## latest
+## Testing
+
+### E2E Tests with Playwright
+
+This project includes Playwright E2E tests for UI testing and infrastructure validation.
+
+#### UI Tests
 
 With all prerequisites in place and the webpack server running:
 
@@ -222,6 +346,30 @@ KUBEADMIN_PASSWORD=kubeadmin yarn pw:test
 ```
 
 Runs tests in the terminal without opening a browser window.
+
+#### Certificate Management Tests
+
+The project includes E2E tests for the certificate management workflow:
+
+```bash
+# Run all tests (including certificate management)
+yarn pw:test
+
+# Run only certificate management tests
+yarn pw:test certificate-management
+```
+
+These tests validate:
+- PKI infrastructure setup
+- Certificate creation for BrokerService and BrokerApp
+- Resource deployment and readiness
+- Cleanup functionality
+
+**Note:** Certificate management tests require:
+- cert-manager installed
+- trust-manager installed
+- ArkMQ operator installed
+- Cluster access configured with kubectl
 
 ## References
 

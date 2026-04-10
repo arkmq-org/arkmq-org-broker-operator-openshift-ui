@@ -12,9 +12,7 @@ test.describe('Console login smoke', () => {
 });
 
 test.describe('Navigate to the example page', () => {
-  test('Logs in and navigate to the example page', async ({
-    page,
-  }) => {
+  test('Logs in and navigate to the example page', async ({ page }) => {
     // Login
     await login(page, username, password);
 
@@ -30,4 +28,3 @@ test.describe('Navigate to the example page', () => {
     ).toBeVisible({ timeout: 30000 });
   });
 });
-

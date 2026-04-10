@@ -18,7 +18,8 @@
     "pw:test": "playwright test",
     "pw:ui": "playwright test --ui",
     "pw:headed": "playwright test --headed",
-    "lint": "yarn eslint src integration-tests --fix && stylelint 'src/**/*.css' --allow-empty-input --fix",
+    "lint": "yarn eslint src scripts playwright --fix && stylelint 'src/**/*.css' --allow-empty-input --fix",
+    "chain-of-trust": "node scripts/chain-of-trust.js",
     "webpack": "node -r ts-node/register ./node_modules/.bin/webpack"
   },
   "devDependencies": {

@@ -31,4 +31,3 @@ export async function login(page: Page, username: string, password: string) {
   // Wait for the page to be fully loaded and interactive
   await page.waitForLoadState('networkidle');
 }
-

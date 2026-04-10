@@ -22,3 +22,12 @@ rules:
 settings:
   react:
     version: detect
+overrides:
+  - files:
+      - 'scripts/**/*.js'
+      - 'playwright/**/*.ts'
+    env:
+      node: true
+      es2021: true
+    rules:
+      '@typescript-eslint/no-var-requires': off
