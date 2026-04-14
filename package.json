@@ -20,6 +20,7 @@
     "pw:headed": "playwright test --headed",
     "lint": "yarn eslint src scripts playwright --fix && stylelint 'src/**/*.css' --allow-empty-input --fix",
     "chain-of-trust": "node scripts/chain-of-trust.js",
+    "prometheus-config": "node scripts/prometheus-config.js",
     "webpack": "node -r ts-node/register ./node_modules/.bin/webpack"
   },
   "devDependencies": {

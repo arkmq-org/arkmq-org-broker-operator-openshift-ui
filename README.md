@@ -305,6 +305,76 @@ best practice is to prefix your CSS classnames with your plugin name to avoid
 conflicts. Please don't disable these rules without understanding how they can
 break console styles!
 
+## Prometheus Monitoring
+
+This project includes a script to manage Prometheus user workload monitoring in OpenShift and other Kubernetes platforms.
+
+### Commands
+
+**Enable user workload monitoring:**
+
+```bash
+yarn prometheus-config enable
+```
+
+Applies the `cluster-monitoring-config` ConfigMap to enable user workload monitoring.
+
+**Verify monitoring setup:**
+
+```bash
+yarn prometheus-config verify
+```
+
+Waits for the `openshift-user-workload-monitoring` namespace to exist and for all monitoring pods to be ready.
+
+**Disable monitoring (cleanup):**
+
+```bash
+yarn prometheus-config disable
+```
+
+Removes the `cluster-monitoring-config` ConfigMap to disable user workload monitoring.
+
+### Configuration for Non-OpenShift Platforms
+
+The script defaults to OpenShift namespace names, but can be customized using environment variables:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `MONITORING_NAMESPACE` | `openshift-user-workload-monitoring` | Namespace where user workload monitoring pods run |
+| `CLUSTER_MONITORING_NAMESPACE` | `openshift-monitoring` | Namespace where cluster monitoring config is stored |
+| `MONITORING_CONFIG` | `cluster-monitoring-config` | Name of the ConfigMap that enables monitoring |
+
+**Example for custom platforms:**
+
+```bash
+MONITORING_NAMESPACE=monitoring \
+CLUSTER_MONITORING_NAMESPACE=kube-monitoring \
+MONITORING_CONFIG=monitoring-config \
+yarn prometheus-config enable
+```
+
+### Manual Configuration
+
+The script applies this ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+```
+
+And verifies by checking:
+
+```bash
+kubectl -n openshift-user-workload-monitoring get pods
+```
+
 ## Testing
 
 ### E2E Tests with Playwright
@@ -346,6 +416,22 @@ KUBEADMIN_PASSWORD=kubeadmin yarn pw:test
 ```
 
 Runs tests in the terminal without opening a browser window.
+
+#### Monitoring Tests
+
+The project includes Playwright tests for monitoring (`playwright/e2e/monitoring.spec.ts`). These tests:
+1. Enable user workload monitoring via `yarn prometheus-config enable`
+2. Verify monitoring is ready via `yarn prometheus-config verify`
+3. Verify ServiceMonitor CRD is available (scaffolding for future plugin metrics tests)
+4. Clean up by running `yarn prometheus-config disable`
+
+The tests are **skipped by default** (including in CI) to avoid requiring cluster admin permissions and additional resources.
+
+To run the monitoring infrastructure smoke test locally:
+
+```bash
+TEST_MONITORING=true KUBEADMIN_PASSWORD=kubeadmin yarn pw:test monitoring
+```
 
 #### Certificate Management Tests
 
