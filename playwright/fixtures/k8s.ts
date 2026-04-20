@@ -35,6 +35,10 @@ export function yarn(args: string, options: { timeout?: number } = {}): string {
   return result.trim();
 }
 
+export async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Wait for a resource to have a specific condition
  */
@@ -82,7 +86,7 @@ export async function waitForCondition(
     }
 
     // Wait 5 seconds before checking again
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await sleep(5000);
   }
 
   throw new Error(
@@ -124,7 +128,7 @@ export async function waitForPod(
       // Pod might not exist yet
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await sleep(5000);
   }
 
   throw new Error(`Timeout waiting for pod ${podName} in namespace ${namespace}`);
@@ -179,4 +183,45 @@ export function secretExists(secretName: string, namespace: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Wait for a Kubernetes Job to complete successfully
+ */
+export async function waitForJob(
+  jobName: string,
+  namespace: string,
+  timeoutMs = 300000,
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const conditions = kubectl(
+        `get job ${jobName} -n ${namespace} -o jsonpath='{.status.conditions}'`,
+        { ignoreError: true },
+      );
+
+      if (conditions) {
+        const conditionsArray = JSON.parse(conditions) as Array<{ type: string; status: string }>;
+
+        if (conditionsArray.find((c) => c.type === 'Failed' && c.status === 'True')) {
+          throw new Error(`Job ${jobName} in namespace ${namespace} failed`);
+        }
+
+        if (conditionsArray.find((c) => c.type === 'Complete' && c.status === 'True')) {
+          console.log(`✓ Job ${jobName} completed successfully`);
+          return;
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith(`Job ${jobName}`)) throw error;
+      // JSON parse error or missing resource – continue waiting
+    }
+
+    console.log(`  Job ${jobName} still running...`);
+    await sleep(5000);
+  }
+
+  throw new Error(`Timeout waiting for job ${jobName} in namespace ${namespace}`);
 }
