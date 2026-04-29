@@ -1,4 +1,12 @@
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
+
+/**
+ * Strip ANSI color codes and control characters from a string
+ */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1B\][^\x07]*\x07/g, '');
+}
 
 /**
  * Execute a kubectl command
@@ -32,7 +40,16 @@ export function yarn(args: string, options: { timeout?: number } = {}): string {
     timeout: options.timeout || 120000,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  return result.trim();
+  // Strip ANSI color codes and control characters
+  let cleaned = stripAnsi(result.trim());
+
+  // Yarn outputs "$ command" on the first line, skip it
+  const lines = cleaned.split('\n');
+  if (lines.length > 0 && lines[0].startsWith('$')) {
+    cleaned = lines.slice(1).join('\n');
+  }
+
+  return cleaned.trim();
 }
 
 export async function sleep(ms: number): Promise<void> {
@@ -224,4 +241,57 @@ export async function waitForJob(
   }
 
   throw new Error(`Timeout waiting for job ${jobName} in namespace ${namespace}`);
+}
+
+/**
+ * Port-forward to a pod and return cleanup function
+ */
+export function startPortForward(
+  podName: string,
+  namespace: string,
+  localPort: number,
+  remotePort: number,
+): { cleanup: () => void; baseUrl: string } {
+  const proc = spawn('kubectl', [
+    'port-forward',
+    '-n',
+    namespace,
+    podName,
+    `${localPort}:${remotePort}`,
+  ]);
+
+  // Give port-forward time to establish
+  execSync('sleep 2');
+
+  const cleanup = () => {
+    proc.kill();
+  };
+
+  return {
+    cleanup,
+    baseUrl: `http://localhost:${localPort}`,
+  };
+}
+
+/**
+ * Query Prometheus API
+ */
+export function queryPrometheus(baseUrl: string, query: string): Record<string, unknown> {
+  const encodedQuery = encodeURIComponent(query);
+  const result = execSync(`curl -s "${baseUrl}/api/v1/query?query=${encodedQuery}"`, {
+    encoding: 'utf-8',
+    timeout: 30000,
+  });
+  return JSON.parse(result.trim()) as Record<string, unknown>;
+}
+
+/**
+ * Get Prometheus targets
+ */
+export function getPrometheusTargets(baseUrl: string): Record<string, unknown> {
+  const result = execSync(`curl -s "${baseUrl}/api/v1/targets"`, {
+    encoding: 'utf-8',
+    timeout: 30000,
+  });
+  return JSON.parse(result.trim()) as Record<string, unknown>;
 }
