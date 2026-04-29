@@ -354,6 +354,49 @@ spec:
 }
 
 /**
+ * Creates a certificate for Prometheus to scrape broker metrics with mTLS
+ *
+ * @param {string} namespace - Namespace where the Prometheus certificate should be created
+ * @param {string} caIssuerName - Name of the CA issuer to use for signing
+ * @returns {Promise<object>} Resource names that were created
+ */
+async function createPrometheusCertificate(namespace, caIssuerName) {
+  console.log(
+    `📦 Creating certificate for Prometheus metrics scraping in namespace ${namespace}...`,
+  );
+
+  // Wait for the CA secret to appear in the namespace (distributed by trust-manager)
+  const bundleName = 'activemq-artemis-manager-ca';
+  console.log(`⏳ Waiting for CA secret to be distributed to namespace ${namespace}...`);
+  await waitForSecret(namespace, bundleName);
+
+  const certName = 'prometheus-cert';
+
+  const certYaml = `
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ${certName}
+  namespace: ${namespace}
+spec:
+  secretName: ${certName}
+  commonName: prometheus
+  issuerRef:
+    name: ${caIssuerName}
+    kind: ClusterIssuer
+`;
+  await applyYaml(certYaml);
+  await waitForCertificate(namespace, certName);
+
+  console.log(`✅ Certificate ${certName} created successfully for Prometheus`);
+
+  return {
+    certName: certName,
+    secretName: certName,
+  };
+}
+
+/**
  * Creates the complete PKI infrastructure (cluster infra + trust bundle + operator cert)
  * Note: The operator cert is always created in the 'default' namespace where the operator
  * is hardcoded to look for it (see DefaultOperatorCertSecretName in operator code)
@@ -414,6 +457,7 @@ module.exports = {
   createOperatorCert,
   createServiceCertificate,
   createAppCertificate,
+  createPrometheusCertificate,
   setupCompletePKI,
   detectOperatorNamespace,
   execAsync,
