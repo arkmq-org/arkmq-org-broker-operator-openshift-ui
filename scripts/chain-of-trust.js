@@ -9,12 +9,14 @@
  *   yarn chain-of-trust setup [options]
  *   yarn chain-of-trust create-service-cert --name <service-name> --namespace <namespace>
  *   yarn chain-of-trust create-app-cert --name <app-name> --namespace <namespace>
+ *   yarn chain-of-trust create-prometheus-cert --namespace <namespace>
  *   yarn chain-of-trust cleanup [options]
  *
  * Commands:
  *   setup                       Create PKI infrastructure (root CA, issuers, trust bundle, operator cert)
  *   create-service-cert         Create certificate for a BrokerService
  *   create-app-cert             Create certificate for a BrokerApp
+ *   create-prometheus-cert      Create certificate for Prometheus metrics scraping with mTLS
  *   cleanup                     Remove PKI infrastructure
  *
  * Options:
@@ -23,7 +25,12 @@
  *   --help                      Show this help message
  */
 
-const { setupCompletePKI, createServiceCertificate, createAppCertificate } = require('./setup-pki');
+const {
+  setupCompletePKI,
+  createServiceCertificate,
+  createAppCertificate,
+  createPrometheusCertificate,
+} = require('./setup-pki');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 
@@ -46,16 +53,18 @@ Usage:
   yarn chain-of-trust setup
   yarn chain-of-trust create-service-cert --name <service-name> --namespace <namespace>
   yarn chain-of-trust create-app-cert --name <app-name> --namespace <namespace>
+  yarn chain-of-trust create-prometheus-cert --namespace <namespace>
   yarn chain-of-trust cleanup
 
 Commands:
   setup                       Create PKI infrastructure (root CA, issuers, trust bundle, operator cert)
   create-service-cert         Create certificate for a BrokerService
   create-app-cert             Create certificate for a BrokerApp
+  create-prometheus-cert      Create certificate for Prometheus metrics scraping with mTLS
   cleanup                     Remove PKI infrastructure
 
 Options:
-  --namespace <name>          Target namespace (required for create-service-cert and create-app-cert)
+  --namespace <name>          Target namespace (required for create-service-cert, create-app-cert, create-prometheus-cert)
   --name <name>               Resource name (required for create-service-cert and create-app-cert)
   --help                      Show this help message
 
@@ -68,6 +77,9 @@ Examples:
 
   # Create a certificate for a BrokerApp
   yarn chain-of-trust create-app-cert --name first-app --namespace app-namespace
+
+  # Create certificate for Prometheus to scrape broker metrics with mTLS
+  yarn chain-of-trust create-prometheus-cert --namespace my-namespace
 
   # Cleanup all PKI resources
   yarn chain-of-trust cleanup
@@ -91,7 +103,13 @@ for (let i = 1; i < args.length; i++) {
   }
 }
 
-const validCommands = ['setup', 'create-service-cert', 'create-app-cert', 'cleanup'];
+const validCommands = [
+  'setup',
+  'create-service-cert',
+  'create-app-cert',
+  'create-prometheus-cert',
+  'cleanup',
+];
 if (!command || !validCommands.includes(command)) {
   console.error(`Error: Please specify a valid command (${validCommands.join(', ')})`);
   showHelp();
@@ -240,6 +258,42 @@ async function createAppCert() {
 }
 
 /**
+ * Create Prometheus Certificate function
+ */
+async function createPrometheusCert() {
+  if (!namespace) {
+    console.error('\n❌ Error: --namespace is required for create-prometheus-cert');
+    showHelp();
+  }
+
+  console.log(
+    `\n📜 Creating certificate for Prometheus metrics scraping in namespace ${namespace}\n`,
+  );
+
+  try {
+    const result = await createPrometheusCertificate(namespace, resourceNames.caIssuer);
+
+    console.log('\n✅ Prometheus Certificate Created!\n');
+    console.log(`Created resources:`);
+    console.log(`  ✓ Certificate: ${result.certName}`);
+    console.log(`  ✓ Secret: ${result.secretName}`);
+    console.log(
+      `\nYou can now configure Prometheus to scrape broker metrics with mTLS in namespace ${namespace}`,
+    );
+    console.log(
+      `Use "yarn prometheus-config create-servicemonitor" to generate ServiceMonitor YAML\n`,
+    );
+  } catch (error) {
+    console.error('\n❌ Error creating Prometheus certificate:', error.message);
+    console.error('\nMake sure:');
+    console.error('  - PKI infrastructure is set up (run "yarn chain-of-trust setup" first)');
+    console.error('  - The namespace exists');
+    console.error('  - kubectl is configured correctly\n');
+    process.exit(1);
+  }
+}
+
+/**
  * Cleanup function - removes PKI infrastructure
  */
 async function cleanup() {
@@ -272,6 +326,11 @@ async function cleanup() {
     await deleteCertificatePattern('app-cert');
     await deleteSecretPattern('app-cert');
 
+    // Delete all Prometheus certificates
+    console.log('  Deleting all Prometheus certificates...');
+    await deleteCertificatePattern('prometheus-cert');
+    await deleteSecretPattern('prometheus-cert');
+
     // Delete ClusterIssuers
     console.log('  Deleting ClusterIssuers...');
     await execAsync(
@@ -295,6 +354,7 @@ async function cleanup() {
     );
     console.log(`  ✓ All BrokerService certificates and secrets (pattern: *broker-cert*)`);
     console.log(`  ✓ All BrokerApp certificates and secrets (pattern: *app-cert*)`);
+    console.log(`  ✓ All Prometheus certificates and secrets (pattern: *prometheus-cert*)`);
     console.log(`  ✓ ClusterIssuers: ${resourceNames.rootIssuer}, ${resourceNames.caIssuer}`);
     console.log(`  ✓ Certificate: ${resourceNames.rootCert} (from cert-manager)`);
     console.log(`  ✓ Secret: ${resourceNames.rootSecret} (from cert-manager)\n`);
@@ -312,6 +372,8 @@ if (command === 'setup') {
   createServiceCert();
 } else if (command === 'create-app-cert') {
   createAppCert();
+} else if (command === 'create-prometheus-cert') {
+  createPrometheusCert();
 } else if (command === 'cleanup') {
   cleanup();
 }

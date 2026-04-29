@@ -307,9 +307,9 @@ break console styles!
 
 ## Prometheus Monitoring
 
-This project includes a script to manage Prometheus user workload monitoring in OpenShift and other Kubernetes platforms.
+This project includes scripts to manage Prometheus user workload monitoring and secure metrics scraping with mTLS authentication.
 
-### Commands
+### Enabling User Workload Monitoring
 
 **Enable user workload monitoring:**
 
@@ -334,6 +334,46 @@ yarn prometheus-config disable
 ```
 
 Removes the `cluster-monitoring-config` ConfigMap to disable user workload monitoring.
+
+### Secure Metrics Scraping with mTLS
+
+For locked-down brokers that require mutual TLS authentication, you can set up secure metrics scraping:
+
+**1. Create Prometheus Certificate:**
+
+First, create a Prometheus client certificate using the PKI infrastructure:
+
+```bash
+yarn chain-of-trust create-prometheus-cert --namespace my-namespace
+```
+
+This creates a `prometheus-cert` secret with CN=prometheus that Prometheus will use to authenticate to the broker's metrics endpoint.
+
+**2. Generate ServiceMonitor YAML:**
+
+Generate the ServiceMonitor configuration for mTLS metrics scraping:
+
+```bash
+yarn prometheus-config create-servicemonitor \
+  --broker-name my-broker \
+  --namespace my-namespace
+```
+
+**3. Apply the ServiceMonitor:**
+
+Save the output to a file or pipe directly to kubectl:
+
+```bash
+yarn prometheus-config create-servicemonitor \
+  --broker-name my-broker \
+  --namespace my-namespace | kubectl apply -f -
+```
+
+The ServiceMonitor will configure Prometheus to:
+- Scrape metrics over HTTPS
+- Authenticate using the Prometheus client certificate
+- Validate the broker's server certificate using the CA bundle
+- Target the broker's metrics endpoint (port 8888)
 
 ### Configuration for Non-OpenShift Platforms
 
