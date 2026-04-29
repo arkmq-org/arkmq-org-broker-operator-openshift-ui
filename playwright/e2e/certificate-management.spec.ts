@@ -76,7 +76,7 @@ test.describe('Certificate Management E2E', () => {
     // Step 4: Deploy BrokerService
     console.log('\n📦 Step 4: Deploying BrokerService...');
     const brokerServiceYaml = `
-apiVersion: arkmq.org/v1beta2
+apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerService
 metadata:
   name: ${SERVICE_NAME}
@@ -133,7 +133,7 @@ spec:
     // Step 6: Deploy BrokerApp
     console.log('\n📦 Step 6: Deploying BrokerApp...');
     const brokerAppYaml = `
-apiVersion: arkmq.org/v1beta2
+apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerApp
 metadata:
   name: ${APP_NAME}
