@@ -8,6 +8,25 @@
     }
   },
   {
+    "type": "console.page/route",
+    "properties": {
+      "exact": true,
+      "path": "/k8s/ns/:ns/brokerapps/~new",
+      "component": { "$codeRef": "CreateBrokerAppPage" }
+    }
+  },
+  {
+    "type": "console.resource/create",
+    "properties": {
+      "model": {
+        "group": "broker.arkmq.org",
+        "version": "v1beta2",
+        "kind": "BrokerApp"
+      },
+      "component": { "$codeRef": "CreateBrokerAppPage" }
+    }
+  },
+  {
     "type": "console.navigation/href",
     "properties": {
       "id": "example",
@@ -15,6 +34,21 @@
       "href": "/example",
       "perspective": "admin",
       "section": "home"
+    }
+  },
+  {
+    "type": "console.navigation/resource-ns",
+    "properties": {
+      "id": "brokerApps",
+      "name": "%plugin__arkmq-org-broker-operator-openshift-ui~BrokerApps%",
+      "model": {
+        "group": "broker.arkmq.org",
+        "version": "v1beta2",
+        "kind": "BrokerApp"
+      },
+      "insertAfter": "statefulsets",
+      "perspective": "admin",
+      "section": "workloads"
     }
   }
 ]
