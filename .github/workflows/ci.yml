@@ -69,6 +69,9 @@ jobs:
       - name: Get cache and install dependencies
         uses: ./.github/actions/cache-restore
 
+      - name: Lint
+        run: yarn lint && git diff --exit-code
+
       - name: Extract translations
         run: yarn i18n && git diff --exit-code locales/en/plugin__arkmq-org-broker-operator-openshift-ui.json
 
