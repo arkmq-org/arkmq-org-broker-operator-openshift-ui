@@ -1,4 +1,3 @@
-import * as React from 'react';
 import Helmet from 'react-helmet';
 import { useTranslation } from 'react-i18next';
 import { Content, PageSection, Title } from '@patternfly/react-core';

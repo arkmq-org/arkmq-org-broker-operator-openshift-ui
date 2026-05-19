@@ -1,0 +1,6 @@
+.plugin__arkmq-org-broker-operator-openshift-ui-yaml-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 400px;
+}
