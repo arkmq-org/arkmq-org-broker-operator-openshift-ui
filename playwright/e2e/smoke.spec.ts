@@ -22,9 +22,9 @@ test.describe('Navigate to the example page', () => {
     });
     await page.waitForLoadState('domcontentloaded');
 
-    // Ensure Brokers page loaded - wait for heading
+    // Ensure Example page loaded - wait for heading
     await expect(
-      page.locator('h1, [data-test="resource-title"]', { hasText: /Hello, Plugin!/i }),
+      page.locator('h1, [data-test="resource-title"]').filter({ hasText: /Hello, Plugin!/i }),
     ).toBeVisible({ timeout: 30000 });
   });
 });

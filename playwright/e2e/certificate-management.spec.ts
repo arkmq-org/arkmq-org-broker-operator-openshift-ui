@@ -176,7 +176,7 @@ spec:
     console.log('\n📦 Step 8: Verifying all certificates and secrets...');
     const secrets = kubectl(`get secrets -n ${TEST_NAMESPACE} -o json`);
     const secretsJson = JSON.parse(secrets) as {
-      items: Array<{ metadata: { name: string } }>;
+      items: { metadata: { name: string } }[];
     };
     const secretNames = secretsJson.items.map((s) => s.metadata.name);
 

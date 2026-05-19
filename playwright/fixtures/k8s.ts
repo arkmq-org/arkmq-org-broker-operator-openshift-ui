@@ -77,11 +77,11 @@ export async function waitForCondition(
       );
 
       if (conditions) {
-        const conditionsArray = JSON.parse(conditions) as Array<{
+        const conditionsArray = JSON.parse(conditions) as {
           type: string;
           status: string;
           reason?: string;
-        }>;
+        }[];
         const condition = conditionsArray.find((c) => c.type === conditionType);
 
         if (condition && condition.status === expectedStatus) {
@@ -220,7 +220,7 @@ export async function waitForJob(
       );
 
       if (conditions) {
-        const conditionsArray = JSON.parse(conditions) as Array<{ type: string; status: string }>;
+        const conditionsArray = JSON.parse(conditions) as { type: string; status: string }[];
 
         if (conditionsArray.find((c) => c.type === 'Failed' && c.status === 'True')) {
           throw new Error(`Job ${jobName} in namespace ${namespace} failed`);

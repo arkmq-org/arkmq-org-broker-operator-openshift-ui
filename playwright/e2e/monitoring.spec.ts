@@ -29,10 +29,10 @@ interface PrometheusTargetsResponse {
 interface PrometheusQueryResponse {
   status: string;
   data?: {
-    result: Array<{
+    result: {
       metric: Record<string, string>;
       value: [number, string];
-    }>;
+    }[];
   };
   error?: string;
 }
