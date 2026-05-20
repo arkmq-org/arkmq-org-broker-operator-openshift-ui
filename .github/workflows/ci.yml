@@ -251,12 +251,12 @@ jobs:
           df -h
           echo "=== Ready for test runs ==="
 
-      - name: Run Playwright tests for console version 4.20
+      - name: Run Playwright tests for console version 4.22
         env:
           KUBEADMIN_PASSWORD: ${{ steps.get_password.outputs.password }}
         run: |
           ./test_utils/prepare_env.sh
-          yarn start-console "4.20" &
+          yarn start-console "4.22" &
           ./test_utils/wait_console.sh
           yarn pw:test
           export CONSOLE_CONTAINER=$(docker ps -aq --filter ancestor=quay.io/openshift/origin-console:4.20)

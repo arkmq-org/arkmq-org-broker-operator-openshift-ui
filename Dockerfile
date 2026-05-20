@@ -1,10 +1,10 @@
-FROM registry.access.redhat.com/ubi9/nodejs-18:latest AS build
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest AS build
 USER root
 RUN command -v yarn || npm i -g yarn
 
 ADD . /usr/src/app
 WORKDIR /usr/src/app
-RUN yarn install && yarn build
+RUN yarn install --network-timeout 600000 && yarn build
 
 FROM registry.access.redhat.com/ubi9/nginx-120:latest
 
