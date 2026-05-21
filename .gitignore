@@ -5,6 +5,11 @@
 playwright-report/
 test-results/
 
+# Sensitive local files
+ca.crt
+ca-bundle.crt
+console-client-secret
+
 # Prevent compiled files in src (TypeScript project)
 src/**/*.js
 src/**/*.js.map

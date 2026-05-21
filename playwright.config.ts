@@ -7,7 +7,7 @@ export default defineConfig({
   retries: 1,
   workers: 1,
   reporter: 'list',
-  timeout: 480000, // 8 minutes for broker startup
+  timeout: 720000, // 12 minutes — must exceed the longest waitForCondition call (600s)
   use: {
     baseURL: 'http://localhost:9000',
     trace: 'on-first-retry',

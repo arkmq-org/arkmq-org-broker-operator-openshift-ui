@@ -30,6 +30,8 @@
     "@patternfly/react-icons": "^6.2.2",
     "@patternfly/react-table": "^6.2.2",
     "@playwright/test": "^1.48.0",
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.0",
     "@types/node": "^18.0.0",
     "@types/react": "^17.0.37",
     "@types/react-helmet": "^6.1.4",
@@ -71,7 +73,8 @@
     "displayName": "ArkMQ Broker Operator OpenShift UI",
     "description": "OpenShift Console plugin UI for ArkMQ Broker Operator.",
     "exposedModules": {
-      "ExamplePage": "./components/ExamplePage"
+      "ExamplePage": "./components/ExamplePage",
+      "CreateBrokerAppPage": "./components/brokerapps/CreateBrokerAppPage"
     },
     "dependencies": {
       "@console/pluginAPI": "*"

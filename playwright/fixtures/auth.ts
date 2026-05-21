@@ -28,6 +28,7 @@ export async function login(page: Page, username: string, password: string) {
   // Wait for redirect back to localhost
   await page.waitForURL('http://localhost:9000/**', { timeout: 30000 });
 
-  // Wait for the page to be fully loaded and interactive
-  await page.waitForLoadState('networkidle');
+  // Wait for the console nav to be visible (networkidle never fires because
+  // the console keeps open WebSocket/long-poll connections to the API server)
+  await page.waitForSelector('nav', { timeout: 60000 });
 }
