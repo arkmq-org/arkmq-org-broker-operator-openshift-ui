@@ -7,7 +7,7 @@ export default defineConfig({
   retries: 1,
   workers: 1,
   reporter: 'list',
-  timeout: 2100000, // 35 minutes — must exceed the longest waitForPod/waitForCondition call (1800s)
+  timeout: 480000, // 8 minutes — default per-test timeout; slow tests use test.setTimeout()
   use: {
     baseURL: 'http://localhost:9000',
     trace: 'on-first-retry',

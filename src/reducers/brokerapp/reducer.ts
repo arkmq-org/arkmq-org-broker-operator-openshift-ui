@@ -199,7 +199,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
   cr: {
     apiVersion: 'broker.arkmq.org/v1beta2',
     kind: 'BrokerApp',
-    metadata: { name: '', namespace },
+    metadata: { name: 'my-messaging-app', namespace },
     spec: {},
   },
   matchLabels: [{ id: String(Date.now()), key: '', value: '' }],

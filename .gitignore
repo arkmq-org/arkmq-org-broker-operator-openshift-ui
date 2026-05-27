@@ -4,6 +4,7 @@
 .devcontainer/dev.env
 playwright-report/
 test-results/
+coverage/
 
 # Sensitive local files
 ca.crt

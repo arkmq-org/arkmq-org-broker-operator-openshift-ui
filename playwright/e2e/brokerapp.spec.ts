@@ -54,7 +54,9 @@ test.describe('BrokerApp lifecycle', () => {
   // ── Test: Create app with matching labels → verify it binds to correct service ──
 
   test('matching labels - binds to correct BrokerService', async () => {
-    // 1. Deploy a BrokerService with a specific label
+    // waitForPod and waitForCondition can each take up to 30 min on a cold CI cluster,
+    // so this test needs its own timeout well above the global 8-min default.
+    test.setTimeout(3_600_000); // 60 minutes
     const brokerServiceYaml = `
 apiVersion: ${BROKERSERVICE_API}
 kind: BrokerService
