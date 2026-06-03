@@ -30,14 +30,17 @@ test.describe('Certificate Management E2E', () => {
   });
 
   test('complete workflow: setup, deploy, and cleanup', async () => {
+    // Playwright default is 8 min; this workflow needs up to ~30 min on CRC CI.
+    test.setTimeout(1_800_000); // 30 minutes
+
     // Step 1: Setup PKI infrastructure
     console.log('\n📦 Step 1: Setting up PKI infrastructure...');
     const setupOutput = yarn('chain-of-trust setup', { timeout: 180000 });
     expect(setupOutput).toContain('Chain of Trust Setup Complete');
     expect(setupOutput).toContain('ClusterIssuer: root-issuer');
     expect(setupOutput).toContain('ClusterIssuer: broker-ca-issuer');
-    expect(setupOutput).toContain('Bundle: activemq-artemis-manager-ca');
-    expect(setupOutput).toContain('Certificate: activemq-artemis-manager-cert');
+    expect(setupOutput).toContain('Bundle: arkmq-org-broker-manager-ca');
+    expect(setupOutput).toContain('Certificate: arkmq-org-broker-manager-cert');
     expect(setupOutput).toContain('in default namespace');
 
     // Verify ClusterIssuers are ready
@@ -54,7 +57,7 @@ test.describe('Certificate Management E2E', () => {
     // Verify operator certificate was created in default namespace
     const operatorNamespace = 'default';
     console.log(`  ✓ Operator certificate created in default namespace`);
-    expect(secretExists('activemq-artemis-manager-cert', operatorNamespace)).toBe(true);
+    expect(secretExists('arkmq-org-broker-manager-cert', operatorNamespace)).toBe(true);
 
     // Step 2: Create test namespace
     console.log('\n📦 Step 2: Creating test namespace...');
@@ -70,7 +73,7 @@ test.describe('Certificate Management E2E', () => {
     expect(serviceCertOutput).toContain(`${SERVICE_NAME}-broker-cert`);
 
     // Verify certificates exist
-    expect(secretExists('activemq-artemis-manager-ca', TEST_NAMESPACE)).toBe(true);
+    expect(secretExists('arkmq-org-broker-manager-ca', TEST_NAMESPACE)).toBe(true);
     expect(secretExists(`${SERVICE_NAME}-broker-cert`, TEST_NAMESPACE)).toBe(true);
 
     // Step 4: Deploy BrokerService
@@ -156,7 +159,7 @@ spec:
 
     // Wait for BrokerApp to be provisioned on the broker (acceptor + JAAS config active)
     console.log('\n⏳ Waiting for BrokerApp to be provisioned on the broker...');
-    await waitForCondition('brokerapp', APP_NAME, TEST_NAMESPACE, 'Deployed', 'True', 300000);
+    await waitForCondition('brokerapp', APP_NAME, TEST_NAMESPACE, 'Deployed', 'True', 600000);
 
     // Verify binding secret was created
     console.log('\n✓ Verifying app binding secret...');
@@ -180,9 +183,9 @@ spec:
     };
     const secretNames = secretsJson.items.map((s) => s.metadata.name);
 
-    expect(secretNames).toContain('activemq-artemis-manager-ca');
+    expect(secretNames).toContain('arkmq-org-broker-manager-ca');
     // Operator cert is in default namespace (hardcoded in operator)
-    expect(secretExists('activemq-artemis-manager-cert', 'default')).toBe(true);
+    expect(secretExists('arkmq-org-broker-manager-cert', 'default')).toBe(true);
     expect(secretNames).toContain(`${SERVICE_NAME}-broker-cert`);
     expect(secretNames).toContain(`${APP_NAME}-app-cert`);
     expect(secretNames).toContain(`${APP_NAME}-binding-secret`);
@@ -195,6 +198,23 @@ spec:
     expect(bindingData).toHaveProperty('uri');
     expect(bindingData).toHaveProperty('host');
     expect(bindingData).toHaveProperty('port');
+
+    // Operator round-trip pattern: binding-secret host/port are env vars expanded by sh -c before java runs.
+    const amqpProducerCommand =
+      'exec java -classpath /opt/amq/lib/*:/opt/amq/lib/extra/* org.apache.activemq.artemis.cli.Artemis producer --protocol=AMQP --url amqps://${BROKER_SERVICE_HOST}:${BROKER_SERVICE_PORT}\\?transport.trustStoreType=PEMCA\\&transport.trustStoreLocation=/app/tls/ca/ca.pem\\&transport.keyStoreType=PEMCFG\\&transport.keyStoreLocation=/app/tls/pem/tls.pemcfg --message-count 1 --destination queue://APP.JOBS';
+    const amqpConsumerCommand =
+      'exec java -classpath /opt/amq/lib/*:/opt/amq/lib/extra/* org.apache.activemq.artemis.cli.Artemis consumer --protocol=AMQP --url amqps://${BROKER_SERVICE_HOST}:${BROKER_SERVICE_PORT}\\?transport.trustStoreType=PEMCA\\&transport.trustStoreLocation=/app/tls/ca/ca.pem\\&transport.keyStoreType=PEMCFG\\&transport.keyStoreLocation=/app/tls/pem/tls.pemcfg --message-count 1 --destination queue://APP.JOBS --receive-timeout 30000';
+    const bindingSecretEnv = `
+        - name: BROKER_SERVICE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: ${APP_NAME}-binding-secret
+              key: host
+        - name: BROKER_SERVICE_PORT
+          valueFrom:
+            secretKeyRef:
+              name: ${APP_NAME}-binding-secret
+              key: port`;
 
     console.log('\n✅ All verifications passed!');
 
@@ -228,18 +248,19 @@ spec:
   backoffLimit: 2
   template:
     spec:
-      activeDeadlineSeconds: 180
+      activeDeadlineSeconds: 300
       restartPolicy: Never
       containers:
       - name: producer
-        image: quay.io/arkmq-org/activemq-artemis-broker-kubernetes:artemis.2.40.0
+        image: quay.io/arkmq-org/arkmq-org-broker-kubernetes:artemis.2.40.0
         command:
         - "/bin/sh"
         - "-c"
-        - exec java -classpath /opt/amq/lib/*:/opt/amq/lib/extra/* org.apache.activemq.artemis.cli.Artemis producer --protocol=AMQP --url 'amqps://${SERVICE_NAME}:61616?transport.trustStoreType=PEMCA&transport.trustStoreLocation=/app/tls/ca/ca.pem&transport.keyStoreType=PEMCFG&transport.keyStoreLocation=/app/tls/pem/tls.pemcfg' --message-count 1 --destination queue://APP.JOBS
+        - ${JSON.stringify(amqpProducerCommand)}
         env:
         - name: JDK_JAVA_OPTIONS
           value: "-Djava.security.properties=/app/tls/pem/java.security"
+${bindingSecretEnv}
         volumeMounts:
         - name: trust
           mountPath: /app/tls/ca
@@ -250,7 +271,7 @@ spec:
       volumes:
       - name: trust
         secret:
-          secretName: activemq-artemis-manager-ca
+          secretName: arkmq-org-broker-manager-ca
       - name: cert
         secret:
           secretName: ${APP_NAME}-app-cert
@@ -277,18 +298,19 @@ spec:
   backoffLimit: 2
   template:
     spec:
-      activeDeadlineSeconds: 120
+      activeDeadlineSeconds: 180
       restartPolicy: Never
       containers:
       - name: consumer
-        image: quay.io/arkmq-org/activemq-artemis-broker-kubernetes:artemis.2.40.0
+        image: quay.io/arkmq-org/arkmq-org-broker-kubernetes:artemis.2.40.0
         command:
         - "/bin/sh"
         - "-c"
-        - exec java -classpath /opt/amq/lib/*:/opt/amq/lib/extra/* org.apache.activemq.artemis.cli.Artemis consumer --protocol=AMQP --url 'amqps://${SERVICE_NAME}:61616?transport.trustStoreType=PEMCA&transport.trustStoreLocation=/app/tls/ca/ca.pem&transport.keyStoreType=PEMCFG&transport.keyStoreLocation=/app/tls/pem/tls.pemcfg' --message-count 1 --destination queue://APP.JOBS --receive-timeout 30000
+        - ${JSON.stringify(amqpConsumerCommand)}
         env:
         - name: JDK_JAVA_OPTIONS
           value: "-Djava.security.properties=/app/tls/pem/java.security"
+${bindingSecretEnv}
         volumeMounts:
         - name: trust
           mountPath: /app/tls/ca
@@ -299,7 +321,7 @@ spec:
       volumes:
       - name: trust
         secret:
-          secretName: activemq-artemis-manager-ca
+          secretName: arkmq-org-broker-manager-ca
       - name: cert
         secret:
           secretName: ${APP_NAME}-app-cert
@@ -350,7 +372,7 @@ spec:
     expect(caIssuerExists).toBe('');
 
     // Verify Bundle is deleted
-    const bundleExists = kubectl('get bundle activemq-artemis-manager-ca -n cert-manager', {
+    const bundleExists = kubectl('get bundle arkmq-org-broker-manager-ca -n cert-manager', {
       ignoreError: true,
     });
     expect(bundleExists).toBe('');

@@ -277,8 +277,8 @@ The `setup` command creates:
 - `ClusterIssuer/root-issuer` - Self-signed root issuer
 - `Certificate/root-cert` (in cert-manager namespace) - Root CA certificate
 - `ClusterIssuer/broker-ca-issuer` - CA issuer for signing broker certificates
-- `Bundle/activemq-artemis-manager-ca` - Trust bundle distributed to all namespaces
-- `Certificate/activemq-artemis-manager-cert` - Operator certificate
+- `Bundle/arkmq-org-broker-manager-ca` - Trust bundle distributed to all namespaces
+- `Certificate/arkmq-org-broker-manager-cert` - Operator certificate
 
 The `create-service-cert` command creates:
 - `Certificate/<service-name>-broker-cert` - Service certificate with proper DNS names

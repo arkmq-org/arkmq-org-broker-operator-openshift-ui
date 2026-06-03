@@ -120,8 +120,8 @@ const resourceNames = {
   rootCert: 'root-cert',
   rootSecret: 'arkmq-root-cert-secret',
   caIssuer: 'broker-ca-issuer',
-  bundle: 'activemq-artemis-manager-ca',
-  operatorCert: 'activemq-artemis-manager-cert',
+  bundle: 'arkmq-org-broker-manager-ca',
+  operatorCert: 'arkmq-org-broker-manager-cert',
 };
 
 /**

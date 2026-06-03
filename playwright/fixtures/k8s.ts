@@ -203,7 +203,7 @@ export function secretExists(secretName: string, namespace: string): boolean {
 }
 
 /**
- * Wait for a Kubernetes Job to complete successfully
+ * Wait for a Kubernetes Job to complete successfully.
  */
 export async function waitForJob(
   jobName: string,

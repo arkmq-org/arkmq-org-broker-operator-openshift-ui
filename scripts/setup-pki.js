@@ -201,7 +201,7 @@ spec:
 async function createTrustBundle(rootSecretName) {
   console.log(`📦 Creating trust bundle...`);
 
-  const bundleName = 'activemq-artemis-manager-ca';
+  const bundleName = 'arkmq-org-broker-manager-ca';
 
   const bundleYaml = `
 apiVersion: trust.cert-manager.io/v1alpha1
@@ -238,10 +238,10 @@ spec:
 async function createOperatorCert(namespace, caIssuerName) {
   console.log(`📦 Creating operator certificate in namespace: ${namespace}...`);
 
-  const operatorCertName = 'activemq-artemis-manager-cert';
+  const operatorCertName = 'arkmq-org-broker-manager-cert';
 
   // Wait for the CA secret to appear in the namespace
-  const bundleName = 'activemq-artemis-manager-ca';
+  const bundleName = 'arkmq-org-broker-manager-ca';
   console.log(`⏳ Waiting for CA secret to be distributed to namespace ${namespace}...`);
   await waitForSecret(namespace, bundleName);
 
@@ -283,7 +283,7 @@ async function createServiceCertificate(serviceName, namespace, caIssuerName) {
   );
 
   // Wait for the CA secret to appear in the namespace (distributed by trust-manager)
-  const bundleName = 'activemq-artemis-manager-ca';
+  const bundleName = 'arkmq-org-broker-manager-ca';
   console.log(`⏳ Waiting for CA secret to be distributed to namespace ${namespace}...`);
   await waitForSecret(namespace, bundleName);
 
@@ -300,6 +300,7 @@ spec:
   commonName: ${serviceName}
   dnsNames:
   - ${serviceName}
+  - ${serviceName}.${namespace}.svc.cluster.local
   - '*.${serviceName}-hdls-svc.${namespace}.svc.cluster.local'
   issuerRef:
     name: ${caIssuerName}
@@ -366,7 +367,7 @@ async function createPrometheusCertificate(namespace, caIssuerName) {
   );
 
   // Wait for the CA secret to appear in the namespace (distributed by trust-manager)
-  const bundleName = 'activemq-artemis-manager-ca';
+  const bundleName = 'arkmq-org-broker-manager-ca';
   console.log(`⏳ Waiting for CA secret to be distributed to namespace ${namespace}...`);
   await waitForSecret(namespace, bundleName);
 

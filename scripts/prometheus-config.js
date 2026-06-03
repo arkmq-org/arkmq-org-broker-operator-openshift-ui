@@ -204,7 +204,7 @@ function generateServiceMonitor(options = {}) {
       options.brokerName || 'artemis-broker'
     }-hdls-svc.${namespace}.svc.cluster.local`,
     prometheusCertSecret = 'prometheus-cert',
-    caSecret = 'activemq-artemis-manager-ca',
+    caSecret = 'arkmq-org-broker-manager-ca',
   } = options;
 
   return `---
