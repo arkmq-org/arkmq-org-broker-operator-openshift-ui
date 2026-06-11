@@ -23,3 +23,28 @@ export interface BrokerAppSpec {
 export type BrokerAppCR = K8sResourceCommon & {
   spec: BrokerAppSpec;
 };
+
+export interface BrokerServiceSpec {
+  resources?: {
+    limits?: {
+      memory?: string;
+    };
+  };
+  env?: {
+    name: string;
+    value: string;
+  }[];
+}
+
+export type BrokerService = K8sResourceCommon & {
+  spec?: BrokerServiceSpec;
+  status?: {
+    conditions?: {
+      type: string;
+      status: string;
+      lastTransitionTime?: string;
+      reason?: string;
+      message?: string;
+    }[];
+  };
+};

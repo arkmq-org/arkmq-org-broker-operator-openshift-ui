@@ -7,3 +7,24 @@ export const validateDNS1123 = (value: string): string | null => {
   }
   return null;
 };
+
+/**
+ * Validate memory value (must be a positive number)
+ */
+export const validateMemoryValue = (value: string): string | null => {
+  if (!value) {
+    return 'Memory value is required';
+  }
+
+  const numValue = parseFloat(value);
+
+  if (isNaN(numValue)) {
+    return 'Memory value must be a number';
+  }
+
+  if (numValue <= 0) {
+    return 'Memory value must be greater than 0';
+  }
+
+  return null;
+};

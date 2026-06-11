@@ -11,3 +11,15 @@ export const BrokerAppModel: K8sModel = {
   namespaced: true,
   crd: true,
 };
+
+export const BrokerServiceModel: K8sModel = {
+  apiVersion: 'v1beta2',
+  apiGroup: 'broker.arkmq.org',
+  kind: 'BrokerService',
+  plural: 'brokerservices',
+  namespaced: true,
+  label: 'BrokerService',
+  labelPlural: 'BrokerServices',
+  abbr: 'BS',
+  crd: true,
+};
