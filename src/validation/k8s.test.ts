@@ -1,4 +1,4 @@
-import { validateDNS1123 } from './k8s';
+import { validateDNS1123, validateMemoryValue } from './k8s';
 
 describe('validateDNS1123', () => {
   it('returns error when value is empty', () => {
@@ -47,5 +47,31 @@ describe('validateDNS1123', () => {
 
   it('returns null for name starting and ending with digits', () => {
     expect(validateDNS1123('1broker2')).toBeNull();
+  });
+});
+
+describe('validateMemoryValue', () => {
+  it('returns error when value is empty', () => {
+    expect(validateMemoryValue('')).toBe('Memory value is required');
+  });
+
+  it('returns null for a valid positive integer', () => {
+    expect(validateMemoryValue('2')).toBeNull();
+  });
+
+  it('returns null for a valid positive decimal', () => {
+    expect(validateMemoryValue('2.5')).toBeNull();
+  });
+
+  it('returns error when value is not a number', () => {
+    expect(validateMemoryValue('abc')).toBe('Memory value must be a number');
+  });
+
+  it('returns error when value is zero', () => {
+    expect(validateMemoryValue('0')).toBe('Memory value must be greater than 0');
+  });
+
+  it('returns error when value is negative', () => {
+    expect(validateMemoryValue('-1')).toBe('Memory value must be greater than 0');
   });
 });

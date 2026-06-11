@@ -16,7 +16,7 @@ const config: Config = {
     ],
   },
   moduleNameMapper: {
-    '^.+\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
+    '^.+\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.ts',
     '@openshift-console/(.*)': '<rootDir>/__mocks__/dynamic-plugin-sdk.ts',
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
   },
