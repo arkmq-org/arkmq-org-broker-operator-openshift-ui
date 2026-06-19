@@ -29,6 +29,7 @@
     "@openshift-console/dynamic-plugin-sdk": "4.22-latest",
     "@openshift-console/dynamic-plugin-sdk-webpack": "4.22-latest",
     "@patternfly/react-core": "^6.4.3",
+    "@patternfly/react-data-view": "~6.5.0",
     "@patternfly/react-icons": "^6.4.0",
     "@patternfly/react-table": "^6.4.3",
     "@playwright/test": "^1.59.1",
@@ -83,7 +84,8 @@
     "exposedModules": {
       "ExamplePage": "./components/ExamplePage",
       "CreateBrokerAppPage": "./components/brokerapps/CreateBrokerAppPage",
-      "BrokerServiceCreatePage": "./components/brokerservices/BrokerServiceCreatePage"
+      "BrokerServiceCreatePage": "./components/brokerservices/BrokerServiceCreatePage",
+      "BrokerServiceListPage": "./components/brokerservices/brokerServiceList/BrokerServiceListPage"
     },
     "dependencies": {
       "@console/pluginAPI": ">=4.22.0-0"
