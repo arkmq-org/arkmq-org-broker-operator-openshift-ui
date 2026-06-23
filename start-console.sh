@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-# Check for a version argument, otherwise default to "latest"
-CONSOLE_TAG=${1:-"latest"}
+# Use 4.22.0 instead of "latest" for React Router v7 compatibility with the plugin SDK.
+CONSOLE_TAG=${1:-"4.22.0"}
 echo "Using OpenShift Console version: $CONSOLE_TAG"
 
 CONSOLE_IMAGE="quay.io/openshift/origin-console:$CONSOLE_TAG"
