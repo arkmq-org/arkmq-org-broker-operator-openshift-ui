@@ -1350,10 +1350,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@openshift-console/dynamic-plugin-sdk-webpack@4.22-latest":
-  version "4.22.0-prerelease.3"
-  resolved "https://registry.yarnpkg.com/@openshift-console/dynamic-plugin-sdk-webpack/-/dynamic-plugin-sdk-webpack-4.22.0-prerelease.3.tgz#028bfdf904b3fdde2213cff0278d55edcb659faa"
-  integrity sha512-8Pamn5fk1HCYkpk4aqvI0kOmO1F7PW2CDR1N/jljuVdMIO/4axooSEMyNssjVthtk52SxO3uHn5LiJxfQQWkDg==
+"@openshift-console/dynamic-plugin-sdk-webpack@4.22.0":
+  version "4.22.0"
+  resolved "https://registry.yarnpkg.com/@openshift-console/dynamic-plugin-sdk-webpack/-/dynamic-plugin-sdk-webpack-4.22.0.tgz#157b519d55feb5eb3f4b172c5c34812b0a7bfc4a"
+  integrity sha512-fnFPXGMi5ouBJf5WunLM2QzkMx6e6HIsvUGQW2FCVQ+8R4XUG5gJB3K029xXbwkkmM6kbM4W6nk0HiKJPYo/7A==
   dependencies:
     "@openshift/dynamic-plugin-sdk" "^8.0.0"
     "@openshift/dynamic-plugin-sdk-webpack" "^5.1.1"
@@ -1366,13 +1366,13 @@
     read-pkg "5.x"
     semver "6.x"
 
-"@openshift-console/dynamic-plugin-sdk@4.22-latest":
-  version "4.22.0-prerelease.3"
-  resolved "https://registry.yarnpkg.com/@openshift-console/dynamic-plugin-sdk/-/dynamic-plugin-sdk-4.22.0-prerelease.3.tgz#68c441f411dd6109c284cd00514e792affd6f770"
-  integrity sha512-+urXo0F3WnjfbVxrQrRASz3JDV4e4VRtqrzocpHqWlexVpCLkV7bP+l7ikDz2H08P9uAaaXxjUTJBBnaW9yAMw==
+"@openshift-console/dynamic-plugin-sdk@4.22.0":
+  version "4.22.0"
+  resolved "https://registry.yarnpkg.com/@openshift-console/dynamic-plugin-sdk/-/dynamic-plugin-sdk-4.22.0.tgz#bed307d95038efff64c5528f2dc03b6f8d5b3876"
+  integrity sha512-b/W5iFW1ak+bZiFS0v8cZSa2hE2lZ5lrPRERlz9+P7aR9Lq4AvxgtDJJM7YTBdFL9xMMAcT6nLo7/tU+surVbQ==
   dependencies:
     "@openshift/dynamic-plugin-sdk" "^8.0.0"
-    immutable "3.x"
+    immutable "^3.8.3"
     lodash "^4.17.21"
     reselect "^5.1.1"
     typesafe-actions "^5.1.0"
@@ -5849,10 +5849,10 @@ ignore@^7.0.5:
   resolved "https://registry.yarnpkg.com/ignore/-/ignore-7.0.5.tgz#4cb5f6cd7d4c7ab0365738c7aea888baa6d7efd9"
   integrity sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==
 
-immutable@3.x:
-  version "3.8.2"
-  resolved "https://registry.yarnpkg.com/immutable/-/immutable-3.8.2.tgz#c2439951455bb39913daf281376f1530e104adf3"
-  integrity sha512-15gZoQ38eYjEjxkorfbcgBKBL6R7T459OuK+CpcWt7O3KF4uPCx2tD0uFETlUDIyo+1789crbMhTvQBSR5yBMg==
+immutable@^3.8.3:
+  version "3.8.3"
+  resolved "https://registry.yarnpkg.com/immutable/-/immutable-3.8.3.tgz#0a8d2494a94d4b2d4f0e99986e74dd25d1e9a859"
+  integrity sha512-AUY/VyX0E5XlibOmWt10uabJzam1zlYjwiEgQSDc5+UIkFNaF9WM0JxXKaNMGf+F/ffUF+7kRKXM9A7C0xXqMg==
 
 import-fresh@^3.2.1:
   version "3.3.0"

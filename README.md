@@ -1,6 +1,6 @@
 # ArkMQ Broker Operator OpenShift UI
 
-OpenShift Console plugin for the ArkMQ Broker Operator. It extends the admin perspective with workflows for provisioning messaging infrastructure and connecting applications to brokers.
+OpenShift Console plugin for the ArkMQ Broker Operator. It extends the admin perspective with workflows for provisioning messaging infrastructure and connecting applications to brokers. It requires OpenShift 4.22 or higher.
 
 [Dynamic plugins](https://github.com/openshift/console/tree/master/frontend/packages/console-dynamic-plugin-sdk)
 allow you to extend the

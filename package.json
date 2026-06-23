@@ -26,8 +26,8 @@
     "test:coverage": "yarn test --watch=false --coverage"
   },
   "devDependencies": {
-    "@openshift-console/dynamic-plugin-sdk": "4.22-latest",
-    "@openshift-console/dynamic-plugin-sdk-webpack": "4.22-latest",
+    "@openshift-console/dynamic-plugin-sdk": "4.22.0",
+    "@openshift-console/dynamic-plugin-sdk-webpack": "4.22.0",
     "@patternfly/react-core": "^6.4.3",
     "@patternfly/react-icons": "^6.4.0",
     "@playwright/test": "^1.59.1",
