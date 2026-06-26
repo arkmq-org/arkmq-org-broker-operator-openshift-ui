@@ -53,7 +53,7 @@ test.describe('BrokerApp lifecycle', () => {
 
   // ── Test: Create app with matching labels → verify it binds to correct service ──
 
-  test('matching labels - binds to correct BrokerService', async () => {
+  test('matching labels - binds to correct BrokerService', async ({ page }) => {
     // waitForPod and waitForCondition can each take up to 30 min on a cold CI cluster,
     // so this test needs its own timeout well above the global 8-min default.
     test.setTimeout(3_600_000); // 60 minutes
@@ -105,23 +105,33 @@ spec:
     });
     console.log(`✓ Created app certificate for ${appName}`);
 
-    // 3. Deploy the BrokerApp
-    const brokerAppYaml = `
-apiVersion: ${BROKERAPP_API}
-kind: BrokerApp
-metadata:
-  name: ${appName}
-  namespace: ${TEST_NAMESPACE}
-spec:
-  selector:
-    matchLabels:
-      tier: e2e
-  capabilities:
-  - producerOf:
-    - address: "QUEUE.ORDERS"
-`;
-    applyYaml(brokerAppYaml);
-    console.log(`✓ Applied BrokerApp ${appName} with selector tier=e2e`);
+    // 3. Create the BrokerApp via the UI form, selecting the label key/value from
+    //    the typeahead dropdowns populated by the live BrokerService in the namespace.
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/~new`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
+
+    await page.locator('[data-test="brokerapp-name"]').fill(appName);
+
+    // Open the key typeahead and pick 'tier' — populated from the BrokerService labels.
+    await page.getByRole('textbox', { name: 'Label key' }).click();
+    await page.getByRole('option', { name: 'tier' }).click();
+    // otherwise getValuesForKey hasn't re-run yet and the value listbox will be empty.
+    await expect(page.getByRole('textbox', { name: 'Label key' })).toHaveValue('tier');
+    console.log('✓ Selected label key "tier" from dropdown');
+
+    // Open the value typeahead and pick 'e2e'.
+    await page.getByRole('textbox', { name: 'Label value' }).click();
+    await page.getByRole('option', { name: 'e2e' }).click();
+    //confirm the value input has updated before submitting the form.
+    await expect(page.getByRole('textbox', { name: 'Label value' })).toHaveValue('e2e');
+    console.log('✓ Selected label value "e2e" from dropdown');
+
+    await page.locator('[data-test="brokerapp-create-btn"]').click();
+    await page.waitForURL('**/broker.arkmq.org~v1beta2~BrokerApp**', { timeout: 30000 });
+    console.log(`✓ BrokerApp ${appName} submitted via form with selector tier=e2e`);
 
     // 3. Wait for the BrokerApp to bind and be provisioned on the broker
     console.log('\nWaiting for BrokerApp to be Deployed (binding + provisioning)...');

@@ -93,7 +93,7 @@ export default function CreateBrokerAppPage() {
               }}
             >
               <GeneralDetailsSection namespace={namespace} />
-              <SelectorSection />
+              <SelectorSection namespace={namespace} />
               <CapabilitiesSection />
             </ResourceFormEditor>
           </PageSection>
