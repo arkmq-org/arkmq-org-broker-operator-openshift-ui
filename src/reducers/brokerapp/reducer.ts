@@ -25,7 +25,7 @@ export type BrokerAppFormAction =
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
-  | { type: 'SET_MODEL'; payload: BrokerAppCR };
+  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean };
 
 // --- helpers ---
 
@@ -41,10 +41,13 @@ const buildCapabilities = (
   return Object.keys(cap).length ? [cap] : undefined;
 };
 
+// First occurrence wins so duplicate form rows do not overwrite YAML preview values.
 const buildMatchLabels = (labels: MatchLabel[]): Record<string, string> | undefined => {
   const result: Record<string, string> = {};
   labels.forEach(({ key, value }) => {
-    if (key) result[key] = value;
+    if (key && !(key in result)) {
+      result[key] = value;
+    }
   });
   return Object.keys(result).length ? result : undefined;
 };
@@ -58,6 +61,24 @@ const matchLabelsFromRecord = (record: Record<string, string> | undefined): Matc
     key,
     value,
   }));
+};
+
+const mergeMatchLabelsWithYaml = (
+  formLabels: MatchLabel[],
+  yamlLabels: Record<string, string> | undefined,
+): MatchLabel[] => {
+  if (!yamlLabels) {
+    return formLabels;
+  }
+  const existingKeys = new Set(formLabels.map(({ key }) => key).filter(Boolean));
+  const merged = [...formLabels];
+  Object.entries(yamlLabels).forEach(([key, value]) => {
+    if (!existingKeys.has(key)) {
+      merged.push({ id: String(Date.now()), key, value });
+      existingKeys.add(key);
+    }
+  });
+  return merged;
 };
 
 const addressesFromCapabilities = (
@@ -180,6 +201,28 @@ export const brokerAppReducer = (
 
     case 'SET_MODEL': {
       const newCr = action.payload;
+      if (action.preserveLabels) {
+        const mergedMatchLabels = mergeMatchLabelsWithYaml(
+          state.matchLabels,
+          newCr.spec.selector?.matchLabels,
+        );
+        return {
+          ...state,
+          cr: {
+            ...newCr,
+            spec: buildSpec(
+              mergedMatchLabels,
+              addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
+              addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
+              addressesFromCapabilities(newCr.spec.capabilities, 'subscriberOf'),
+            ),
+          },
+          matchLabels: mergedMatchLabels,
+          producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
+          consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
+          subscriberOf: addressesFromCapabilities(newCr.spec.capabilities, 'subscriberOf'),
+        };
+      }
       return {
         ...state,
         cr: newCr,

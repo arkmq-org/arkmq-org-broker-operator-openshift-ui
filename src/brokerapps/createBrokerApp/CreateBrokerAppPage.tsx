@@ -6,7 +6,11 @@ import { k8sCreate, useAccessReview } from '@openshift-console/dynamic-plugin-sd
 import { EmptyState, EmptyStateBody, PageSection, Spinner, Title } from '@patternfly/react-core';
 import { BrokerAppModel } from '../../k8s/models';
 import type { BrokerAppCR } from '../../k8s/types';
-import { validateDNS1123 } from '../../validation/k8s';
+import {
+  validateDNS1123,
+  validateLabelEntries,
+  validateYamlDuplicateBrokerAppMatchLabels,
+} from '../../validation/k8s';
 import {
   brokerAppReducer,
   createInitialBrokerAppState,
@@ -35,8 +39,9 @@ export default function CreateBrokerAppPage() {
     createInitialBrokerAppState(namespace),
   );
 
-  const { cr } = formState;
-  const isFormValid = validateDNS1123(cr.metadata?.name ?? '') === null;
+  const { cr, matchLabels } = formState;
+  const isFormValid =
+    validateDNS1123(cr.metadata?.name ?? '') === null && validateLabelEntries(matchLabels) === null;
   const listPath = `/k8s/ns/${namespace}/broker.arkmq.org~v1beta2~BrokerApp`;
 
   const submit = async (crToSubmit: BrokerAppCR) => {
@@ -79,10 +84,25 @@ export default function CreateBrokerAppPage() {
               isFormValid={isFormValid}
               createButtonTestId="brokerapp-create-btn"
               onFormSubmit={() => submit(cr)}
-              onYamlSave={(yaml) => submit(jsYaml.load(yaml) as BrokerAppCR)}
+              onYamlSave={(yaml) => {
+                const duplicateLabelError = validateYamlDuplicateBrokerAppMatchLabels(yaml);
+                if (duplicateLabelError) {
+                  throw new Error(duplicateLabelError);
+                }
+                return submit(jsYaml.load(yaml) as BrokerAppCR);
+              }}
               onSwitchToForm={(yaml) => {
+                const duplicateLabelError = validateYamlDuplicateBrokerAppMatchLabels(yaml);
+                if (duplicateLabelError) {
+                  return { ok: false, error: duplicateLabelError };
+                }
                 try {
-                  dispatch({ type: 'SET_MODEL', payload: jsYaml.load(yaml) as BrokerAppCR });
+                  const parsed = jsYaml.load(yaml) as BrokerAppCR;
+                  dispatch({
+                    type: 'SET_MODEL',
+                    payload: parsed,
+                    preserveLabels: validateLabelEntries(matchLabels) !== null,
+                  });
                   return { ok: true };
                 } catch {
                   return { ok: false, error: t('Cannot switch to Form view: YAML is not valid') };

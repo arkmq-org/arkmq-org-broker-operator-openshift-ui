@@ -104,6 +104,139 @@ describe('brokerServiceReducer', () => {
     expect(state.cr.metadata?.labels).toEqual({ app: 'messaging' });
   });
 
+  it('uses the first value when duplicate label keys are synced to the CR', () => {
+    let state = createState();
+
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 0, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 0, value: 'test' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 1, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 1, value: 'some-value' },
+    });
+
+    expect(state.labels).toEqual([
+      { key: 'key1', value: 'test' },
+      { key: 'key1', value: 'some-value' },
+    ]);
+    expect(state.cr.metadata?.labels).toEqual({ key1: 'test' });
+  });
+
+  it('SET_MODEL with preserveLabels keeps form label rows when duplicates exist', () => {
+    let state = createState();
+
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 0, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 0, value: 'test' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 1, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 1, value: 'some-value' },
+    });
+
+    const yamlCr: BrokerService = {
+      apiVersion: 'broker.arkmq.org/v1beta2',
+      kind: 'BrokerService',
+      metadata: {
+        name: 'from-yaml',
+        namespace: TEST_NAMESPACE,
+        labels: { key1: 'test' },
+      },
+      spec: { resources: { limits: { memory: '4Gi' } } },
+    };
+
+    const next = brokerServiceReducer(state, {
+      type: 'SET_MODEL',
+      payload: yamlCr,
+      preserveLabels: true,
+    });
+
+    expect(next.labels).toEqual(state.labels);
+    expect(next.cr.metadata?.labels).toEqual({ key1: 'test' });
+    expect(next.cr.metadata?.name).toBe('from-yaml');
+    expect(next.memoryValue).toBe('4');
+  });
+
+  it('SET_MODEL with preserveLabels merges new YAML-only label keys into form rows', () => {
+    let state = createState();
+
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 0, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 0, value: 'value1' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 1, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 1, value: 'value2' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 2, key: 'key2' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 2, value: 'something' },
+    });
+
+    const next = brokerServiceReducer(state, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerService',
+        metadata: {
+          name: 'from-yaml',
+          namespace: TEST_NAMESPACE,
+          labels: { key1: 'value1', key2: 'something', key3: 'test' },
+        },
+        spec: { resources: { limits: { memory: '4Gi' } } },
+      },
+      preserveLabels: true,
+    });
+
+    expect(next.labels).toEqual([
+      { key: 'key1', value: 'value1' },
+      { key: 'key1', value: 'value2' },
+      { key: 'key2', value: 'something' },
+      { key: 'key3', value: 'test' },
+    ]);
+    expect(next.cr.metadata?.labels).toEqual({
+      key1: 'value1',
+      key2: 'something',
+      key3: 'test',
+    });
+  });
+
   it('SET_MEMORY_VALUE syncs the CR memory limit string', () => {
     const state = createState();
     const next = brokerServiceReducer(state, { type: 'SET_MEMORY_VALUE', payload: '4' });

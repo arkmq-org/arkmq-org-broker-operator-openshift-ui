@@ -1,4 +1,10 @@
-import { validateDNS1123, validateMemoryValue } from './k8s';
+import {
+  validateDNS1123,
+  validateLabelEntries,
+  validateMemoryValue,
+  validateYamlDuplicateBrokerServiceLabels,
+  validateYamlDuplicateBrokerAppMatchLabels,
+} from './k8s';
 
 describe('validateDNS1123', () => {
   it('returns error when value is empty', () => {
@@ -73,5 +79,128 @@ describe('validateMemoryValue', () => {
 
   it('returns error when value is negative', () => {
     expect(validateMemoryValue('-1')).toBe('Memory value must be greater than 0');
+  });
+});
+
+describe('validateLabelEntries', () => {
+  it('returns null when all keys are unique', () => {
+    expect(
+      validateLabelEntries([
+        { key: 'app', value: 'messaging' },
+        { key: 'forWorkQueue', value: 'true' },
+      ]),
+    ).toBeNull();
+  });
+
+  it('returns null when entries have empty keys', () => {
+    expect(
+      validateLabelEntries([
+        { key: '', value: 'ignored' },
+        { key: 'app', value: 'messaging' },
+      ]),
+    ).toBeNull();
+  });
+
+  it('returns error when duplicate non-empty keys exist', () => {
+    expect(
+      validateLabelEntries([
+        { key: 'key1', value: 'one' },
+        { key: 'key1', value: 'two' },
+      ]),
+    ).toBe('Duplicate label key "key1"');
+  });
+});
+
+describe('validateYamlDuplicateBrokerServiceLabels', () => {
+  it('returns null when metadata.labels has unique keys', () => {
+    const yaml = `
+apiVersion: broker.arkmq.org/v1beta2
+kind: BrokerService
+metadata:
+  name: my-service
+  labels:
+    app: messaging
+    forWorkQueue: "true"
+spec:
+  resources:
+    limits:
+      memory: 2Gi
+`;
+
+    expect(validateYamlDuplicateBrokerServiceLabels(yaml)).toBeNull();
+  });
+
+  it('returns error when metadata.labels has duplicate keys', () => {
+    const yaml = `
+apiVersion: broker.arkmq.org/v1beta2
+kind: BrokerService
+metadata:
+  name: my-service
+  labels:
+    key1: one
+    key1: two
+spec:
+  resources:
+    limits:
+      memory: 2Gi
+`;
+
+    expect(validateYamlDuplicateBrokerServiceLabels(yaml)).toBe(
+      'Duplicate label key "key1" in metadata.labels',
+    );
+  });
+});
+
+describe('validateYamlDuplicateBrokerAppMatchLabels', () => {
+  it('returns null when spec.selector.matchLabels has unique keys', () => {
+    const yaml = `
+apiVersion: broker.arkmq.org/v1beta2
+kind: BrokerApp
+metadata:
+  name: my-app
+spec:
+  selector:
+    matchLabels:
+      env: dev
+      tier: web
+`;
+
+    expect(validateYamlDuplicateBrokerAppMatchLabels(yaml)).toBeNull();
+  });
+
+  it('returns error when spec.selector.matchLabels has duplicate keys', () => {
+    const yaml = `
+apiVersion: broker.arkmq.org/v1beta2
+kind: BrokerApp
+metadata:
+  name: my-app
+spec:
+  selector:
+    matchLabels:
+      env: dev
+      env: prod
+`;
+
+    expect(validateYamlDuplicateBrokerAppMatchLabels(yaml)).toBe(
+      'Duplicate label key "env" in spec.selector.matchLabels',
+    );
+  });
+});
+
+describe('validateYamlDuplicateKeysInMapping', () => {
+  it('returns null when duplicate keys exist outside the scanned mapping', () => {
+    const yaml = `
+apiVersion: broker.arkmq.org/v1beta2
+kind: BrokerService
+metadata:
+  name: my-service
+spec:
+  resources:
+    limits:
+      memory: 2Gi
+      memory: 4Gi
+`;
+
+    expect(validateYamlDuplicateBrokerServiceLabels(yaml)).toBeNull();
   });
 });

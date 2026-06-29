@@ -1,4 +1,5 @@
 import type { FC } from 'react';
+import { useMemo } from 'react';
 import {
   Button,
   FormGroup,
@@ -18,7 +19,7 @@ import {
   useBrokerServiceFormState,
   useBrokerServiceFormDispatch,
 } from '../../../reducers/brokerservice/reducer';
-import { validateDNS1123 } from '../../../validation/k8s';
+import { validateDNS1123, validateLabelEntries } from '../../../validation/k8s';
 
 export interface GeneralDetailsSectionProps {
   namespace: string;
@@ -31,6 +32,22 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespac
 
   const name = cr.metadata?.name ?? '';
   const nameError = validateDNS1123(name) ?? undefined;
+  const labelsError = validateLabelEntries(labels) ?? undefined;
+  const duplicateLabelKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    labels.forEach(({ key }) => {
+      if (key) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+    const duplicateKeys = new Set<string>();
+    counts.forEach((count, key) => {
+      if (count > 1) {
+        duplicateKeys.add(key);
+      }
+    });
+    return duplicateKeys;
+  }, [labels]);
 
   return (
     <FormSection title={t('General Details')}>
@@ -87,47 +104,62 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespac
             </FormHelperText>
           </StackItem>
 
-          {labels.map((label, index) => (
-            <StackItem key={index}>
-              <Split hasGutter>
-                <SplitItem isFilled>
-                  <TextInput
-                    type="text"
-                    id={`label-key-${String(index)}`}
-                    value={label.key}
-                    onChange={(_event, val) => {
-                      dispatch({ type: 'UPDATE_LABEL_KEY', payload: { index, key: val } });
-                    }}
-                    placeholder={t('key')}
-                    aria-label={t('Label key')}
-                  />
-                </SplitItem>
-                <SplitItem className="pf-v6-u-color-200 pf-v6-u-flex-shrink-0">=</SplitItem>
-                <SplitItem isFilled>
-                  <TextInput
-                    type="text"
-                    id={`label-value-${String(index)}`}
-                    value={label.value}
-                    onChange={(_event, val) => {
-                      dispatch({ type: 'UPDATE_LABEL_VALUE', payload: { index, value: val } });
-                    }}
-                    placeholder={t('value')}
-                    aria-label={t('Label value')}
-                  />
-                </SplitItem>
-                <SplitItem>
-                  <Button
-                    variant="plain"
-                    onClick={() => {
-                      dispatch({ type: 'REMOVE_LABEL', payload: index });
-                    }}
-                    aria-label={t('Remove label')}
-                    icon={<TimesIcon />}
-                  />
-                </SplitItem>
-              </Split>
+          {labels.map((label, index) => {
+            const hasDuplicateKey = Boolean(label.key && duplicateLabelKeys.has(label.key));
+
+            return (
+              <StackItem key={index}>
+                <Split hasGutter>
+                  <SplitItem isFilled>
+                    <TextInput
+                      type="text"
+                      id={`label-key-${String(index)}`}
+                      value={label.key}
+                      onChange={(_event, val) => {
+                        dispatch({ type: 'UPDATE_LABEL_KEY', payload: { index, key: val } });
+                      }}
+                      validated={hasDuplicateKey ? 'error' : 'default'}
+                      placeholder={t('key')}
+                      aria-label={t('Label key')}
+                    />
+                  </SplitItem>
+                  <SplitItem className="pf-v6-u-color-200 pf-v6-u-flex-shrink-0">=</SplitItem>
+                  <SplitItem isFilled>
+                    <TextInput
+                      type="text"
+                      id={`label-value-${String(index)}`}
+                      value={label.value}
+                      onChange={(_event, val) => {
+                        dispatch({ type: 'UPDATE_LABEL_VALUE', payload: { index, value: val } });
+                      }}
+                      placeholder={t('value')}
+                      aria-label={t('Label value')}
+                    />
+                  </SplitItem>
+                  <SplitItem>
+                    <Button
+                      variant="plain"
+                      onClick={() => {
+                        dispatch({ type: 'REMOVE_LABEL', payload: index });
+                      }}
+                      aria-label={t('Remove label')}
+                      icon={<TimesIcon />}
+                    />
+                  </SplitItem>
+                </Split>
+              </StackItem>
+            );
+          })}
+
+          {labelsError && (
+            <StackItem>
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem variant="error">{labelsError}</HelperTextItem>
+                </HelperText>
+              </FormHelperText>
             </StackItem>
-          ))}
+          )}
 
           <StackItem>
             <Button

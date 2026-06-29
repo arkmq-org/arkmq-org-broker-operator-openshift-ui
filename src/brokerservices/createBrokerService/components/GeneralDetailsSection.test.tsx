@@ -160,4 +160,18 @@ describe('GeneralDetailsSection', () => {
     expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
     expect(screen.getAllByLabelText('Label value')).toHaveLength(2);
   });
+
+  it('shows a validation error when duplicate label keys are entered', async () => {
+    const user = userEvent.setup();
+    render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);
+
+    await user.click(screen.getByTestId('add-label-button'));
+    await user.click(screen.getByTestId('add-label-button'));
+
+    const keyInputs = screen.getAllByLabelText('Label key');
+    await user.type(keyInputs[0], 'key1');
+    await user.type(keyInputs[1], 'key1');
+
+    expect(screen.getByText('Duplicate label key "key1"')).toBeInTheDocument();
+  });
 });

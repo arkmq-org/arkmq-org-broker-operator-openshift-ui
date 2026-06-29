@@ -211,4 +211,17 @@ describe('SelectorSection', () => {
     // 'tier' is not yet used, so it must still appear
     expect(screen.getByRole('option', { name: 'tier' })).toBeInTheDocument();
   });
+
+  it('shows a validation error when duplicate match label keys are typed', async () => {
+    const user = userEvent.setup();
+    render(<SelectorSectionWrapper />);
+
+    await user.click(screen.getByRole('button', { name: 'Add Match Label' }));
+
+    const keyInputs = screen.getAllByRole('textbox', { name: 'Label key' });
+    await user.type(keyInputs[0], 'env');
+    await user.type(keyInputs[1], 'env');
+
+    expect(screen.getByText('Duplicate label key "env"')).toBeInTheDocument();
+  });
 });

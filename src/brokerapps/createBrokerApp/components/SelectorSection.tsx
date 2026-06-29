@@ -26,6 +26,7 @@ import {
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
 } from '../../../reducers/brokerapp/reducer';
+import { validateLabelEntries } from '../../../validation/k8s';
 
 export interface SelectorSectionProps {
   namespace: string;
@@ -73,11 +74,28 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
   /** Sorted list of all unique label keys across available BrokerServices. */
   const availableKeys = React.useMemo(() => Array.from(valuesByKey.keys()).sort(), [valuesByKey]);
 
-  /** Prevents duplicate label keys across rows.*/
+  /** Prevents duplicate label keys across rows in the key dropdown suggestions. */
   const usedKeys = React.useMemo(
     () => new Set(state.matchLabels.map((l) => l.key).filter(Boolean)),
     [state.matchLabels],
   );
+
+  const matchLabelsError = validateLabelEntries(state.matchLabels) ?? undefined;
+  const duplicateMatchLabelKeys = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    state.matchLabels.forEach(({ key }) => {
+      if (key) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+    const duplicateKeys = new Set<string>();
+    counts.forEach((count, key) => {
+      if (count > 1) {
+        duplicateKeys.add(key);
+      }
+    });
+    return duplicateKeys;
+  }, [state.matchLabels]);
 
   /** Returns sorted values for a given label key. */
   const getValuesForKey = React.useCallback(
@@ -135,6 +153,7 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
           {state.matchLabels.map((label) => {
             const isKeyOpen = openField?.labelId === label.id && openField.field === 'key';
             const isValueOpen = openField?.labelId === label.id && openField.field === 'value';
+            const hasDuplicateKey = Boolean(label.key && duplicateMatchLabelKeys.has(label.key));
 
             const filteredKeys = availableKeys.filter(
               (k) =>
@@ -166,6 +185,7 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
                         <MenuToggle
                           ref={toggleRef}
                           variant="typeahead"
+                          status={hasDuplicateKey ? 'danger' : undefined}
                           onClick={() => {
                             setOpenField(isKeyOpen ? null : { labelId: label.id, field: 'key' });
                           }}
@@ -278,6 +298,15 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
               </StackItem>
             );
           })}
+          {matchLabelsError && (
+            <StackItem>
+              <FormHelperText>
+                <HelperText>
+                  <HelperTextItem variant="error">{matchLabelsError}</HelperTextItem>
+                </HelperText>
+              </FormHelperText>
+            </StackItem>
+          )}
           <StackItem>
             <Button
               variant="link"

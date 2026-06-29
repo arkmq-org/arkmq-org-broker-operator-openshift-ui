@@ -16,7 +16,12 @@ import {
 } from '@patternfly/react-core';
 import { BrokerServiceModel } from '../../k8s/models';
 import type { BrokerService } from '../../k8s/types';
-import { validateDNS1123, validateMemoryValue } from '../../validation/k8s';
+import {
+  validateDNS1123,
+  validateLabelEntries,
+  validateMemoryValue,
+  validateYamlDuplicateBrokerServiceLabels,
+} from '../../validation/k8s';
 import { ResourceFormEditor } from '../../shared-components/ResourceFormEditor';
 import { GeneralDetailsSection } from './components/GeneralDetailsSection';
 import { InfrastructureSection } from './components/InfrastructureSection';
@@ -44,9 +49,11 @@ const CreateBrokerServicePage: FC = () => {
     createInitialBrokerServiceState(namespace),
   );
 
-  const { cr, memoryValue } = formState;
+  const { cr, memoryValue, labels } = formState;
   const isFormValid =
-    validateDNS1123(cr.metadata?.name ?? '') === null && validateMemoryValue(memoryValue) === null;
+    validateDNS1123(cr.metadata?.name ?? '') === null &&
+    validateMemoryValue(memoryValue) === null &&
+    validateLabelEntries(labels) === null;
   const listPath = `/k8s/ns/${namespace}/broker.arkmq.org~v1beta2~BrokerService`;
 
   const submit = async (crToSubmit: BrokerService) => {
@@ -101,10 +108,25 @@ const CreateBrokerServicePage: FC = () => {
               createButtonTestId="create-broker-service-button"
               cancelButtonTestId="cancel-broker-service-button"
               onFormSubmit={() => submit(cr)}
-              onYamlSave={(yaml) => submit(jsYaml.load(yaml) as BrokerService)}
+              onYamlSave={(yaml) => {
+                const duplicateLabelError = validateYamlDuplicateBrokerServiceLabels(yaml);
+                if (duplicateLabelError) {
+                  throw new Error(duplicateLabelError);
+                }
+                return submit(jsYaml.load(yaml) as BrokerService);
+              }}
               onSwitchToForm={(yaml) => {
+                const duplicateLabelError = validateYamlDuplicateBrokerServiceLabels(yaml);
+                if (duplicateLabelError) {
+                  return { ok: false, error: duplicateLabelError };
+                }
                 try {
-                  dispatch({ type: 'SET_MODEL', payload: jsYaml.load(yaml) as BrokerService });
+                  const parsed = jsYaml.load(yaml) as BrokerService;
+                  dispatch({
+                    type: 'SET_MODEL',
+                    payload: parsed,
+                    preserveLabels: validateLabelEntries(labels) !== null,
+                  });
                   return { ok: true };
                 } catch {
                   return {

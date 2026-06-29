@@ -104,6 +104,108 @@ describe('brokerAppReducer', () => {
     expect(matchLabels).toEqual({ tier: 'web' });
   });
 
+  it('uses the first value when duplicate match label keys are synced to the CR', () => {
+    let state = createInitialBrokerAppState(ns);
+    const id1 = state.matchLabels[0].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id1, key: 'key1', value: 'test' },
+    });
+    state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+    const id2 = state.matchLabels[1].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id2, key: 'key1', value: 'some-value' },
+    });
+
+    expect(state.matchLabels.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: 'key1', value: 'test' },
+      { key: 'key1', value: 'some-value' },
+    ]);
+    expect(state.cr.spec.selector?.matchLabels).toEqual({ key1: 'test' });
+  });
+
+  it('SET_MODEL with preserveLabels keeps form match label rows when duplicates exist', () => {
+    let state = createInitialBrokerAppState(ns);
+    const id1 = state.matchLabels[0].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id1, key: 'key1', value: 'test' },
+    });
+    state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+    const id2 = state.matchLabels[1].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id2, key: 'key1', value: 'some-value' },
+    });
+
+    const next = brokerAppReducer(state, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'from-yaml', namespace: ns },
+        spec: {
+          selector: { matchLabels: { key1: 'test' } },
+          capabilities: [{ producerOf: [{ address: 'QUEUE.OUT' }] }],
+        },
+      },
+      preserveLabels: true,
+    });
+
+    expect(next.matchLabels).toEqual(state.matchLabels);
+    expect(next.cr.spec.selector?.matchLabels).toEqual({ key1: 'test' });
+    expect(next.cr.metadata?.name).toBe('from-yaml');
+    expect(next.producerOf).toEqual(['QUEUE.OUT']);
+  });
+
+  it('SET_MODEL with preserveLabels merges new YAML-only match label keys into form rows', () => {
+    let state = createInitialBrokerAppState(ns);
+    const id1 = state.matchLabels[0].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id1, key: 'key1', value: 'value1' },
+    });
+    state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+    const id2 = state.matchLabels[1].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id2, key: 'key1', value: 'value2' },
+    });
+    state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+    const id3 = state.matchLabels[2].id;
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_MATCH_LABEL',
+      payload: { id: id3, key: 'key2', value: 'something' },
+    });
+
+    const next = brokerAppReducer(state, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'from-yaml', namespace: ns },
+        spec: {
+          selector: { matchLabels: { key1: 'value1', key2: 'something', key3: 'test' } },
+          capabilities: [{ producerOf: [{ address: 'QUEUE.OUT' }] }],
+        },
+      },
+      preserveLabels: true,
+    });
+
+    expect(next.matchLabels.slice(0, 3).map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: 'key1', value: 'value1' },
+      { key: 'key1', value: 'value2' },
+      { key: 'key2', value: 'something' },
+    ]);
+    expect(next.matchLabels[3]).toMatchObject({ key: 'key3', value: 'test' });
+    expect(next.cr.spec.selector?.matchLabels).toEqual({
+      key1: 'value1',
+      key2: 'something',
+      key3: 'test',
+    });
+  });
+
   it('SET_NAME updates the CR metadata name', () => {
     let state = createInitialBrokerAppState(ns);
     state = brokerAppReducer(state, { type: 'SET_NAME', payload: 'my-broker-app' });

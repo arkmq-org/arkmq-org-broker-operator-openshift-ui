@@ -22,12 +22,15 @@ export type BrokerServiceFormAction =
   | { type: 'UPDATE_LABEL_VALUE'; payload: { index: number; value: string } }
   | { type: 'SET_MEMORY_VALUE'; payload: string }
   | { type: 'SET_MEMORY_UNIT'; payload: 'Mi' | 'Gi' }
-  | { type: 'SET_MODEL'; payload: BrokerService };
+  | { type: 'SET_MODEL'; payload: BrokerService; preserveLabels?: boolean };
 
+// First occurrence wins so duplicate form rows do not overwrite YAML preview values.
 const labelsToRecord = (labels: LabelEntry[]): Record<string, string> | undefined => {
   const record: Record<string, string> = {};
   labels.forEach(({ key, value }) => {
-    if (key) record[key] = value;
+    if (key && !(key in record)) {
+      record[key] = value;
+    }
   });
   return Object.keys(record).length > 0 ? record : undefined;
 };
@@ -35,6 +38,24 @@ const labelsToRecord = (labels: LabelEntry[]): Record<string, string> | undefine
 const labelsFromRecord = (record: Record<string, string> | undefined): LabelEntry[] => {
   if (!record) return [];
   return Object.entries(record).map(([key, value]) => ({ key, value }));
+};
+
+const mergeFormLabelsWithYaml = (
+  formLabels: LabelEntry[],
+  yamlLabels: Record<string, string> | undefined,
+): LabelEntry[] => {
+  if (!yamlLabels) {
+    return formLabels;
+  }
+  const existingKeys = new Set(formLabels.map(({ key }) => key).filter(Boolean));
+  const merged = [...formLabels];
+  Object.entries(yamlLabels).forEach(([key, value]) => {
+    if (!existingKeys.has(key)) {
+      merged.push({ key, value });
+      existingKeys.add(key);
+    }
+  });
+  return merged;
 };
 
 const parseMemory = (memoryStr: string | undefined): { value: string; unit: 'Mi' | 'Gi' } => {
@@ -142,6 +163,22 @@ export const brokerServiceReducer = (
     case 'SET_MODEL': {
       const newCr = action.payload;
       const mem = parseMemory(newCr.spec?.resources?.limits?.memory);
+      if (action.preserveLabels) {
+        const mergedLabels = mergeFormLabelsWithYaml(state.labels, newCr.metadata?.labels);
+        return {
+          ...state,
+          cr: {
+            ...newCr,
+            metadata: {
+              ...newCr.metadata,
+              labels: labelsToRecord(mergedLabels),
+            },
+          },
+          labels: mergedLabels,
+          memoryValue: mem.value,
+          memoryUnit: mem.unit,
+        };
+      }
       return {
         ...state,
         cr: newCr,
