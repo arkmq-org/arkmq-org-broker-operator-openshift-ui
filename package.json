@@ -29,7 +29,9 @@
     "@openshift-console/dynamic-plugin-sdk": "4.22-latest",
     "@openshift-console/dynamic-plugin-sdk-webpack": "4.22-latest",
     "@patternfly/react-core": "^6.4.3",
+    "@patternfly/react-data-view": "^6.5.0",
     "@patternfly/react-icons": "^6.4.0",
+    "@patternfly/react-table": "^6.4.0",
     "@playwright/test": "^1.59.1",
     "@swc/core": "^1.15.32",
     "@swc/jest": "^0.2.37",
@@ -82,7 +84,8 @@
     "description": "OpenShift Console plugin UI for ArkMQ Broker Operator.",
     "exposedModules": {
       "CreateBrokerAppPage": "./brokerapps/createBrokerApp/CreateBrokerAppPage",
-      "CreateBrokerServicePage": "./brokerservices/createBrokerService/CreateBrokerServicePage"
+      "CreateBrokerServicePage": "./brokerservices/createBrokerService/CreateBrokerServicePage",
+      "BrokerAppListPage": "./brokerapps/brokerappList/BrokerAppListPage"
     },
     "dependencies": {
       "@console/pluginAPI": ">=4.22.0-0"

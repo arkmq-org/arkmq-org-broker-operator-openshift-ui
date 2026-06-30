@@ -20,8 +20,24 @@ export interface BrokerAppSpec {
   capabilities?: BrokerAppCapability[];
 }
 
+/** Basic Kubernetes condition shape used by these CRs. */
+export interface K8sCondition {
+  type: string;
+  status: string;
+  lastTransitionTime?: string;
+  reason?: string;
+  message?: string;
+}
+
+export interface BrokerAppStatus {
+  conditions?: K8sCondition[];
+  /** Name of the BrokerService this app has been provisioned to. */
+  provisionedService?: string;
+}
+
 export type BrokerAppCR = K8sResourceCommon & {
   spec: BrokerAppSpec;
+  status?: BrokerAppStatus;
 };
 
 export interface BrokerServiceSpec {
@@ -39,12 +55,6 @@ export interface BrokerServiceSpec {
 export type BrokerService = K8sResourceCommon & {
   spec?: BrokerServiceSpec;
   status?: {
-    conditions?: {
-      type: string;
-      status: string;
-      lastTransitionTime?: string;
-      reason?: string;
-      message?: string;
-    }[];
+    conditions?: K8sCondition[];
   };
 };
