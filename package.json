@@ -85,7 +85,8 @@
     "exposedModules": {
       "CreateBrokerAppPage": "./brokerapps/createBrokerApp/CreateBrokerAppPage",
       "CreateBrokerServicePage": "./brokerservices/createBrokerService/CreateBrokerServicePage",
-      "BrokerServiceListPage": "./brokerservices/brokerServiceList/BrokerServiceListPage"
+      "BrokerServiceListPage": "./brokerservices/brokerServiceList/BrokerServiceListPage",
+      "BrokerAppListPage": "./brokerapps/brokerappList/BrokerAppListPage"
     },
     "dependencies": {
       "@console/pluginAPI": ">=4.22.0-0"

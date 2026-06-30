@@ -27,10 +27,12 @@ export const ListPageHeader: FC<{
 export const ListPageBody: FC<{ children: ReactNode }> = ({ children }) =>
   createElement('div', { 'data-test': 'list-page-body' }, children);
 
-export const ListPageCreateLink: FC<{ to: string; children: ReactNode }> = ({
-  to,
-  children,
-}) => createElement('a', { href: to, 'data-test': 'list-page-create-link' }, children);
+export const ListPageCreateLink: FC<{
+  to: string;
+  children: ReactNode;
+  createAccessReview?: unknown;
+}> = ({ to, children }) =>
+  createElement('a', { href: to, 'data-test': 'list-page-create-link' }, children);
 
 export const ResourceLink: FC<{
   groupVersionKind: object;

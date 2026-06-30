@@ -20,8 +20,15 @@ export interface BrokerAppSpec {
   capabilities?: BrokerAppCapability[];
 }
 
+export interface BrokerAppStatus {
+  conditions?: K8sResourceCondition[];
+  /** Set by the operator once the app is bound to a BrokerService. */
+  service?: { name: string; namespace: string };
+}
+
 export type BrokerAppCR = K8sResourceCommon & {
   spec: BrokerAppSpec;
+  status?: BrokerAppStatus;
 };
 
 export enum K8sResourceConditionStatus {

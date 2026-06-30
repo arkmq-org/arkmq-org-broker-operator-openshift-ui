@@ -9,11 +9,12 @@ export interface ReadyConditionDisplay {
   color: ReadyConditionLabelColor;
 }
 
-const FAILED_REASON_PATTERN = /fail/i;
+const FAILED_REASON_PATTERN = /(Error|Failed)$/;
 
 export function getReadyConditionDisplay(
   conditions: K8sResourceCondition[] | undefined,
   conditionType = 'Ready',
+  falseWithoutErrorAs: 'Warning' | 'Pending' = 'Warning',
 ): ReadyConditionDisplay {
   const condition = conditions?.find((entry) => entry.type === conditionType);
 
@@ -30,8 +31,12 @@ export function getReadyConditionDisplay(
     if (FAILED_REASON_PATTERN.test(reason)) {
       return { labelKey: 'Failed', color: 'red' };
     }
-    return { labelKey: 'Warning', color: 'orange' };
+    return falseWithoutErrorAs === 'Pending'
+      ? { labelKey: 'Pending', color: 'grey' }
+      : { labelKey: 'Warning', color: 'orange' };
   }
 
-  return { labelKey: 'Warning', color: 'orange' };
+  return falseWithoutErrorAs === 'Pending'
+    ? { labelKey: 'Pending', color: 'grey' }
+    : { labelKey: 'Warning', color: 'orange' };
 }
