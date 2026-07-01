@@ -253,4 +253,90 @@ spec:
     expect(secretExists(`${appName}-binding-secret`, TEST_NAMESPACE)).toBe(false);
     console.log('✓ No binding secret created for unbound BrokerApp');
   });
+
+  // ── List page UI tests ──────────────────────────────────────────────────────
+  // Nested inside the lifecycle describe so these tests run before the afterAll
+  // deletes the namespace. Reuses e2e-app-matching (provisioned, bound to
+  // e2e-broker-service) and e2e-app-nomatch (pending) from the tests above.
+
+  test.describe('BrokerApp list page', () => {
+    const PROVISIONED_APP = 'e2e-app-matching';
+    const PENDING_APP = 'e2e-app-nomatch';
+
+    const LIST_URL = `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerApp`;
+
+    // Navigate to the list page and wait for the provisioned app row before each test.
+    test.beforeEach(async ({ page }) => {
+      await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+      await page.goto(LIST_URL, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector(`[data-test="brokerapp-row-${PROVISIONED_APP}"]`, {
+        timeout: 30000,
+      });
+    });
+
+    // ── Test: all apps appear in the list ─────────────────────────────────
+
+    test('provisioned and pending apps both appear in the list', async ({ page }) => {
+      await expect(page.locator(`[data-test="brokerapp-row-${PROVISIONED_APP}"]`)).toBeVisible();
+      await expect(page.locator(`[data-test="brokerapp-row-${PENDING_APP}"]`)).toBeVisible();
+      console.log(`✓ Both ${PROVISIONED_APP} and ${PENDING_APP} visible in list`);
+    });
+
+    // ── Test: name filter hides non-matching rows ──────────────────────────
+
+    test('search by name filters the list', async ({ page }) => {
+      await page.locator('[data-test="brokerapp-search"]').fill('matching');
+
+      await expect(page.locator(`[data-test="brokerapp-row-${PROVISIONED_APP}"]`)).toBeVisible();
+      await expect(page.locator(`[data-test="brokerapp-row-${PENDING_APP}"]`)).not.toBeVisible();
+      console.log(`✓ Name filter "matching" shows only ${PROVISIONED_APP}`);
+    });
+
+    // ── Test: provisioned service link navigates to service detail ─────────
+
+    test('clicking the provisioned service link navigates to service detail', async ({ page }) => {
+      // e2e-app-matching has provisionedService set by the lifecycle test above,
+      // so the ResourceLink renders in its list row.
+      const serviceLink = page.locator(`[data-test="resource-link-${SERVICE_NAME}"]`).first();
+      await expect(serviceLink).toBeVisible({ timeout: 10000 });
+
+      await serviceLink.click();
+
+      await expect(page).toHaveURL(new RegExp(SERVICE_NAME), { timeout: 15000 });
+      console.log(`✓ Clicking provisioned service link navigated to ${SERVICE_NAME} detail`);
+    });
+
+    // ── Test: delete an app → it disappears from the list ─────────────────
+    // Creates its own throwaway app so neither lifecycle app is touched.
+
+    test('deleting an app removes it from the list', async ({ page }) => {
+      const appToDelete = 'list-app-to-delete';
+
+      applyYaml(`
+apiVersion: ${BROKERAPP_API}
+kind: BrokerApp
+metadata:
+  name: ${appToDelete}
+  namespace: ${TEST_NAMESPACE}
+spec:
+  selector:
+    matchLabels:
+      tier: delete-test
+`);
+      console.log(`✓ Created ${appToDelete} for delete test`);
+
+      // Reload so the new app appears in the list.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector(`[data-test="brokerapp-row-${appToDelete}"]`, { timeout: 30000 });
+
+      // Delete via kubectl — the list reflects the deletion via the console watch stream.
+      kubectl(`delete brokerapp ${appToDelete} -n ${TEST_NAMESPACE}`);
+      console.log(`✓ Deleted ${appToDelete} via kubectl`);
+
+      await expect(page.locator(`[data-test="brokerapp-row-${appToDelete}"]`)).not.toBeVisible({
+        timeout: 30000,
+      });
+      console.log(`✓ ${appToDelete} row removed from list after deletion`);
+    });
+  });
 });

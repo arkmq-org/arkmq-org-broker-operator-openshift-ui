@@ -1,5 +1,16 @@
 [
   {
+    "type": "console.page/resource/list",
+    "properties": {
+      "model": {
+        "group": "broker.arkmq.org",
+        "version": "v1beta2",
+        "kind": "BrokerApp"
+      },
+      "component": { "$codeRef": "BrokerAppListPage" }
+    }
+  },
+  {
     "type": "console.page/route",
     "properties": {
       "exact": true,
