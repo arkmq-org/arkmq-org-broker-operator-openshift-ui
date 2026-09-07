@@ -1,6 +1,6 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
-import type { BrokerAppCR } from '../../k8s/types';
+import type { BrokerAppCR, BrokerAppSpec } from '../../k8s/types';
 
 export interface MatchLabel {
   id: string;
@@ -23,7 +23,11 @@ export type BrokerAppFormAction =
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
-  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean; resetChanges?: boolean };
+  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean; resetChanges?: boolean }
+  | { type: 'SET_CPU_REQUEST'; payload: string }
+  | { type: 'SET_CPU_LIMIT'; payload: string }
+  | { type: 'SET_MEMORY_REQUEST'; payload: string }
+  | { type: 'SET_MEMORY_LIMIT'; payload: string };
 
 // --- CR readers ---
 
@@ -75,6 +79,18 @@ const syncSelectorFromLabels = (cr: BrokerAppCR, labels: MatchLabel[]): void => 
     cr.spec.selector = { matchLabels: result };
   } else {
     delete cr.spec.selector;
+  }
+};
+
+const cleanupResources = (spec: BrokerAppSpec): void => {
+  if (spec.resources?.limits && !Object.keys(spec.resources.limits).length) {
+    delete spec.resources.limits;
+  }
+  if (spec.resources?.requests && !Object.keys(spec.resources.requests).length) {
+    delete spec.resources.requests;
+  }
+  if (spec.resources && !Object.keys(spec.resources).length) {
+    delete spec.resources;
   }
 };
 
@@ -159,6 +175,54 @@ export const brokerAppReducer = (
         : matchLabelsFromRecord(cr.spec.selector?.matchLabels);
       syncSelectorFromLabels(cr, matchLabels);
       return { ...state, cr, matchLabels, hasChanges: !action.resetChanges };
+
+    case 'SET_CPU_REQUEST':
+      if (action.payload) {
+        cr.spec.resources = {
+          ...cr.spec.resources,
+          requests: { ...cr.spec.resources?.requests, cpu: action.payload },
+        };
+      } else {
+        delete cr.spec.resources?.requests?.cpu;
+        cleanupResources(cr.spec);
+      }
+      break;
+
+    case 'SET_CPU_LIMIT':
+      if (action.payload) {
+        cr.spec.resources = {
+          ...cr.spec.resources,
+          limits: { ...cr.spec.resources?.limits, cpu: action.payload },
+        };
+      } else {
+        delete cr.spec.resources?.limits?.cpu;
+        cleanupResources(cr.spec);
+      }
+      break;
+
+    case 'SET_MEMORY_REQUEST':
+      if (action.payload) {
+        cr.spec.resources = {
+          ...cr.spec.resources,
+          requests: { ...cr.spec.resources?.requests, memory: action.payload },
+        };
+      } else {
+        delete cr.spec.resources?.requests?.memory;
+        cleanupResources(cr.spec);
+      }
+      break;
+
+    case 'SET_MEMORY_LIMIT':
+      if (action.payload) {
+        cr.spec.resources = {
+          ...cr.spec.resources,
+          limits: { ...cr.spec.resources?.limits, memory: action.payload },
+        };
+      } else {
+        delete cr.spec.resources?.limits?.memory;
+        cleanupResources(cr.spec);
+      }
+      break;
 
     default:
       return state;

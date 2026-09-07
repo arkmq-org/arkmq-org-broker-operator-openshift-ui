@@ -391,6 +391,129 @@ describe('brokerAppReducer', () => {
   });
 });
 
+describe('brokerAppReducer resource fields', () => {
+  const ns = 'test-ns';
+
+  it('SET_CPU_REQUEST writes spec.resources.requests.cpu', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_REQUEST', payload: '250m' });
+
+    expect(state.cr.spec.resources?.requests?.cpu).toBe('250m');
+  });
+
+  it('SET_CPU_LIMIT writes spec.resources.limits.cpu', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_LIMIT', payload: '500m' });
+
+    expect(state.cr.spec.resources?.limits?.cpu).toBe('500m');
+  });
+
+  it('SET_MEMORY_REQUEST writes spec.resources.requests.memory', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_REQUEST', payload: '256Mi' });
+
+    expect(state.cr.spec.resources?.requests?.memory).toBe('256Mi');
+  });
+
+  it('SET_MEMORY_LIMIT writes spec.resources.limits.memory', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_LIMIT', payload: '512Mi' });
+
+    expect(state.cr.spec.resources?.limits?.memory).toBe('512Mi');
+  });
+
+  it('removes cleared resource fields and cleans up empty parent objects', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_REQUEST', payload: '250m' });
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_REQUEST', payload: '256Mi' });
+    state = brokerAppReducer(state, { type: 'SET_CPU_REQUEST', payload: '' });
+
+    expect(state.cr.spec.resources?.requests?.cpu).toBeUndefined();
+    expect(state.cr.spec.resources?.requests?.memory).toBe('256Mi');
+
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_REQUEST', payload: '' });
+    expect(state.cr.spec.resources).toBeUndefined();
+  });
+
+  it('removes cleared limit fields and cleans up empty parent objects', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_LIMIT', payload: '500m' });
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_LIMIT', payload: '512Mi' });
+    state = brokerAppReducer(state, { type: 'SET_CPU_LIMIT', payload: '' });
+
+    expect(state.cr.spec.resources?.limits?.cpu).toBeUndefined();
+    expect(state.cr.spec.resources?.limits?.memory).toBe('512Mi');
+
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_LIMIT', payload: '' });
+    expect(state.cr.spec.resources).toBeUndefined();
+  });
+
+  it('only includes requests when only request fields are set', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_REQUEST', payload: '500m' });
+
+    expect(state.cr.spec.resources?.requests?.cpu).toBe('500m');
+    expect(state.cr.spec.resources?.limits).toBeUndefined();
+  });
+
+  it('only includes limits when only limit fields are set', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_LIMIT', payload: '2Gi' });
+
+    expect(state.cr.spec.resources?.limits?.memory).toBe('2Gi');
+    expect(state.cr.spec.resources?.requests).toBeUndefined();
+  });
+
+  it('builds all four fields together correctly', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, { type: 'SET_CPU_REQUEST', payload: '250m' });
+    state = brokerAppReducer(state, { type: 'SET_CPU_LIMIT', payload: '500m' });
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_REQUEST', payload: '256Mi' });
+    state = brokerAppReducer(state, { type: 'SET_MEMORY_LIMIT', payload: '512Mi' });
+
+    expect(state.cr.spec.resources).toEqual({
+      requests: { cpu: '250m', memory: '256Mi' },
+      limits: { cpu: '500m', memory: '512Mi' },
+    });
+  });
+
+  it('SET_MODEL preserves resource values from the incoming CR', () => {
+    const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'imported', namespace: ns },
+        spec: {
+          resources: {
+            requests: { cpu: '100m', memory: '128Mi' },
+            limits: { cpu: '200m', memory: '256Mi' },
+          },
+        },
+      },
+    });
+
+    expect(state.cr.spec.resources?.requests?.cpu).toBe('100m');
+    expect(state.cr.spec.resources?.limits?.cpu).toBe('200m');
+    expect(state.cr.spec.resources?.requests?.memory).toBe('128Mi');
+    expect(state.cr.spec.resources?.limits?.memory).toBe('256Mi');
+  });
+
+  it('SET_MODEL with no resources leaves spec.resources undefined', () => {
+    const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'no-resources', namespace: ns },
+        spec: {},
+      },
+    });
+
+    expect(state.cr.spec.resources).toBeUndefined();
+  });
+});
+
 describe('broker app hooks', () => {
   it('useBrokerAppFormState throws when used outside its Provider', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined);

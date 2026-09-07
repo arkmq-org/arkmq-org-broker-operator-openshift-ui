@@ -2,6 +2,8 @@ import {
   validateDNS1123,
   validateLabelEntries,
   validateMemoryValue,
+  validateCpuQuantity,
+  validateMemoryQuantity,
   validateYamlDuplicateBrokerServiceLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
 } from './k8s';
@@ -183,6 +185,98 @@ spec:
 
     expect(validateYamlDuplicateBrokerAppMatchLabels(yaml)).toBe(
       'Duplicate label key "env" in spec.selector.matchLabels',
+    );
+  });
+});
+
+describe('validateCpuQuantity', () => {
+  it('returns null for an empty string (field is optional)', () => {
+    expect(validateCpuQuantity('')).toBeNull();
+  });
+
+  it('returns null for a plain integer (1)', () => {
+    expect(validateCpuQuantity('1')).toBeNull();
+  });
+
+  it('returns null for milli-CPU (500m)', () => {
+    expect(validateCpuQuantity('500m')).toBeNull();
+  });
+
+  it('returns null for a decimal value (0.5)', () => {
+    expect(validateCpuQuantity('0.5')).toBeNull();
+  });
+
+  it('returns an error for a memory suffix (2Gi) — not valid for CPU', () => {
+    expect(validateCpuQuantity('2Gi')).not.toBeNull();
+  });
+
+  it('returns an error for a memory suffix (512Mi) — not valid for CPU', () => {
+    expect(validateCpuQuantity('512Mi')).not.toBeNull();
+  });
+
+  it('returns an error for a plain string with no numeric part', () => {
+    expect(validateCpuQuantity('abc')).not.toBeNull();
+  });
+
+  it('returns an error for a value with an invalid suffix', () => {
+    expect(validateCpuQuantity('500x')).not.toBeNull();
+  });
+
+  it('returns an error for a negative value', () => {
+    expect(validateCpuQuantity('-500m')).not.toBeNull();
+  });
+
+  it('returns an error message with CPU-specific example formats', () => {
+    expect(validateCpuQuantity('bad!')).toBe(
+      'Invalid CPU quantity. Use standard format (e.g., 250m, 1, 0.5)',
+    );
+  });
+});
+
+describe('validateMemoryQuantity', () => {
+  it('returns null for an empty string (field is optional)', () => {
+    expect(validateMemoryQuantity('')).toBeNull();
+  });
+
+  it('returns null for a plain integer', () => {
+    expect(validateMemoryQuantity('1')).toBeNull();
+  });
+
+  it('returns null for binary suffix (2Gi)', () => {
+    expect(validateMemoryQuantity('2Gi')).toBeNull();
+  });
+
+  it('returns null for binary suffix (512Mi)', () => {
+    expect(validateMemoryQuantity('512Mi')).toBeNull();
+  });
+
+  it('returns null for decimal SI suffix (1k)', () => {
+    expect(validateMemoryQuantity('1k')).toBeNull();
+  });
+
+  it('returns null for decimal SI suffix (4G)', () => {
+    expect(validateMemoryQuantity('4G')).toBeNull();
+  });
+
+  it('returns an error for milli-CPU suffix (500m) — not valid for memory', () => {
+    expect(validateMemoryQuantity('500m')).not.toBeNull();
+  });
+
+  it('returns an error for a plain string with no numeric part', () => {
+    expect(validateMemoryQuantity('abc')).not.toBeNull();
+  });
+
+  it('returns an error for a value with an invalid suffix', () => {
+    expect(validateMemoryQuantity('500x')).not.toBeNull();
+  });
+
+  it('returns an error for a negative value', () => {
+    expect(validateMemoryQuantity('-512Mi')).not.toBeNull();
+  });
+
+  it('returns an error message with memory-specific example formats', () => {
+    expect(validateMemoryQuantity('bad!')).toBe(
+      'Invalid memory quantity. Use standard format (e.g., 256Mi, 2Gi, 512M)',
     );
   });
 });

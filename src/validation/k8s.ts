@@ -121,6 +121,34 @@ export const validateYamlDuplicateBrokerAppMatchLabels = (yamlContent: string): 
   );
 
 /**
+ * Validates a CPU quantity value.
+ * Accepts: plain integer (1), decimal (0.5), or milli-CPU (500m).
+ * Rejects memory-only suffixes such as Ki, Mi, Gi.
+ */
+export const validateCpuQuantity = (value: string): string | null => {
+  if (!value) return null;
+  const cpuRegex = /^(\d+(\.\d+)?|\.\d+)(m)?$/;
+  if (!cpuRegex.test(value)) {
+    return 'Invalid CPU quantity. Use standard format (e.g., 250m, 1, 0.5)';
+  }
+  return null;
+};
+
+/**
+ * Validates a memory quantity value.
+ * Accepts: binary suffixes (Ki, Mi, Gi, Ti, Pi, Ei), decimal-SI suffixes (k, M, G, T, P, E),
+ * or plain integers. Rejects CPU-only suffix m.
+ */
+export const validateMemoryQuantity = (value: string): string | null => {
+  if (!value) return null;
+  const memoryRegex = /^(\d+(\.\d+)?|\.\d+)(k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$/;
+  if (!memoryRegex.test(value)) {
+    return 'Invalid memory quantity. Use standard format (e.g., 256Mi, 2Gi, 512M)';
+  }
+  return null;
+};
+
+/**
  * Validate memory value (must be a positive number)
  */
 export const validateMemoryValue = (value: string): string | null => {

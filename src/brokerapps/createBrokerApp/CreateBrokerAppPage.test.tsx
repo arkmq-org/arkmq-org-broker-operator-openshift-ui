@@ -42,4 +42,12 @@ describe('CreateBrokerAppPage', () => {
     render(<CreateBrokerAppPage />);
     expect(screen.getByTestId('brokerapp-create-btn')).toBeInTheDocument();
   });
+
+  it('renders the Resources section with all four resource input fields', () => {
+    render(<CreateBrokerAppPage />);
+    expect(screen.getByTestId('brokerapp-cpu-request')).toBeInTheDocument();
+    expect(screen.getByTestId('brokerapp-cpu-limit')).toBeInTheDocument();
+    expect(screen.getByTestId('brokerapp-memory-request')).toBeInTheDocument();
+    expect(screen.getByTestId('brokerapp-memory-limit')).toBeInTheDocument();
+  });
 });

@@ -13,6 +13,7 @@ import { ResourceFormEditor } from '../shared-components/ResourceFormEditor';
 import { GeneralDetailsSection } from './createBrokerApp/components/GeneralDetailsSection';
 import { SelectorSection } from './createBrokerApp/components/SelectorSection';
 import { CapabilitiesSection } from './createBrokerApp/components/CapabilitiesSection';
+import { ResourcesSection } from './createBrokerApp/components/ResourcesSection';
 
 interface BrokerAppFormPageProps {
   title: string;
@@ -101,6 +102,7 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
           <GeneralDetailsSection namespace={namespace} isEditMode={isEditMode} />
           <SelectorSection namespace={namespace} />
           <CapabilitiesSection />
+          <ResourcesSection />
         </ResourceFormEditor>
       </PageSection>
     </>
