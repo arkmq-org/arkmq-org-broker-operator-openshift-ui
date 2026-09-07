@@ -22,7 +22,11 @@ export type BrokerAppFormAction =
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
-  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean };
+  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean }
+  | { type: 'SET_CPU_REQUEST'; payload: string }
+  | { type: 'SET_CPU_LIMIT'; payload: string }
+  | { type: 'SET_MEMORY_REQUEST'; payload: string }
+  | { type: 'SET_MEMORY_LIMIT'; payload: string };
 
 // --- CR readers ---
 
@@ -156,6 +160,34 @@ export const brokerAppReducer = (
       matchLabels = action.preserveLabels
         ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.selector?.matchLabels)
         : matchLabelsFromRecord(cr.spec.selector?.matchLabels);
+      break;
+
+    case 'SET_CPU_REQUEST':
+      cr.spec.resources = {
+        ...cr.spec.resources,
+        requests: { ...cr.spec.resources?.requests, cpu: action.payload || undefined },
+      };
+      break;
+
+    case 'SET_CPU_LIMIT':
+      cr.spec.resources = {
+        ...cr.spec.resources,
+        limits: { ...cr.spec.resources?.limits, cpu: action.payload || undefined },
+      };
+      break;
+
+    case 'SET_MEMORY_REQUEST':
+      cr.spec.resources = {
+        ...cr.spec.resources,
+        requests: { ...cr.spec.resources?.requests, memory: action.payload || undefined },
+      };
+      break;
+
+    case 'SET_MEMORY_LIMIT':
+      cr.spec.resources = {
+        ...cr.spec.resources,
+        limits: { ...cr.spec.resources?.limits, memory: action.payload || undefined },
+      };
       break;
 
     default:
