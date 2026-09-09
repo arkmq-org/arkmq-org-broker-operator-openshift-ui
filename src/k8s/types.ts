@@ -16,9 +16,18 @@ export interface BrokerAppCapability {
   consumerOf?: MatchAddress[];
 }
 
+export interface PrivateAddress {
+  address: string;
+  pubSub?: boolean;
+  subscriptions?: string[];
+}
+
 export interface BrokerAppSpec {
   selector?: { matchLabels?: Record<string, string> };
   capabilities?: BrokerAppCapability[];
+  /** Private addresses whose lifecycle is tied to this app. */
+  addresses?: PrivateAddress[];
+  sharedAddresses?: PrivateAddress[];
 }
 
 export interface BrokerAppServiceBinding {

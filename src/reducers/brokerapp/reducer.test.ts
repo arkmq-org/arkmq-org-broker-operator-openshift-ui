@@ -291,3 +291,217 @@ describe('broker app hooks', () => {
     jest.restoreAllMocks();
   });
 });
+
+const applyActions = (
+  ...actions: Parameters<typeof brokerAppReducer>[1][]
+): ReturnType<typeof brokerAppReducer> =>
+  actions.reduce((s, a) => brokerAppReducer(s, a), createInitialBrokerAppState('test-ns'));
+
+const addEntry = (kind: 'private' | 'shared'): Parameters<typeof brokerAppReducer>[1] => ({
+  type: 'ADD_ADDRESS_ENTRY',
+  payload: { addressKind: kind },
+});
+
+const updateEntry = (
+  kind: 'private' | 'shared',
+  index: number,
+  fields: { address?: string; pubSub?: boolean },
+): Parameters<typeof brokerAppReducer>[1] => ({
+  type: 'UPDATE_ADDRESS_ENTRY',
+  payload: { addressKind: kind, index, ...fields },
+});
+
+const addSubscription = (
+  kind: 'private' | 'shared',
+  addressIndex: number,
+  name: string,
+): Parameters<typeof brokerAppReducer>[1] => ({
+  type: 'ADD_SUBSCRIPTION',
+  payload: { addressKind: kind, addressIndex, name },
+});
+
+const removeSubscription = (
+  kind: 'private' | 'shared',
+  addressIndex: number,
+  name: string,
+): Parameters<typeof brokerAppReducer>[1] => ({
+  type: 'REMOVE_SUBSCRIPTION',
+  payload: { addressKind: kind, addressIndex, name },
+});
+
+const makeCR = (name: string, spec = {}) => ({
+  apiVersion: 'broker.arkmq.org/v1beta2',
+  kind: 'BrokerApp',
+  metadata: { name, namespace: 'test-ns' },
+  spec,
+});
+
+describe('private address reducer actions', () => {
+  beforeEach(() => {
+    let nowCounter = 0;
+    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('ADD_ADDRESS_ENTRY appends a blank entry to privateAddresses', () => {
+    const state = applyActions(addEntry('private'));
+    expect(state.privateAddresses).toHaveLength(1);
+    expect(state.privateAddresses[0].address).toBe('');
+  });
+
+  it('ADD_ADDRESS_ENTRY blank entry is excluded from spec.addresses', () => {
+    const state = applyActions(addEntry('private'));
+    expect(state.cr.spec.addresses).toBeUndefined();
+  });
+
+  it('REMOVE_ADDRESS_ENTRY removes the correct private entry by index', () => {
+    const state = applyActions(addEntry('private'), {
+      type: 'REMOVE_ADDRESS_ENTRY',
+      payload: { addressKind: 'private', index: 0 },
+    });
+    expect(state.privateAddresses).toHaveLength(0);
+    expect(state.cr.spec.addresses).toBeUndefined();
+  });
+
+  it('UPDATE_ADDRESS_ENTRY address value is reflected in spec.addresses', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'orders.private' }),
+    );
+    expect(state.cr.spec.addresses).toEqual([{ address: 'orders.private' }]);
+  });
+
+  it('UPDATE_ADDRESS_ENTRY pubSub toggle is reflected in spec.addresses', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'events.topic', pubSub: true }),
+    );
+    expect(state.cr.spec.addresses).toEqual([{ address: 'events.topic', pubSub: true }]);
+  });
+
+  it('ADD_SUBSCRIPTION appends a name to the correct private address entry', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'events.topic', pubSub: true }),
+      addSubscription('private', 0, 'sub-a'),
+      addSubscription('private', 0, 'sub-b'),
+    );
+    expect(state.cr.spec.addresses).toEqual([
+      { address: 'events.topic', pubSub: true, subscriptions: ['sub-a', 'sub-b'] },
+    ]);
+  });
+
+  it('ADD_SUBSCRIPTION does not mutate other address entries', () => {
+    const state = applyActions(
+      addEntry('private'),
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'events.topic', pubSub: true }),
+      updateEntry('private', 1, { address: 'other.topic', pubSub: true }),
+      addSubscription('private', 0, 'sub-a'),
+    );
+    expect(state.privateAddresses[1].subscriptions).toBeUndefined();
+  });
+
+  it('REMOVE_SUBSCRIPTION removes the named subscription from the entry', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'events.topic', pubSub: true }),
+      addSubscription('private', 0, 'sub-a'),
+      addSubscription('private', 0, 'sub-b'),
+      removeSubscription('private', 0, 'sub-a'),
+    );
+    expect(state.privateAddresses[0].subscriptions).toEqual(['sub-b']);
+    expect(state.cr.spec.addresses?.[0].subscriptions).toEqual(['sub-b']);
+  });
+
+  it('ADD_SUBSCRIPTION on a shared address targets sharedAddresses, not privateAddresses', () => {
+    const state = applyActions(
+      addEntry('private'),
+      addEntry('shared'),
+      updateEntry('private', 0, { address: 'private.topic', pubSub: true }),
+      updateEntry('shared', 0, { address: 'shared.topic', pubSub: true }),
+      addSubscription('shared', 0, 'shared-sub'),
+    );
+    expect(state.sharedAddresses[0].subscriptions).toEqual(['shared-sub']);
+    expect(state.privateAddresses[0].subscriptions).toBeUndefined();
+  });
+
+  it('spec.addresses omits pubSub and subscriptions when not set', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'queue.plain' }),
+    );
+    const entry = state.cr.spec.addresses?.[0];
+    expect(entry).not.toHaveProperty('pubSub');
+    expect(entry).not.toHaveProperty('subscriptions');
+  });
+
+  it('spec.addresses is undefined when all entries are whitespace-only', () => {
+    const state = applyActions(addEntry('private'), updateEntry('private', 0, { address: '   ' }));
+    expect(state.cr.spec.addresses).toBeUndefined();
+  });
+
+  it('toggling pubSub off clears subscriptions from form state and spec', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'events.topic', pubSub: true }),
+      addSubscription('private', 0, 'sub-a'),
+      updateEntry('private', 0, { pubSub: false }),
+    );
+    expect(state.privateAddresses[0].subscriptions).toBeUndefined();
+    expect(state.cr.spec.addresses?.[0]).not.toHaveProperty('pubSub');
+    expect(state.cr.spec.addresses?.[0]).not.toHaveProperty('subscriptions');
+  });
+
+  it('SET_MODEL hydrates privateAddresses from spec.addresses', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        addresses: [
+          { address: 'orders.private', pubSub: false },
+          { address: 'events.topic', pubSub: true, subscriptions: ['sub-a'] },
+        ],
+      }),
+    });
+    expect(state.privateAddresses).toHaveLength(2);
+    expect(state.privateAddresses[0].address).toBe('orders.private');
+    expect(state.privateAddresses[1].address).toBe('events.topic');
+    expect(state.privateAddresses[1].subscriptions).toEqual(['sub-a']);
+  });
+
+  it('SET_MODEL hydrates sharedAddresses from spec.sharedAddresses', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        sharedAddresses: [{ address: 'shared.topic', pubSub: true }],
+      }),
+    });
+    expect(state.sharedAddresses).toHaveLength(1);
+    expect(state.sharedAddresses[0].address).toBe('shared.topic');
+    expect(state.cr.spec.sharedAddresses).toEqual([{ address: 'shared.topic', pubSub: true }]);
+  });
+
+  it('spec.addresses trims whitespace from address values', () => {
+    const state = applyActions(
+      addEntry('private'),
+      updateEntry('private', 0, { address: '  orders.private  ' }),
+    );
+    expect(state.cr.spec.addresses).toEqual([{ address: 'orders.private' }]);
+  });
+
+  it('REMOVE_ADDRESS_ENTRY at index 0 preserves the second entry at index 0', () => {
+    const state = applyActions(
+      addEntry('private'),
+      addEntry('private'),
+      updateEntry('private', 0, { address: 'first' }),
+      updateEntry('private', 1, { address: 'second' }),
+      { type: 'REMOVE_ADDRESS_ENTRY', payload: { addressKind: 'private', index: 0 } },
+    );
+    expect(state.privateAddresses).toHaveLength(1);
+    expect(state.privateAddresses[0].address).toBe('second');
+    expect(state.cr.spec.addresses).toEqual([{ address: 'second' }]);
+  });
+});

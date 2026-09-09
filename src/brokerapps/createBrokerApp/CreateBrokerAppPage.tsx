@@ -9,6 +9,9 @@ import type { BrokerAppCR } from '../../k8s/types';
 import {
   validateDNS1123,
   validateLabelEntries,
+  validatePrivateAddressEntries,
+  validateNoDuplicateAddresses,
+  validateNoAddressOverlap,
   validateYamlDuplicateBrokerAppMatchLabels,
 } from '../../validation/k8s';
 import {
@@ -21,6 +24,7 @@ import { ResourceFormEditor } from '../../shared-components/ResourceFormEditor';
 import { GeneralDetailsSection } from './components/GeneralDetailsSection';
 import { SelectorSection } from './components/SelectorSection';
 import { CapabilitiesSection } from './components/CapabilitiesSection';
+import { AddressManager } from './components/AddressManager';
 
 export default function CreateBrokerAppPage() {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -39,9 +43,17 @@ export default function CreateBrokerAppPage() {
     createInitialBrokerAppState(namespace),
   );
 
-  const { cr, matchLabels } = formState;
+  const { cr, matchLabels, privateAddresses, sharedAddresses } = formState;
+  const privateAddressNames = privateAddresses.map((e) => e.address);
+  const sharedAddressNames = sharedAddresses.map((e) => e.address);
   const isFormValid =
-    validateDNS1123(cr.metadata?.name ?? '') === null && validateLabelEntries(matchLabels) === null;
+    validateDNS1123(cr.metadata?.name ?? '') === null &&
+    validateLabelEntries(matchLabels) === null &&
+    validatePrivateAddressEntries(privateAddresses).every((e) => e === undefined) &&
+    validatePrivateAddressEntries(sharedAddresses).every((e) => e === undefined) &&
+    validateNoDuplicateAddresses(privateAddresses) === null &&
+    validateNoDuplicateAddresses(sharedAddresses) === null &&
+    validateNoAddressOverlap(privateAddressNames, sharedAddressNames) === null;
   const listPath = `/k8s/ns/${namespace}/broker.arkmq.org~v1beta2~BrokerApp`;
 
   const submit = async (crToSubmit: BrokerAppCR) => {
@@ -89,7 +101,25 @@ export default function CreateBrokerAppPage() {
                 if (duplicateLabelError) {
                   throw new Error(duplicateLabelError);
                 }
-                return submit(jsYaml.load(yaml) as BrokerAppCR);
+                const parsed = jsYaml.load(yaml) as BrokerAppCR;
+                const privateDupError = validateNoDuplicateAddresses(parsed.spec.addresses ?? []);
+                if (privateDupError) {
+                  throw new Error(privateDupError);
+                }
+                const sharedDupError = validateNoDuplicateAddresses(
+                  parsed.spec.sharedAddresses ?? [],
+                );
+                if (sharedDupError) {
+                  throw new Error(sharedDupError);
+                }
+                const overlapError = validateNoAddressOverlap(
+                  (parsed.spec.addresses ?? []).map((a) => a.address),
+                  (parsed.spec.sharedAddresses ?? []).map((a) => a.address),
+                );
+                if (overlapError) {
+                  throw new Error(overlapError);
+                }
+                return submit(parsed);
               }}
               onSwitchToForm={(yaml) => {
                 const duplicateLabelError = validateYamlDuplicateBrokerAppMatchLabels(yaml);
@@ -113,6 +143,8 @@ export default function CreateBrokerAppPage() {
               }}
             >
               <GeneralDetailsSection namespace={namespace} />
+              <AddressManager addressKind="private" />
+              <AddressManager addressKind="shared" />
               <SelectorSection namespace={namespace} />
               <CapabilitiesSection />
             </ResourceFormEditor>
