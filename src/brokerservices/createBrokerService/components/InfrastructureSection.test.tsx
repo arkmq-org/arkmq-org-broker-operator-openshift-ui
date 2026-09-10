@@ -5,6 +5,7 @@ const mockDispatch = jest.fn();
 const mockUseBrokerServiceFormState = jest.fn(() => ({
   memoryValue: '2',
   memoryUnit: 'Gi' as const,
+  cr: { spec: {} },
 }));
 
 jest.mock('../../../reducers/brokerservice/reducer', () => ({
@@ -47,6 +48,7 @@ beforeEach(() => {
   mockUseBrokerServiceFormState.mockReturnValue({
     memoryValue: '2',
     memoryUnit: 'Gi',
+    cr: { spec: {} },
   });
 });
 
@@ -69,6 +71,7 @@ describe('InfrastructureSection', () => {
     mockUseBrokerServiceFormState.mockReturnValue({
       memoryValue: '',
       memoryUnit: 'Gi',
+      cr: { spec: {} },
     });
 
     render(<InfrastructureSection />);

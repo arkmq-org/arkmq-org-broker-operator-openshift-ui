@@ -73,6 +73,10 @@ const parseMemory = (memoryStr: string | undefined): { value: string; unit: 'Mi'
 
 const buildMemoryString = (value: string, unit: 'Mi' | 'Gi'): string => `${value}${unit}`;
 
+/** Clones a BrokerService CR before storing it in form state, isolating edits from the watched cluster object. */
+export const cloneBrokerService = (cr: BrokerService): BrokerService =>
+  JSON.parse(JSON.stringify(cr)) as BrokerService;
+
 // --- reducer ---
 
 export const brokerServiceReducer = (
@@ -89,8 +93,17 @@ export const brokerServiceReducer = (
         },
       };
 
-    case 'ADD_LABEL':
-      return { ...state, labels: [...state.labels, { key: '', value: '' }] };
+    case 'ADD_LABEL': {
+      const labels = [...state.labels, { key: '', value: '' }];
+      return {
+        ...state,
+        labels,
+        cr: {
+          ...state.cr,
+          metadata: { ...state.cr.metadata, labels: labelsToRecord(labels) },
+        },
+      };
+    }
 
     case 'REMOVE_LABEL': {
       const labels = state.labels.filter((_, i) => i !== action.payload);
@@ -177,7 +190,7 @@ export const brokerServiceReducer = (
     }
 
     case 'SET_MODEL': {
-      const newCr = action.payload;
+      const newCr = cloneBrokerService(action.payload);
       const mem = parseMemory(newCr.spec?.resources?.limits?.memory);
       if (action.preserveLabels) {
         const mergedLabels = mergeFormLabelsWithYaml(state.labels, newCr.metadata?.labels);
@@ -210,14 +223,19 @@ export const brokerServiceReducer = (
 };
 
 const formStateFromCr = (cr: BrokerService): BrokerServiceFormState => {
-  const mem = parseMemory(cr.spec?.resources?.limits?.memory);
+  const clonedCr = cloneBrokerService(cr);
+  const mem = parseMemory(clonedCr.spec?.resources?.limits?.memory);
   return {
-    cr,
-    labels: labelsFromRecord(cr.metadata?.labels),
+    cr: clonedCr,
+    labels: labelsFromRecord(clonedCr.metadata?.labels),
     memoryValue: mem.value,
     memoryUnit: mem.unit,
   };
 };
+
+/** Builds edit-form state from a BrokerService CR fetched from the cluster. */
+export const createBrokerServiceStateFromCr = (cr: BrokerService): BrokerServiceFormState =>
+  formStateFromCr(cr);
 
 export const createInitialBrokerServiceState = (namespace: string): BrokerServiceFormState =>
   formStateFromCr({

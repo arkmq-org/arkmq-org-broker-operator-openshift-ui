@@ -86,6 +86,7 @@
       "CreateBrokerAppPage": "./brokerapps/createBrokerApp/CreateBrokerAppPage",
       "CreateBrokerServicePage": "./brokerservices/createBrokerService/CreateBrokerServicePage",
       "BrokerServiceListPage": "./brokerservices/brokerServiceList/BrokerServiceListPage",
+      "EditBrokerServicePage": "./brokerservices/editBrokerService/EditBrokerServicePage",
       "BrokerServiceDetailsPage": "./brokerservices/brokerServiceDetails/BrokerServiceDetailsPage",
       "BrokerAppListPage": "./brokerapps/brokerappList/BrokerAppListPage",
       "BrokerAppDetailsPage": "./brokerapps/brokerAppDetails/BrokerAppDetailsPage"
