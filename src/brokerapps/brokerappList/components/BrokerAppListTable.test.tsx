@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import { K8sResourceConditionStatus, type BrokerAppCR } from '../../../k8s/types';
 import { BrokerAppListTable } from './BrokerAppListTable';
 
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => jest.fn()),
+}));
+
 const makeApp = (name: string, namespace = 'test-namespace'): BrokerAppCR => ({
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',

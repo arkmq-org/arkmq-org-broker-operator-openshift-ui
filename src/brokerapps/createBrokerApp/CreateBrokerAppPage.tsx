@@ -1,27 +1,22 @@
 import { useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
-import * as jsYaml from 'js-yaml';
 import { k8sCreate, useAccessReview } from '@openshift-console/dynamic-plugin-sdk';
-import { EmptyState, EmptyStateBody, PageSection, Spinner, Title } from '@patternfly/react-core';
+import { EmptyState, EmptyStateBody, PageSection, Spinner } from '@patternfly/react-core';
 import { BrokerAppModel } from '../../k8s/models';
 import type { BrokerAppCR } from '../../k8s/types';
-import {
-  validateDNS1123,
-  validateLabelEntries,
-  validateYamlDuplicateBrokerAppMatchLabels,
-} from '../../validation/k8s';
 import {
   brokerAppReducer,
   createInitialBrokerAppState,
   BrokerAppFormStateContext,
   BrokerAppFormDispatchContext,
 } from '../../reducers/brokerapp/reducer';
-import { ResourceFormEditor } from '../../shared-components/ResourceFormEditor';
-import { GeneralDetailsSection } from './components/GeneralDetailsSection';
-import { SelectorSection } from './components/SelectorSection';
-import { CapabilitiesSection } from './components/CapabilitiesSection';
+import { BrokerAppFormPage } from '../BrokerAppFormPage';
 
+/**
+ * Container for the "Create BrokerApp" flow.
+ * Sets up the reducer with an empty initial state and submits via k8sCreate.
+ */
 export default function CreateBrokerAppPage() {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const { ns: namespace = 'default' } = useParams<{ ns: string }>();
@@ -39,15 +34,7 @@ export default function CreateBrokerAppPage() {
     createInitialBrokerAppState(namespace),
   );
 
-  const { cr, matchLabels } = formState;
-  const isFormValid =
-    validateDNS1123(cr.metadata?.name ?? '') === null && validateLabelEntries(matchLabels) === null;
   const listPath = `/k8s/ns/${namespace}/broker.arkmq.org~v1beta2~BrokerApp`;
-
-  const submit = async (crToSubmit: BrokerAppCR) => {
-    await k8sCreate({ model: BrokerAppModel, data: crToSubmit });
-    void navigate(listPath);
-  };
 
   if (canCreateLoading) {
     return (
@@ -72,52 +59,19 @@ export default function CreateBrokerAppPage() {
   return (
     <BrokerAppFormStateContext.Provider value={formState}>
       <BrokerAppFormDispatchContext.Provider value={dispatch}>
-        <>
-          <PageSection>
-            <Title headingLevel="h1" data-test="create-brokerapp-title">
-              {t('Create BrokerApp')}
-            </Title>
-          </PageSection>
-          <PageSection>
-            <ResourceFormEditor
-              initialResource={cr}
-              isFormValid={isFormValid}
-              createButtonTestId="brokerapp-create-btn"
-              onFormSubmit={() => submit(cr)}
-              onYamlSave={(yaml) => {
-                const duplicateLabelError = validateYamlDuplicateBrokerAppMatchLabels(yaml);
-                if (duplicateLabelError) {
-                  throw new Error(duplicateLabelError);
-                }
-                return submit(jsYaml.load(yaml) as BrokerAppCR);
-              }}
-              onSwitchToForm={(yaml) => {
-                const duplicateLabelError = validateYamlDuplicateBrokerAppMatchLabels(yaml);
-                if (duplicateLabelError) {
-                  return { ok: false, error: duplicateLabelError };
-                }
-                try {
-                  const parsed = jsYaml.load(yaml) as BrokerAppCR;
-                  dispatch({
-                    type: 'SET_MODEL',
-                    payload: parsed,
-                    preserveLabels: validateLabelEntries(matchLabels) !== null,
-                  });
-                  return { ok: true };
-                } catch {
-                  return { ok: false, error: t('Cannot switch to Form view: YAML is not valid') };
-                }
-              }}
-              onCancel={() => {
-                void navigate(listPath);
-              }}
-            >
-              <GeneralDetailsSection namespace={namespace} />
-              <SelectorSection namespace={namespace} />
-              <CapabilitiesSection />
-            </ResourceFormEditor>
-          </PageSection>
-        </>
+        <BrokerAppFormPage
+          title={t('Create BrokerApp')}
+          namespace={namespace}
+          onSubmit={async (cr: BrokerAppCR) => {
+            await k8sCreate({ model: BrokerAppModel, data: cr });
+            void navigate(listPath);
+          }}
+          onCancel={() => {
+            void navigate(listPath);
+          }}
+          titleTestId="create-brokerapp-title"
+          submitButtonTestId="brokerapp-create-btn"
+        />
       </BrokerAppFormDispatchContext.Provider>
     </BrokerAppFormStateContext.Provider>
   );

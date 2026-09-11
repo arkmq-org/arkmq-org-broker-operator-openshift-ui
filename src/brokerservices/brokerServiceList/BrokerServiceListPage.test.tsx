@@ -10,6 +10,10 @@ import { K8sResourceConditionStatus } from '../../k8s/types';
 import BrokerServiceListPage from './BrokerServiceListPage';
 import { BrokerServiceModel } from '../../k8s/models';
 
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => jest.fn()),
+}));
+
 const mockUseK8sWatchResource = useK8sWatchResource as jest.Mock;
 const mockUseActiveNamespace = useActiveNamespace as jest.Mock;
 const mockIsAllNamespacesKey = isAllNamespacesKey as unknown as jest.Mock;

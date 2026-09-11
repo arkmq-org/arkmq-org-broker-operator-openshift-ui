@@ -9,10 +9,9 @@ import { BrokerServiceModel } from '../../k8s/models';
 import type { BrokerService } from '../../k8s/types';
 import { ResourceDetailsActionsMenu } from './ResourceDetailsActionsMenu';
 
+const mockNavigate = jest.fn();
 jest.mock('react-router', () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
+  useNavigate: jest.fn(() => mockNavigate),
 }));
 
 const mockUseLabelsModal = useLabelsModal as jest.Mock;
@@ -51,13 +50,30 @@ describe('ResourceDetailsActionsMenu', () => {
     expect(screen.getByText('Edit annotations')).toBeInTheDocument();
     expect(screen.getByText('Edit BrokerService')).toBeInTheDocument();
     expect(screen.getByText('Delete BrokerService')).toBeInTheDocument();
-    expect(screen.getByText('Edit BrokerService').closest('a')).toHaveAttribute(
-      'href',
-      '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService/my-broker-service/yaml',
+  });
+
+  it('uses editFormPath as the edit destination when provided', async () => {
+    const user = userEvent.setup();
+    render(
+      <ResourceDetailsActionsMenu
+        resource={brokerService}
+        model={BrokerServiceModel}
+        editActionLabel="Edit BrokerService"
+        deleteActionLabel="Delete BrokerService"
+        listPath="/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService"
+        editFormPath="/k8s/ns/default/brokerservices/my-broker-service/edit"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit BrokerService' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/k8s/ns/default/brokerservices/my-broker-service/edit',
     );
   });
 
-  it('launches console modals and links edit YAML for labels, annotations, edit, and delete', async () => {
+  it('launches console modals for labels, annotations, and delete', async () => {
     const launchLabelsModal = jest.fn();
     const launchAnnotationsModal = jest.fn();
     const launchDeleteModal = jest.fn();
@@ -81,10 +97,6 @@ describe('ResourceDetailsActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(screen.getByRole('menuitem', { name: 'Edit annotations' }));
     await user.click(screen.getByRole('button', { name: 'Actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Edit BrokerService' })).toHaveAttribute(
-      'href',
-      '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService/my-broker-service/yaml',
-    );
     await user.click(screen.getByRole('menuitem', { name: 'Delete BrokerService' }));
 
     expect(launchLabelsModal).toHaveBeenCalledTimes(1);
@@ -93,6 +105,26 @@ describe('ResourceDetailsActionsMenu', () => {
     expect(mockUseDeleteModal).toHaveBeenCalledWith(
       brokerService,
       '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService',
+    );
+  });
+
+  it('falls back to YAML edit path when editFormPath is not provided', async () => {
+    const user = userEvent.setup();
+    render(
+      <ResourceDetailsActionsMenu
+        resource={brokerService}
+        model={BrokerServiceModel}
+        editActionLabel="Edit BrokerService"
+        deleteActionLabel="Delete BrokerService"
+        listPath="/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit BrokerService' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService/my-broker-service/yaml',
     );
   });
 

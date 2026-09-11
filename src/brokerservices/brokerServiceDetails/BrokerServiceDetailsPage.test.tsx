@@ -8,6 +8,7 @@ import BrokerServiceDetailsPage from './BrokerServiceDetailsPage';
 
 jest.mock('react-router', () => ({
   useParams: jest.fn(),
+  useNavigate: jest.fn(() => jest.fn()),
   useLocation: () => ({
     pathname: '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerService/my-messaging-service',
   }),

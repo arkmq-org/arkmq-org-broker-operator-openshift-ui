@@ -4,6 +4,10 @@ import type { BrokerService } from '../../../k8s/types';
 import { BrokerServiceListRow } from './BrokerServiceListRow';
 import { DataViewTable } from '@patternfly/react-data-view';
 
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => jest.fn()),
+}));
+
 const STATUS_LABELS = {
   Running: 'Running',
   Warning: 'Warning',

@@ -3,6 +3,10 @@ import { DataViewTable } from '@patternfly/react-data-view';
 import { K8sResourceConditionStatus, type BrokerAppCR } from '../../../k8s/types';
 import { BrokerAppListRow } from './BrokerAppListRow';
 
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => jest.fn()),
+}));
+
 const DEFAULT_OPTIONS = {
   editActionLabel: 'Edit BrokerApp',
   deleteActionLabel: 'Delete BrokerApp',

@@ -4,6 +4,11 @@ import { useDeleteModal } from '@openshift-console/dynamic-plugin-sdk';
 import { BrokerServiceModel } from '../../k8s/models';
 import { ResourceListRowActions } from './ResourceListRowActions';
 
+const mockNavigate = jest.fn();
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => mockNavigate),
+}));
+
 const mockUseDeleteModal = useDeleteModal as jest.Mock;
 
 const myMessagingService1 = 'my-messaging-service-1';
@@ -53,19 +58,43 @@ describe('ResourceListRowActions', () => {
     expect(screen.queryByRole('button', { name: 'Actions' })).not.toBeInTheDocument();
   });
 
-  it('shows edit and delete actions with the correct edit path when the menu is opened', async () => {
+  it('shows edit and delete actions when the menu is opened', async () => {
     const user = userEvent.setup();
     render(<ResourceListRowActions {...defaultProps} />);
 
     await user.click(screen.getByRole('button', { name: 'Actions' }));
 
-    const editAction = screen.getByRole('menuitem', { name: 'Edit resource' });
-    expect(editAction).toBeInTheDocument();
-    expect(editAction).toHaveAttribute(
-      'href',
+    expect(screen.getByRole('menuitem', { name: 'Edit resource' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Delete resource' })).toBeInTheDocument();
+  });
+
+  it('uses editFormPath as the edit destination when provided', async () => {
+    const user = userEvent.setup();
+    render(
+      <ResourceListRowActions
+        {...defaultProps}
+        editFormPath={`/k8s/ns/${testNamespace}/brokerapps/${myMessagingService1}/edit`}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit resource' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/k8s/ns/${testNamespace}/brokerapps/${myMessagingService1}/edit`,
+    );
+  });
+
+  it('falls back to YAML edit path when editFormPath is not provided', async () => {
+    const user = userEvent.setup();
+    render(<ResourceListRowActions {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit resource' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
       `/k8s/ns/${testNamespace}/broker.arkmq.org~v1beta2~BrokerService/${myMessagingService1}/yaml`,
     );
-    expect(screen.getByRole('menuitem', { name: 'Delete resource' })).toBeInTheDocument();
   });
 
   it('launches the delete modal when delete is selected', async () => {

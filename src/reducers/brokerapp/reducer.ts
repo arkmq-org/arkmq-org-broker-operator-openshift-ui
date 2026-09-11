@@ -13,6 +13,7 @@ export type AddressField = 'producerOf' | 'consumerOf';
 export interface BrokerAppFormState {
   cr: BrokerAppCR;
   matchLabels: MatchLabel[];
+  hasChanges: boolean;
 }
 
 export type BrokerAppFormAction =
@@ -22,7 +23,7 @@ export type BrokerAppFormAction =
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
-  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean };
+  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean; resetChanges?: boolean };
 
 // --- CR readers ---
 
@@ -156,14 +157,15 @@ export const brokerAppReducer = (
       matchLabels = action.preserveLabels
         ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.selector?.matchLabels)
         : matchLabelsFromRecord(cr.spec.selector?.matchLabels);
-      break;
+      syncSelectorFromLabels(cr, matchLabels);
+      return { ...state, cr, matchLabels, hasChanges: !action.resetChanges };
 
     default:
       return state;
   }
 
   syncSelectorFromLabels(cr, matchLabels);
-  return { ...state, cr, matchLabels };
+  return { ...state, cr, matchLabels, hasChanges: true };
 };
 
 export const createInitialBrokerAppState = (namespace: string): BrokerAppFormState => ({
@@ -174,6 +176,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
     spec: {},
   },
   matchLabels: [{ id: String(Date.now()), key: '', value: '' }],
+  hasChanges: false,
 });
 
 export const BrokerAppFormStateContext = createContext<BrokerAppFormState | undefined>(undefined);

@@ -3,6 +3,10 @@ import type { BrokerService } from '../../../k8s/types';
 import { K8sResourceConditionStatus } from '../../../k8s/types';
 import { BrokerServiceListTable } from './BrokerServiceListTable';
 
+jest.mock('react-router', () => ({
+  useNavigate: jest.fn(() => jest.fn()),
+}));
+
 const myMessagingService1 = 'my-messaging-service-1';
 
 const makeService = (name: string, namespace = 'test-namespace'): BrokerService => ({

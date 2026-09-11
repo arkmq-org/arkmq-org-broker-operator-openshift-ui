@@ -15,19 +15,21 @@ import {
   type MenuToggleElement,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 
 export interface ResourceDetailsActionsMenuProps {
   /** CR shown on the details page; drives labels, annotations, edit, and delete actions. */
   resource: K8sResourceCommon;
   /** K8s model used to build the YAML edit path. */
   model: K8sModel;
-  /** Label for the YAML edit action. */
+  /** Label for the edit action. */
   editActionLabel: string;
   /** Label for the delete action. */
   deleteActionLabel: string;
   /** Path to return to after a successful delete. */
   listPath: string;
+  /** Overrides the default YAML edit path. */
+  editFormPath?: string;
   dataTest?: string;
 }
 
@@ -38,9 +40,11 @@ export const ResourceDetailsActionsMenu: FC<ResourceDetailsActionsMenuProps> = (
   editActionLabel,
   deleteActionLabel,
   listPath,
+  editFormPath,
   dataTest,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const launchLabelsModal = useLabelsModal(resource);
   const launchAnnotationsModal = useAnnotationsModal(resource);
@@ -100,12 +104,11 @@ export const ResourceDetailsActionsMenu: FC<ResourceDetailsActionsMenuProps> = (
           {t('Edit annotations')}
         </DropdownItem>
         <DropdownItem
-          component={Link}
-          to={editPath}
           onClick={() => {
             setIsOpen(false);
+            void navigate(editFormPath ?? editPath);
           }}
-          data-test={`edit-yaml-${namespace}-${name}`}
+          data-test={`edit-${namespace}-${name}`}
         >
           {editActionLabel}
         </DropdownItem>
