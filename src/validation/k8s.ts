@@ -110,6 +110,72 @@ export const validateYamlDuplicateKeysInMapping = (
   return null;
 };
 
+/**
+ * Per-entry required check — flags empty or whitespace-only address names.
+ *
+ * @param entries - Any array of objects with an address field
+ * @returns Parallel array of error strings or undefined
+ */
+export const validateAddressEntries = (entries: { address: string }[]): (string | undefined)[] =>
+  entries.map((e) => (e.address.trim() ? undefined : 'Address is required'));
+
+/**
+ * Marks the second and subsequent occurrences of duplicate non-empty addresses.
+ * The first occurrence is not flagged — only later repeats get an error.
+ * Blank entries are skipped (handled by validateAddressEntries).
+ *
+ * @param entries - Any array of objects with an address field
+ * @returns Per-entry error or undefined, parallel to the input array
+ */
+export const validateDuplicateAddressEntries = (
+  entries: { address: string }[],
+): (string | undefined)[] => {
+  const seen = new Set<string>();
+  return entries.map((e) => {
+    const trimmed = e.address.trim();
+    if (!trimmed) return undefined;
+    if (seen.has(trimmed)) return 'Duplicate address';
+    seen.add(trimmed);
+    return undefined;
+  });
+};
+
+/**
+ * Rejects duplicate non-empty address names within a single address list.
+ * Empty/whitespace entries are skipped — validateAddressEntries handles those.
+ *
+ * @param entries - Any array of objects with an address field
+ * @returns Error naming the first duplicate, or null when all entries are unique
+ */
+export const validateNoDuplicateAddresses = (entries: { address: string }[]): string | null => {
+  const seen = new Set<string>();
+  for (const { address } of entries) {
+    const trimmed = address.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) {
+      return `Duplicate address "${trimmed}"`;
+    }
+    seen.add(trimmed);
+  }
+  return null;
+};
+
+// TODO: i18n — this returns an interpolated English string; callers throw it as an Error
+// so it bypasses t(). To translate, return the overlap address separately and let the call site
+// build the message with t() interpolation.
+// Ensures no address is in both spec.addresses and spec.sharedAddresses; if so returns error naming first overlapping address, else null.
+export const validateNoAddressOverlap = (
+  privateAddresses: string[],
+  sharedAddresses: string[],
+): string | null => {
+  const sharedSet = new Set(sharedAddresses.map((a) => a.trim()));
+  const overlap = privateAddresses.map((a) => a.trim()).find((a) => a && sharedSet.has(a));
+
+  return overlap
+    ? `Address "${overlap}" cannot appear in both spec.addresses and spec.sharedAddresses`
+    : null;
+};
+
 export const validateYamlDuplicateBrokerServiceLabels = (yamlContent: string): string | null =>
   validateYamlDuplicateKeysInMapping(yamlContent, ['metadata', 'labels'], 'metadata.labels');
 

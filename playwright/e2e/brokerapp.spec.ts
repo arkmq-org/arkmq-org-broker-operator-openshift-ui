@@ -211,6 +211,101 @@ spec:
     );
   });
 
+  // ── Test: Create app with private addresses → verify spec.addresses ──────
+
+  test('private addresses with pubSub and subscriptions appear in spec', async ({ page }) => {
+    const appName = 'e2e-app-private-addrs';
+
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/~new`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
+
+    await page.locator('[data-test="brokerapp-name"]').fill(appName);
+
+    // 1. Add a plain point-to-point address (no pubSub)
+    await page.locator('[data-test="add-private-address-btn"]').click();
+    await page.locator('[data-test="private-address-input-0"]').fill('orders.queue');
+
+    // 2. Add a pub/sub address with subscriptions
+    await page.locator('[data-test="add-private-address-btn"]').click();
+    await page.locator('[data-test="private-address-input-1"]').fill('events.topic');
+    // PatternFly Switch renders a decorative <span> over the <input> that
+    // intercepts pointer events. Click the visible <label> instead.
+    await page.locator('label[for="private-address-pubsub-1"]').click();
+
+    // Add two subscriptions
+    await page.getByText('Add subscription').click();
+    const subInput = page.getByPlaceholder('e.g., my-subscription');
+    await subInput.fill('durable-sub-a');
+    await subInput.press('Enter');
+    await expect(page.getByText('durable-sub-a')).toBeVisible({ timeout: 5000 });
+
+    await page.getByText('Add subscription').click();
+    const subInput2 = page.getByPlaceholder('e.g., my-subscription');
+    await subInput2.fill('durable-sub-b');
+    await subInput2.press('Enter');
+    await expect(page.getByText('durable-sub-b')).toBeVisible({ timeout: 5000 });
+
+    // 3. Submit the form
+    await page.locator('[data-test="brokerapp-create-btn"]').click();
+    await page.waitForURL('**/broker.arkmq.org~v1beta2~BrokerApp**', { timeout: 30000 });
+    console.log('✓ Form submitted — navigated to BrokerApp list');
+
+    // 4. Verify spec.addresses via kubectl
+    await sleep(2000);
+    const addressesJson = kubectl(
+      `get brokerapp ${appName} -n ${TEST_NAMESPACE} -o jsonpath='{.spec.addresses}'`,
+    );
+    const addresses = JSON.parse(addressesJson) as {
+      address: string;
+      pubSub?: boolean;
+      subscriptions?: string[];
+    }[];
+
+    expect(addresses).toHaveLength(2);
+
+    const plainEntry = addresses.find((a) => a.address === 'orders.queue');
+    expect(plainEntry).toBeDefined();
+    expect(plainEntry?.pubSub).toBeUndefined();
+    expect(plainEntry?.subscriptions).toBeUndefined();
+    console.log('✓ Plain address "orders.queue" present without pubSub');
+
+    const pubSubEntry = addresses.find((a) => a.address === 'events.topic');
+    expect(pubSubEntry).toBeDefined();
+    expect(pubSubEntry?.pubSub).toBe(true);
+    expect(pubSubEntry?.subscriptions).toEqual(
+      expect.arrayContaining(['durable-sub-a', 'durable-sub-b']),
+    );
+    expect(pubSubEntry?.subscriptions).toHaveLength(2);
+    console.log('✓ Pub/sub address "events.topic" present with subscriptions');
+  });
+
+  // ── Test: Duplicate private address shows validation error ──────────────────
+
+  test('duplicate private address shows inline validation error', async ({ page }) => {
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/~new`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
+
+    // Add two entries with the same address
+    await page.locator('[data-test="add-private-address-btn"]').click();
+    await page.locator('[data-test="add-private-address-btn"]').click();
+    await page.locator('[data-test="private-address-input-0"]').fill('duplicate.addr');
+    await page.locator('[data-test="private-address-input-1"]').fill('duplicate.addr');
+    await page.locator('[data-test="private-address-input-1"]').blur();
+
+    await expect(page.getByText('Duplicate address')).toBeVisible({ timeout: 5000 });
+    console.log('✓ Duplicate address validation error is visible');
+
+    // Verify the Create button is disabled
+    await expect(page.locator('[data-test="brokerapp-create-btn"]')).toBeDisabled();
+    console.log('✓ Create button is disabled with duplicate address');
+  });
+
   // ── Test: Create app with non-matching labels → verify it stays pending ──────
 
   test('non-matching labels - BrokerApp stays pending', async () => {

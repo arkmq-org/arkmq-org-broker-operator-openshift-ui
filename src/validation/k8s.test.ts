@@ -1,7 +1,11 @@
 import {
   validateDNS1123,
+  validateDuplicateAddressEntries,
   validateLabelEntries,
   validateMemoryValue,
+  validateNoDuplicateAddresses,
+  validateNoAddressOverlap,
+  validateAddressEntries,
   validateYamlDuplicateBrokerServiceLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
 } from './k8s';
@@ -202,5 +206,130 @@ spec:
 `;
 
     expect(validateYamlDuplicateBrokerServiceLabels(yaml)).toBeNull();
+  });
+});
+
+describe('validateAddressEntries', () => {
+  it.each<[{ address: string }[], (string | undefined)[]]>([
+    [
+      [{ address: 'orders.private' }, { address: 'events.topic' }],
+      [undefined, undefined],
+    ],
+    [[{ address: '' }], ['Address is required']],
+    [[{ address: '   ' }], ['Address is required']],
+    [
+      [{ address: 'valid.address' }, { address: '' }],
+      [undefined, 'Address is required'],
+    ],
+    [[], []],
+  ])('validates entries %j', (entries, expected) => {
+    expect(validateAddressEntries(entries)).toEqual(expected);
+  });
+});
+
+describe('validateDuplicateAddressEntries', () => {
+  it('returns all undefined when addresses are unique', () => {
+    expect(
+      validateDuplicateAddressEntries([{ address: 'a' }, { address: 'b' }, { address: 'c' }]),
+    ).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('flags the second occurrence, not the first', () => {
+    expect(validateDuplicateAddressEntries([{ address: 'orders' }, { address: 'orders' }])).toEqual(
+      [undefined, 'Duplicate address'],
+    );
+  });
+
+  it('flags all subsequent occurrences after the first', () => {
+    expect(
+      validateDuplicateAddressEntries([{ address: 'a' }, { address: 'a' }, { address: 'a' }]),
+    ).toEqual([undefined, 'Duplicate address', 'Duplicate address']);
+  });
+
+  it('skips blank entries', () => {
+    expect(validateDuplicateAddressEntries([{ address: '' }, { address: '' }])).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('detects duplicates that differ only by surrounding whitespace', () => {
+    expect(
+      validateDuplicateAddressEntries([{ address: 'orders' }, { address: '  orders  ' }]),
+    ).toEqual([undefined, 'Duplicate address']);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(validateDuplicateAddressEntries([])).toEqual([]);
+  });
+});
+
+describe('validateNoDuplicateAddresses', () => {
+  it.each([
+    [[{ address: 'orders.private' }, { address: 'events.topic' }]],
+    [[]],
+    [[{ address: '' }, { address: '   ' }]],
+  ])('returns null for non-duplicate entries %j', (entries) => {
+    expect(validateNoDuplicateAddresses(entries)).toBeNull();
+  });
+
+  it('returns error naming the first duplicate address', () => {
+    expect(
+      validateNoDuplicateAddresses([
+        { address: 'orders' },
+        { address: 'events' },
+        { address: 'orders' },
+      ]),
+    ).toBe('Duplicate address "orders"');
+  });
+
+  it('detects duplicates that differ only by surrounding whitespace', () => {
+    expect(validateNoDuplicateAddresses([{ address: 'orders' }, { address: '  orders  ' }])).toBe(
+      'Duplicate address "orders"',
+    );
+  });
+
+  it('returns the first duplicate when multiple duplicates exist', () => {
+    expect(
+      validateNoDuplicateAddresses([
+        { address: 'a' },
+        { address: 'b' },
+        { address: 'a' },
+        { address: 'b' },
+      ]),
+    ).toBe('Duplicate address "a"');
+  });
+});
+
+describe('validateNoAddressOverlap', () => {
+  it.each<[string[], string[]]>([
+    [['orders.private'], ['shared.topic']],
+    [[], ['shared.topic']],
+    [['orders.private'], []],
+    [[], []],
+  ])('returns null for non-overlapping lists %j / %j', (priv, shared) => {
+    expect(validateNoAddressOverlap(priv, shared)).toBeNull();
+  });
+
+  it('returns an error naming the overlapping address', () => {
+    expect(validateNoAddressOverlap(['chungus', 'other'], ['chungus'])).toBe(
+      'Address "chungus" cannot appear in both spec.addresses and spec.sharedAddresses',
+    );
+  });
+
+  it('returns the first overlapping address when multiple overlap', () => {
+    expect(validateNoAddressOverlap(['a', 'b', 'c'], ['b', 'c'])).toBe(
+      'Address "b" cannot appear in both spec.addresses and spec.sharedAddresses',
+    );
+  });
+
+  it('detects overlap when addresses differ only by surrounding whitespace', () => {
+    expect(validateNoAddressOverlap(['  orders  '], ['orders'])).toBe(
+      'Address "orders" cannot appear in both spec.addresses and spec.sharedAddresses',
+    );
+  });
+
+  it('ignores empty/whitespace-only entries when checking overlap', () => {
+    expect(validateNoAddressOverlap(['', '   '], ['', '   '])).toBeNull();
   });
 });
