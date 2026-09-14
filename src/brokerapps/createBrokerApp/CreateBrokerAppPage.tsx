@@ -21,6 +21,7 @@ import { ResourceFormEditor } from '../../shared-components/ResourceFormEditor';
 import { GeneralDetailsSection } from './components/GeneralDetailsSection';
 import { SelectorSection } from './components/SelectorSection';
 import { CapabilitiesSection } from './components/CapabilitiesSection';
+import { ResourcesSection } from './components/ResourcesSection';
 
 export default function CreateBrokerAppPage() {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -115,6 +116,7 @@ export default function CreateBrokerAppPage() {
               <GeneralDetailsSection namespace={namespace} />
               <SelectorSection namespace={namespace} />
               <CapabilitiesSection />
+              <ResourcesSection />
             </ResourceFormEditor>
           </PageSection>
         </>
