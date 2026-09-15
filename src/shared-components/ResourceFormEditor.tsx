@@ -20,6 +20,44 @@ import { FormActionGroup } from './FormActionGroup';
 
 export type SwitchResult = { ok: true } | { ok: false; error: string };
 
+interface YamlEditorWithChangeTrackingProps {
+  initialResource: object;
+  create: boolean;
+  onContentChange: (content: string, hasUnsavedChanges: boolean) => void;
+  onSave: (yaml: string) => void;
+}
+
+/** Tracks YAML edits in an isolated instance that remounts when the editor session resets. */
+const YamlEditorWithChangeTracking: React.FC<YamlEditorWithChangeTrackingProps> = ({
+  initialResource,
+  create,
+  onContentChange,
+  onSave,
+}) => {
+  const baselineYamlRef = useRef<string | null>(null);
+
+  const handleYamlChange = useCallback(
+    (content: string) => {
+      if (baselineYamlRef.current === null) {
+        baselineYamlRef.current = content;
+        onContentChange(content, false);
+        return;
+      }
+      onContentChange(content, content !== baselineYamlRef.current);
+    },
+    [onContentChange],
+  );
+
+  return (
+    <YamlEditorWrapper
+      initialResource={initialResource}
+      create={create}
+      onChange={handleYamlChange}
+      onSave={onSave}
+    />
+  );
+};
+
 interface ResourceFormEditorProps {
   initialResource: object;
   isFormValid?: boolean;
@@ -27,7 +65,16 @@ interface ResourceFormEditorProps {
   onYamlSave: (yaml: string) => Promise<void>;
   onSwitchToForm: (yaml: string) => SwitchResult;
   onCancel: () => void;
+  mode?: 'create' | 'edit';
+  onReload?: () => void | Promise<void>;
+  /** When true in edit mode, Cancel and Reload prompt before discarding unsaved form changes. */
+  hasUnsavedChanges?: boolean;
+  isReloading?: boolean;
+  /** Bumps when the backing resource is re-fetched so the YAML editor remounts. */
+  editorResetKey?: number;
   createButtonTestId?: string;
+  saveButtonTestId?: string;
+  reloadButtonTestId?: string;
   cancelButtonTestId?: string;
   children: React.ReactNode;
 }
@@ -39,7 +86,14 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   onYamlSave,
   onSwitchToForm,
   onCancel,
+  mode = 'create',
+  onReload,
+  hasUnsavedChanges = false,
+  isReloading = false,
+  editorResetKey = 0,
   createButtonTestId,
+  saveButtonTestId,
+  reloadButtonTestId,
   cancelButtonTestId,
   children,
 }) => {
@@ -51,9 +105,16 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   const [yamlConvertError, setYamlConvertError] = useState<string | undefined>(undefined);
   const yamlContentRef = useRef('');
   const [yamlKey, setYamlKey] = useState(0);
+  const [hasUnsavedYamlChanges, setHasUnsavedYamlChanges] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showReloadConfirm, setShowReloadConfirm] = useState(false);
 
-  const handleYamlChange = useCallback((content: string) => {
+  const hasAnyUnsavedChanges = hasUnsavedChanges || hasUnsavedYamlChanges;
+  const yamlSessionKey = `${String(yamlKey)}-${String(editorResetKey)}`;
+
+  const handleYamlContentChange = useCallback((content: string, yamlChanged: boolean) => {
     yamlContentRef.current = content;
+    setHasUnsavedYamlChanges(yamlChanged);
     setSubmitError(undefined);
   }, []);
 
@@ -67,6 +128,7 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
       }
     }
     if (newType === EditorType.YAML) {
+      setHasUnsavedYamlChanges(false);
       setYamlKey((k) => k + 1);
     }
     setEditorType(newType);
@@ -80,7 +142,34 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   /** Closes the modal and remounts the YAML editor from initialResource, discarding the user's edits. */
   const handleResetToDefault = () => {
     setYamlConvertError(undefined);
+    setHasUnsavedYamlChanges(false);
     setYamlKey((k) => k + 1);
+  };
+
+  const performReload = async () => {
+    setSubmitError(undefined);
+    setHasUnsavedYamlChanges(false);
+    try {
+      await onReload?.();
+    } finally {
+      setYamlKey((k) => k + 1);
+    }
+  };
+
+  const handleReloadRequest = () => {
+    if (mode === 'edit' && hasAnyUnsavedChanges) {
+      setShowReloadConfirm(true);
+      return;
+    }
+    void performReload();
+  };
+
+  const handleCancelRequest = () => {
+    if (mode === 'edit' && hasAnyUnsavedChanges) {
+      setShowCancelConfirm(true);
+      return;
+    }
+    onCancel();
   };
 
   const handleFormSubmit = async () => {
@@ -140,27 +229,105 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
             <FormActionGroup
               isSubmitting={isSubmitting}
               isFormValid={isFormValid}
+              mode={mode}
               onSubmit={() => {
                 void handleFormSubmit();
               }}
-              onCancel={onCancel}
+              onReload={onReload ? handleReloadRequest : undefined}
+              isReloading={isReloading}
+              onCancel={handleCancelRequest}
               createButtonTestId={createButtonTestId}
+              saveButtonTestId={saveButtonTestId}
+              reloadButtonTestId={reloadButtonTestId}
               cancelButtonTestId={cancelButtonTestId}
             />
           </Form>
         </StackItem>
       ) : (
         <StackItem>
-          <YamlEditorWrapper
-            key={yamlKey}
+          <YamlEditorWithChangeTracking
+            key={yamlSessionKey}
             initialResource={initialResource}
-            onChange={handleYamlChange}
+            create={mode === 'create'}
+            onContentChange={handleYamlContentChange}
             onSave={(yaml) => {
               void handleYamlSave(yaml);
             }}
           />
         </StackItem>
       )}
+
+      <Modal
+        isOpen={showCancelConfirm}
+        variant="small"
+        onClose={() => {
+          setShowCancelConfirm(false);
+        }}
+        aria-label={t('Unsaved changes')}
+      >
+        <ModalHeader title={t('Unsaved changes')} />
+        <ModalBody>
+          {t('You are about to quit the editor. Configuration that is not applied will be lost.')}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => {
+              setShowCancelConfirm(false);
+              onCancel();
+            }}
+            data-test="confirm-discard-cancel-button"
+          >
+            {t('Confirm')}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            onClick={() => {
+              setShowCancelConfirm(false);
+            }}
+            data-test="dismiss-discard-cancel-button"
+          >
+            {t('Cancel')}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        isOpen={showReloadConfirm}
+        variant="small"
+        onClose={() => {
+          setShowReloadConfirm(false);
+        }}
+        aria-label={t('Unsaved changes')}
+      >
+        <ModalHeader title={t('Unsaved changes')} />
+        <ModalBody>{t('Upon reloading, the modified changes will be lost.')}</ModalBody>
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => {
+              setShowReloadConfirm(false);
+              void performReload();
+            }}
+            data-test="confirm-discard-reload-button"
+          >
+            {t('Confirm')}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            onClick={() => {
+              setShowReloadConfirm(false);
+            }}
+            data-test="dismiss-discard-reload-button"
+          >
+            {t('Cancel')}
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       <Modal
         isOpen={yamlConvertError !== undefined}

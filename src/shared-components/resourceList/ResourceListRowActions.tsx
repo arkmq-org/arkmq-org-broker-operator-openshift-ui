@@ -18,6 +18,8 @@ export interface ResourceListRowActionsProps {
   model: K8sModel;
   editActionLabel: string;
   deleteActionLabel: string;
+  /** Optional override for the edit action; defaults to the console YAML editor route. */
+  editPath?: string;
   dataTest?: string;
 }
 
@@ -26,6 +28,7 @@ export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
   model,
   editActionLabel,
   deleteActionLabel,
+  editPath,
   dataTest,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -44,7 +47,8 @@ export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
     return null;
   }
 
-  const editPath = `/k8s/ns/${namespace}/${group}~${version}~${kind}/${name}/yaml`;
+  const resolvedEditPath =
+    editPath ?? `/k8s/ns/${namespace}/${group}~${version}~${kind}/${name}/yaml`;
 
   return (
     <Dropdown
@@ -69,7 +73,7 @@ export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
       <DropdownList>
         <DropdownItem
           component={Link}
-          to={editPath}
+          to={resolvedEditPath}
           onClick={() => {
             setIsOpen(false);
           }}

@@ -28,6 +28,8 @@ export interface ResourceDetailsActionsMenuProps {
   deleteActionLabel: string;
   /** Path to return to after a successful delete. */
   listPath: string;
+  /** Optional override for the edit action; defaults to the console YAML editor route. */
+  editPath?: string;
   dataTest?: string;
 }
 
@@ -38,6 +40,7 @@ export const ResourceDetailsActionsMenu: FC<ResourceDetailsActionsMenuProps> = (
   editActionLabel,
   deleteActionLabel,
   listPath,
+  editPath,
   dataTest,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -58,7 +61,8 @@ export const ResourceDetailsActionsMenu: FC<ResourceDetailsActionsMenuProps> = (
     return null;
   }
 
-  const editPath = `/k8s/ns/${namespace}/${group}~${version}~${kind}/${name}/yaml`;
+  const resolvedEditPath =
+    editPath ?? `/k8s/ns/${namespace}/${group}~${version}~${kind}/${name}/yaml`;
   const menuDataTest = dataTest ?? `resource-details-actions-${namespace}-${name}`;
 
   return (
@@ -101,7 +105,7 @@ export const ResourceDetailsActionsMenu: FC<ResourceDetailsActionsMenuProps> = (
         </DropdownItem>
         <DropdownItem
           component={Link}
-          to={editPath}
+          to={resolvedEditPath}
           onClick={() => {
             setIsOpen(false);
           }}

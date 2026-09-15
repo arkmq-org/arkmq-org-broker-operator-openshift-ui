@@ -8,7 +8,12 @@ interface FormActionGroupProps {
   submitError?: string;
   onSubmit: () => void;
   onCancel: () => void;
+  mode?: 'create' | 'edit';
+  onReload?: () => void;
+  isReloading?: boolean;
   createButtonTestId?: string;
+  saveButtonTestId?: string;
+  reloadButtonTestId?: string;
   cancelButtonTestId?: string;
 }
 
@@ -18,10 +23,16 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
   submitError,
   onSubmit,
   onCancel,
+  mode = 'create',
+  onReload,
+  isReloading = false,
   createButtonTestId,
+  saveButtonTestId,
+  reloadButtonTestId,
   cancelButtonTestId,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const isEditMode = mode === 'edit';
 
   return (
     <>
@@ -32,15 +43,29 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
       )}
       <ActionGroup>
         <Button
+          type="button"
           variant="primary"
           onClick={onSubmit}
           isLoading={isSubmitting}
           isDisabled={isSubmitting || !isFormValid}
-          data-test={createButtonTestId}
+          data-test={isEditMode ? saveButtonTestId : createButtonTestId}
         >
-          {t('Create')}
+          {isEditMode ? t('Save') : t('Create')}
         </Button>
+        {isEditMode && onReload && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onReload}
+            isLoading={isReloading}
+            isDisabled={isSubmitting || isReloading}
+            data-test={reloadButtonTestId}
+          >
+            {t('Reload')}
+          </Button>
+        )}
         <Button
+          type="button"
           variant="link"
           onClick={onCancel}
           isDisabled={isSubmitting}
