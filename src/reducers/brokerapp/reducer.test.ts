@@ -256,6 +256,122 @@ describe('brokerAppReducer', () => {
     expect(getAddresses(state.cr, 'consumerOf')).toEqual(['QUEUE.IN']);
   });
 
+  describe('hasChanges tracking', () => {
+    it('starts with hasChanges false', () => {
+      const state = createInitialBrokerAppState(ns);
+      expect(state.hasChanges).toBe(false);
+    });
+
+    it('SET_NAME sets hasChanges to true', () => {
+      const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+        type: 'SET_NAME',
+        payload: 'new-name',
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('ADD_ADDRESS sets hasChanges to true', () => {
+      const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+        type: 'ADD_ADDRESS',
+        field: 'producerOf',
+        payload: 'QUEUE.A',
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('REMOVE_ADDRESS sets hasChanges to true', () => {
+      let state = createInitialBrokerAppState(ns);
+      state = brokerAppReducer(state, {
+        type: 'ADD_ADDRESS',
+        field: 'producerOf',
+        payload: 'QUEUE.A',
+      });
+      state = brokerAppReducer(state, {
+        type: 'SET_MODEL',
+        payload: state.cr,
+        resetChanges: true,
+      });
+      expect(state.hasChanges).toBe(false);
+
+      state = brokerAppReducer(state, {
+        type: 'REMOVE_ADDRESS',
+        field: 'producerOf',
+        payload: 'QUEUE.A',
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('ADD_MATCH_LABEL sets hasChanges to true', () => {
+      const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+        type: 'ADD_MATCH_LABEL',
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('REMOVE_MATCH_LABEL sets hasChanges to true', () => {
+      let state = createInitialBrokerAppState(ns);
+      const id1 = state.matchLabels[0].id;
+      state = brokerAppReducer(state, {
+        type: 'UPDATE_MATCH_LABEL',
+        payload: { id: id1, key: 'env', value: 'prod' },
+      });
+      state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+      const id2 = state.matchLabels[1].id;
+      state = brokerAppReducer(state, {
+        type: 'UPDATE_MATCH_LABEL',
+        payload: { id: id2, key: 'tier', value: 'web' },
+      });
+      state = brokerAppReducer(state, {
+        type: 'SET_MODEL',
+        payload: state.cr,
+        resetChanges: true,
+      });
+      expect(state.hasChanges).toBe(false);
+      expect(state.matchLabels).toHaveLength(2);
+
+      state = brokerAppReducer(state, {
+        type: 'REMOVE_MATCH_LABEL',
+        payload: state.matchLabels[1].id,
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('UPDATE_MATCH_LABEL sets hasChanges to true', () => {
+      const initial = createInitialBrokerAppState(ns);
+      const state = brokerAppReducer(initial, {
+        type: 'UPDATE_MATCH_LABEL',
+        payload: { id: initial.matchLabels[0].id, key: 'env', value: 'prod' },
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+
+    it('SET_MODEL with resetChanges resets hasChanges to false', () => {
+      let state = createInitialBrokerAppState(ns);
+      state = brokerAppReducer(state, { type: 'SET_NAME', payload: 'edited' });
+      expect(state.hasChanges).toBe(true);
+
+      state = brokerAppReducer(state, {
+        type: 'SET_MODEL',
+        payload: state.cr,
+        resetChanges: true,
+      });
+      expect(state.hasChanges).toBe(false);
+    });
+
+    it('SET_MODEL without resetChanges sets hasChanges to true', () => {
+      const state = brokerAppReducer(createInitialBrokerAppState(ns), {
+        type: 'SET_MODEL',
+        payload: {
+          apiVersion: 'broker.arkmq.org/v1beta2',
+          kind: 'BrokerApp',
+          metadata: { name: 'from-yaml', namespace: ns },
+          spec: {},
+        },
+      });
+      expect(state.hasChanges).toBe(true);
+    });
+  });
+
   it('SET_MODEL with empty spec produces a single blank matchLabel row', () => {
     const state = brokerAppReducer(createInitialBrokerAppState(ns), {
       type: 'SET_MODEL',

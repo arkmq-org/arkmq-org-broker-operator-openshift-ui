@@ -84,6 +84,7 @@
     "description": "OpenShift Console plugin UI for ArkMQ Broker Operator.",
     "exposedModules": {
       "CreateBrokerAppPage": "./brokerapps/createBrokerApp/CreateBrokerAppPage",
+      "EditBrokerAppPage": "./brokerapps/editBrokerApp/EditBrokerAppPage",
       "CreateBrokerServicePage": "./brokerservices/createBrokerService/CreateBrokerServicePage",
       "BrokerServiceListPage": "./brokerservices/brokerServiceList/BrokerServiceListPage",
       "BrokerServiceDetailsPage": "./brokerservices/brokerServiceDetails/BrokerServiceDetailsPage",

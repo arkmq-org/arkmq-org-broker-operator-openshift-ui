@@ -492,4 +492,50 @@ spec:
       console.log(`✓ No producer address appears in Consumes From`);
     });
   });
+
+  // ── Edit page E2E test ──────────────────────────────────────────────────────
+  // Edits the already-provisioned e2e-app-matching to add a producerOf address,
+  // then verifies the operator reconciles the change on the bound BrokerService.
+
+  test('editing a provisioned app adds an address and operator reconciles', async ({ page }) => {
+    test.setTimeout(3_600_000); // 60 minutes — operator reconciliation can be slow
+
+    const appName = 'e2e-app-matching';
+    const newAddress = 'QUEUE.EDITED';
+
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/${appName}/edit`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="edit-brokerapp-title"]', { timeout: 30000 });
+
+    // Add a producerOf address via the Messaging Capabilities section.
+    const producerGroup = page.getByRole('list', { name: 'Produces To' });
+    await producerGroup.getByText('Add address').click();
+    await page.locator('#brokerapp-produces').fill(newAddress);
+    await page.locator('#brokerapp-produces').press('Enter');
+    await expect(page.getByText(newAddress, { exact: true }).first()).toBeVisible({
+      timeout: 5000,
+    });
+
+    await page.locator('[data-test="brokerapp-save-btn"]').click();
+
+    // Should navigate to the details page after saving.
+    await page.waitForURL(`**/broker.arkmq.org~v1beta2~BrokerApp/${appName}`, {
+      timeout: 30000,
+    });
+    console.log(`✓ Save navigated to details page`);
+
+    // Verify the new address is in the CR spec.
+    const capabilities = kubectl(
+      `get brokerapp ${appName} -n ${TEST_NAMESPACE} -o jsonpath='{.spec.capabilities[0].producerOf}'`,
+    );
+    expect(capabilities).toContain(newAddress);
+    console.log(`✓ New address ${newAddress} present in CR spec`);
+
+    // Wait for the operator to reconcile — app should return to Deployed.
+    console.log('\nWaiting for operator to reconcile after edit...');
+    await waitForCondition('brokerapp', appName, TEST_NAMESPACE, 'Deployed', 'True', 1800000);
+    console.log(`✓ BrokerApp ${appName} is Deployed after edit — operator reconciled`);
+  });
 });

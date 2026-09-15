@@ -23,7 +23,6 @@ export const YamlEditorWrapper: React.FC<YamlEditorWrapperProps> = ({
       <Suspense fallback={<Spinner aria-label={t('Loading editor')} />}>
         <ResourceYAMLEditor
           initialResource={initialResource}
-          create
           hideHeader
           onChange={onChange}
           onSave={onSave}

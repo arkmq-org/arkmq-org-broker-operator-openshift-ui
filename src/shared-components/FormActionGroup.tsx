@@ -8,8 +8,11 @@ interface FormActionGroupProps {
   submitError?: string;
   onSubmit: () => void;
   onCancel: () => void;
+  submitLabel?: string;
+  onReload?: () => void;
   createButtonTestId?: string;
   cancelButtonTestId?: string;
+  reloadButtonTestId?: string;
 }
 
 export const FormActionGroup: React.FC<FormActionGroupProps> = ({
@@ -18,8 +21,11 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
   submitError,
   onSubmit,
   onCancel,
+  submitLabel,
+  onReload,
   createButtonTestId,
   cancelButtonTestId,
+  reloadButtonTestId,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
 
@@ -38,8 +44,18 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
           isDisabled={isSubmitting || !isFormValid}
           data-test={createButtonTestId}
         >
-          {t('Create')}
+          {submitLabel ?? t('Create')}
         </Button>
+        {onReload && (
+          <Button
+            variant="secondary"
+            onClick={onReload}
+            isDisabled={isSubmitting}
+            data-test={reloadButtonTestId}
+          >
+            {t('Reload')}
+          </Button>
+        )}
         <Button
           variant="link"
           onClick={onCancel}

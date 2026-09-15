@@ -40,6 +40,13 @@ export const BrokerAppListRow = (
 ): DataViewTr => {
   const name = app.metadata?.name;
   const namespace = app.metadata?.namespace;
+  const listPath = namespace
+    ? `/k8s/ns/${namespace}/${BrokerAppModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerAppModel.apiVersion}~${BrokerAppModel.kind}`
+    : undefined;
+  const editFormPath =
+    name && namespace && listPath
+      ? `/k8s/ns/${namespace}/brokerapps/${name}/edit?returnUrl=${encodeURIComponent(listPath)}`
+      : undefined;
   const boundService = app.status?.service;
 
   const { labelKey, color } = getReadyConditionDisplay(
@@ -107,6 +114,7 @@ export const BrokerAppListRow = (
           model={BrokerAppModel}
           editActionLabel={editActionLabel}
           deleteActionLabel={deleteActionLabel}
+          editFormPath={editFormPath}
           dataTest={name && namespace ? `brokerapp-actions-${namespace}-${name}` : undefined}
         />
       ),

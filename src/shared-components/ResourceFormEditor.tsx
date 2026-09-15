@@ -27,8 +27,15 @@ interface ResourceFormEditorProps {
   onYamlSave: (yaml: string) => Promise<void>;
   onSwitchToForm: (yaml: string) => SwitchResult;
   onCancel: () => void;
+  submitLabel?: string;
+  onReload?: () => void;
+  /** Enables cancel/reload confirmation modals when the form has unsaved changes. */
+  hasChanges?: boolean;
+  /** Resource kind shown in the reload modal title (e.g. "BrokerApp"). */
+  resourceName?: string;
   createButtonTestId?: string;
   cancelButtonTestId?: string;
+  reloadButtonTestId?: string;
   children: React.ReactNode;
 }
 
@@ -39,8 +46,13 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   onYamlSave,
   onSwitchToForm,
   onCancel,
+  submitLabel,
+  onReload,
+  hasChanges = false,
+  resourceName,
   createButtonTestId,
   cancelButtonTestId,
+  reloadButtonTestId,
   children,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -51,6 +63,9 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   const [yamlConvertError, setYamlConvertError] = useState<string | undefined>(undefined);
   const yamlContentRef = useRef('');
   const [yamlKey, setYamlKey] = useState(0);
+
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isReloadModalOpen, setIsReloadModalOpen] = useState(false);
 
   const handleYamlChange = useCallback((content: string) => {
     yamlContentRef.current = content;
@@ -108,59 +123,81 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
     }
   };
 
+  const handleCancel = useCallback(() => {
+    if (hasChanges) {
+      setIsCancelModalOpen(true);
+    } else {
+      onCancel();
+    }
+  }, [hasChanges, onCancel]);
+
+  const handleReload = useCallback(() => {
+    if (!onReload) return;
+    if (hasChanges) {
+      setIsReloadModalOpen(true);
+    } else {
+      onReload();
+    }
+  }, [hasChanges, onReload]);
+
   return (
-    <Stack hasGutter>
-      <StackItem>
-        <EditorToggle value={editorType} onChange={handleModeSwitch} isDisabled={isSubmitting} />
-      </StackItem>
-
-      {submitError && (
+    <>
+      <Stack hasGutter>
         <StackItem>
-          <Alert
-            variant="danger"
-            isInline
-            title={t('An error occurred')}
-            actionClose={
-              <AlertActionCloseButton
-                onClose={() => {
-                  setSubmitError(undefined);
+          <EditorToggle value={editorType} onChange={handleModeSwitch} isDisabled={isSubmitting} />
+        </StackItem>
+
+        {submitError && (
+          <StackItem>
+            <Alert
+              variant="danger"
+              isInline
+              title={t('An error occurred')}
+              actionClose={
+                <AlertActionCloseButton
+                  onClose={() => {
+                    setSubmitError(undefined);
+                  }}
+                />
+              }
+            >
+              {submitError}
+            </Alert>
+          </StackItem>
+        )}
+
+        {editorType === EditorType.FORM ? (
+          <StackItem>
+            <Form>
+              {children}
+              <FormActionGroup
+                isSubmitting={isSubmitting}
+                isFormValid={isFormValid}
+                onSubmit={() => {
+                  void handleFormSubmit();
                 }}
+                onCancel={handleCancel}
+                submitLabel={submitLabel}
+                onReload={onReload ? handleReload : undefined}
+                createButtonTestId={createButtonTestId}
+                cancelButtonTestId={cancelButtonTestId}
+                reloadButtonTestId={reloadButtonTestId}
               />
-            }
-          >
-            {submitError}
-          </Alert>
-        </StackItem>
-      )}
-
-      {editorType === EditorType.FORM ? (
-        <StackItem>
-          <Form>
-            {children}
-            <FormActionGroup
-              isSubmitting={isSubmitting}
-              isFormValid={isFormValid}
-              onSubmit={() => {
-                void handleFormSubmit();
+            </Form>
+          </StackItem>
+        ) : (
+          <StackItem>
+            <YamlEditorWrapper
+              key={yamlKey}
+              initialResource={initialResource}
+              onChange={handleYamlChange}
+              onSave={(yaml) => {
+                void handleYamlSave(yaml);
               }}
-              onCancel={onCancel}
-              createButtonTestId={createButtonTestId}
-              cancelButtonTestId={cancelButtonTestId}
             />
-          </Form>
-        </StackItem>
-      ) : (
-        <StackItem>
-          <YamlEditorWrapper
-            key={yamlKey}
-            initialResource={initialResource}
-            onChange={handleYamlChange}
-            onSave={(yaml) => {
-              void handleYamlSave(yaml);
-            }}
-          />
-        </StackItem>
-      )}
+          </StackItem>
+        )}
+      </Stack>
 
       <Modal
         isOpen={yamlConvertError !== undefined}
@@ -187,6 +224,83 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
           </Button>
         </ModalFooter>
       </Modal>
-    </Stack>
+
+      <Modal
+        isOpen={isCancelModalOpen}
+        variant="small"
+        onClose={() => {
+          setIsCancelModalOpen(false);
+        }}
+        aria-label={t('Confirm cancel')}
+      >
+        <ModalHeader title={t('Discard changes?')} titleIconVariant="warning" />
+        <ModalBody>
+          {t('You are about to leave the editor. Changes that are not saved will be lost.')}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setIsCancelModalOpen(false);
+              onCancel();
+            }}
+            data-test="confirm-cancel-btn"
+          >
+            {t('Discard')}
+          </Button>
+          <Button
+            variant="link"
+            onClick={() => {
+              setIsCancelModalOpen(false);
+            }}
+          >
+            {t('Keep editing')}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {onReload && (
+        <Modal
+          isOpen={isReloadModalOpen}
+          variant="small"
+          onClose={() => {
+            setIsReloadModalOpen(false);
+          }}
+          aria-label={t('Confirm reload')}
+        >
+          <ModalHeader
+            title={
+              resourceName ? t('Reload {{resourceName}}?', { resourceName }) : t('Reload resource?')
+            }
+            titleIconVariant="warning"
+          />
+          <ModalBody>
+            {t(
+              'Upon reloading, local modifications will be lost. The form will be reset to the current state of the resource on the cluster.',
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setIsReloadModalOpen(false);
+                onReload();
+              }}
+              data-test="confirm-reload-btn"
+            >
+              {t('Reload')}
+            </Button>
+            <Button
+              variant="link"
+              onClick={() => {
+                setIsReloadModalOpen(false);
+              }}
+            >
+              {t('Cancel')}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+    </>
   );
 };

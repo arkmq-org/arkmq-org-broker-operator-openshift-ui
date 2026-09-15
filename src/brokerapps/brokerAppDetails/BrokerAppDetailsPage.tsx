@@ -46,6 +46,11 @@ const BrokerAppDetailsPage: FC<BrokerAppDetailsPageProps> = ({ namespace }) => {
   }) as [BrokerAppCR, boolean, unknown];
 
   const listPath = `/k8s/ns/${namespace}/${BrokerAppModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerAppModel.apiVersion}~${BrokerAppModel.kind}`;
+  const detailsPath = name ? `${listPath}/${name}` : undefined;
+  const editFormPath =
+    name && detailsPath
+      ? `/k8s/ns/${namespace}/brokerapps/${name}/edit?returnUrl=${encodeURIComponent(detailsPath)}`
+      : undefined;
 
   const statusLabels = {
     Running: t('Provisioned'),
@@ -152,6 +157,7 @@ const BrokerAppDetailsPage: FC<BrokerAppDetailsPageProps> = ({ namespace }) => {
                 editActionLabel={t('Edit BrokerApp')}
                 deleteActionLabel={t('Delete BrokerApp')}
                 listPath={listPath}
+                editFormPath={editFormPath}
                 dataTest={`broker-app-details-actions-${namespace}-${name}`}
               />
             </FlexItem>

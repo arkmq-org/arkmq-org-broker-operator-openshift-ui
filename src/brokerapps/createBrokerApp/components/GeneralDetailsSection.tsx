@@ -16,24 +16,31 @@ import { validateDNS1123 } from '../../../validation/k8s';
 
 interface GeneralDetailsSectionProps {
   namespace: string;
+  isEditMode?: boolean;
 }
 
-export const GeneralDetailsSection: React.FC<GeneralDetailsSectionProps> = ({ namespace }) => {
+export const GeneralDetailsSection: React.FC<GeneralDetailsSectionProps> = ({
+  namespace,
+  isEditMode = false,
+}) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const state = useBrokerAppFormState();
   const dispatch = useBrokerAppFormDispatch();
-  const nameError = validateDNS1123(state.cr.metadata?.name ?? '') ?? undefined;
+  const nameError = isEditMode
+    ? undefined
+    : (validateDNS1123(state.cr.metadata?.name ?? '') ?? undefined);
 
   return (
     <FormSection title={t('Application Details')}>
-      <FormGroup label={t('Name')} isRequired fieldId="brokerapp-name">
+      <FormGroup label={t('Name')} isRequired={!isEditMode} fieldId="brokerapp-name">
         <TextInput
           id="brokerapp-name"
           value={state.cr.metadata?.name ?? ''}
           onChange={(_e, val) => {
             dispatch({ type: 'SET_NAME', payload: val });
           }}
-          isRequired
+          isRequired={!isEditMode}
+          isDisabled={isEditMode}
           placeholder="my-messaging-app"
           validated={nameError ? 'error' : 'default'}
           data-test="brokerapp-name"
@@ -41,7 +48,9 @@ export const GeneralDetailsSection: React.FC<GeneralDetailsSectionProps> = ({ na
         <FormHelperText>
           <HelperText>
             <HelperTextItem variant={nameError ? 'error' : 'default'}>
-              {nameError ?? t('Unique name for the BrokerApp resource.')}
+              {isEditMode
+                ? t('Resource name cannot be changed after creation.')
+                : (nameError ?? t('Unique name for the BrokerApp resource.'))}
             </HelperTextItem>
           </HelperText>
         </FormHelperText>
@@ -52,7 +61,9 @@ export const GeneralDetailsSection: React.FC<GeneralDetailsSectionProps> = ({ na
         <FormHelperText>
           <HelperText>
             <HelperTextItem>
-              {t('Use the project selector above to change the namespace.')}
+              {isEditMode
+                ? t('Resource namespace cannot be changed after creation.')
+                : t('Use the project selector above to change the namespace.')}
             </HelperTextItem>
           </HelperText>
         </FormHelperText>

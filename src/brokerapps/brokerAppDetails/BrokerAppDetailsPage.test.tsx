@@ -8,6 +8,7 @@ import BrokerAppDetailsPage from './BrokerAppDetailsPage';
 
 jest.mock('react-router', () => ({
   useParams: jest.fn(),
+  useNavigate: jest.fn(() => jest.fn()),
   useLocation: () => ({
     pathname: '/k8s/ns/default/broker.arkmq.org~v1beta2~BrokerApp/my-payment-app',
   }),

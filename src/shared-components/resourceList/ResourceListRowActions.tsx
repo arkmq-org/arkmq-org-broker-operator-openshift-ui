@@ -11,24 +11,27 @@ import {
 } from '@patternfly/react-core';
 import { EllipsisVIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 
 export interface ResourceListRowActionsProps {
   resource: K8sResourceCommon;
   model: K8sModel;
   editActionLabel: string;
   deleteActionLabel: string;
+  /** Overrides the default YAML edit path. */
+  editFormPath?: string;
   dataTest?: string;
 }
-
 export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
   resource,
   model,
   editActionLabel,
   deleteActionLabel,
+  editFormPath,
   dataTest,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const launchDeleteModal = useDeleteModal(resource);
 
@@ -68,12 +71,11 @@ export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
     >
       <DropdownList>
         <DropdownItem
-          component={Link}
-          to={editPath}
           onClick={() => {
             setIsOpen(false);
+            void navigate(editFormPath ?? editPath);
           }}
-          data-test={`edit-yaml-${namespace}-${name}`}
+          data-test={`edit-${namespace}-${name}`}
         >
           {editActionLabel}
         </DropdownItem>
