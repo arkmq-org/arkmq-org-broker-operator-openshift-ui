@@ -1,0 +1,16 @@
+.git/
+.gitignore
+node_modules/
+dist/
+.devcontainer/
+*.md
+.cache
+logs/
+*/temp*
+*/*/temp*
+*/tmp*
+*/*/tmp
+test-results/
+playwright-report/
+playwright/
+.github/
