@@ -129,7 +129,7 @@ describe('BrokerAppFormPage', () => {
     render(<Wrapper />);
     expect(screen.getByTestId('brokerapp-name')).toBeInTheDocument();
     expect(screen.getByText('Service Selector')).toBeInTheDocument();
-    expect(screen.getByText('Messaging Capabilities')).toBeInTheDocument();
+    expect(screen.getByText('Addresses')).toBeInTheDocument();
   });
 
   it('disables the name field in edit mode', () => {

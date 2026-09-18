@@ -9,6 +9,8 @@ export interface MatchAddress {
   address: string;
   /** Cross-app reference app name; empty for local addresses. */
   appName?: string;
+  pubSub?: boolean;
+  subscriptions?: string[];
 }
 
 export interface BrokerAppCapability {
@@ -26,10 +28,19 @@ export interface ResourceRequirements {
   limits?: ResourceList;
 }
 
+export interface PrivateAddress {
+  address: string;
+  pubSub?: boolean;
+  subscriptions?: string[];
+}
+
 export interface BrokerAppSpec {
   selector?: { matchLabels?: Record<string, string> };
   capabilities?: BrokerAppCapability[];
   resources?: ResourceRequirements;
+  /** Private addresses whose lifecycle is tied to this app. */
+  addresses?: PrivateAddress[];
+  sharedAddresses?: PrivateAddress[];
 }
 
 export interface BrokerAppServiceBinding {

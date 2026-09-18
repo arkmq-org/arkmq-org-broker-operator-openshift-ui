@@ -1,6 +1,6 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
-import type { BrokerAppCR, BrokerAppSpec } from '../../k8s/types';
+import type { BrokerAppCR, BrokerAppSpec, MatchAddress, PrivateAddress } from '../../k8s/types';
 
 export interface MatchLabel {
   id: string;
@@ -8,18 +8,34 @@ export interface MatchLabel {
   value: string;
 }
 
-export type AddressField = 'producerOf' | 'consumerOf';
+export type AddressOwnership = 'private' | 'shared' | 'external';
+export type AddressDirection = 'produces' | 'consumes' | 'both' | 'none';
+
+export interface Address {
+  address: string;
+  ownership: AddressOwnership;
+  direction: AddressDirection;
+  pubSub?: boolean;
+  subscriptions?: string[];
+}
 
 export interface BrokerAppFormState {
   cr: BrokerAppCR;
   matchLabels: MatchLabel[];
+  addresses: Address[];
   hasChanges: boolean;
 }
 
 export type BrokerAppFormAction =
   | { type: 'SET_NAME'; payload: string }
-  | { type: 'ADD_ADDRESS'; field: AddressField; payload: string }
-  | { type: 'REMOVE_ADDRESS'; field: AddressField; payload: string }
+  | { type: 'ADD_ADDRESS' }
+  | { type: 'REMOVE_ADDRESS'; payload: { index: number } }
+  | {
+      type: 'UPDATE_ADDRESS';
+      payload: { index: number } & Partial<
+        Pick<Address, 'address' | 'ownership' | 'direction' | 'pubSub' | 'subscriptions'>
+      >;
+    }
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
@@ -29,43 +45,7 @@ export type BrokerAppFormAction =
   | { type: 'SET_MEMORY_REQUEST'; payload: string }
   | { type: 'SET_MEMORY_LIMIT'; payload: string };
 
-// --- CR readers ---
-
-/**
- * Extracts addresses from the CR's capabilities for display in the form.
- * The CR stores addresses as MatchAddress objects; this returns plain strings.
- *
- * @param cr - The BrokerApp custom resource
- * @param field - Which address list to read ('producerOf' or 'consumerOf')
- * @returns Flat string array of address names
- */
-export const getAddresses = (cr: BrokerAppCR, field: AddressField): string[] => {
-  const arr = cr.spec.capabilities?.[0]?.[field];
-  return arr ? arr.map((a) => a.address) : [];
-};
-
-// --- CR writers ---
-
-/**
- * Replaces one address list (producerOf or consumerOf) on the CR's spec.
- * Cleans up the capabilities array when both lists become empty.
- */
-const setAddresses = (cr: BrokerAppCR, field: AddressField, addresses: string[]): void => {
-  if (!cr.spec.capabilities?.[0]) {
-    cr.spec.capabilities = [{}];
-  }
-  if (addresses.length) {
-    cr.spec.capabilities[0][field] = addresses.map((a) => ({ address: a }));
-  } else if (field === 'producerOf') {
-    delete cr.spec.capabilities[0].producerOf;
-  } else {
-    delete cr.spec.capabilities[0].consumerOf;
-  }
-  const cap = cr.spec.capabilities[0];
-  if (!cap.producerOf && !cap.consumerOf) {
-    delete cr.spec.capabilities;
-  }
-};
+// --- CR sync ---
 
 // First occurrence wins so duplicate form rows do not overwrite YAML preview values.
 const syncSelectorFromLabels = (cr: BrokerAppCR, labels: MatchLabel[]): void => {
@@ -91,6 +71,63 @@ const cleanupResources = (spec: BrokerAppSpec): void => {
   }
   if (spec.resources && !Object.keys(spec.resources).length) {
     delete spec.resources;
+  }
+};
+
+/**
+ * Maps the address list to the three CRD spec fields:
+ * spec.addresses, spec.sharedAddresses, and spec.capabilities.
+ */
+const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
+  const cleanAddress = (e: Address): PrivateAddress => {
+    const cleaned: PrivateAddress = { address: e.address.trim() };
+    if (e.pubSub) cleaned.pubSub = e.pubSub;
+    if (e.subscriptions?.length) cleaned.subscriptions = [...e.subscriptions];
+    return cleaned;
+  };
+
+  const validAddresses = addresses.filter((e) => e.address.trim());
+
+  const privateEntries = validAddresses.filter((e) => e.ownership === 'private').map(cleanAddress);
+
+  const sharedEntries = validAddresses.filter((e) => e.ownership === 'shared').map(cleanAddress);
+
+  const toCapabilityEntry = (e: Address, isConsumer: boolean): MatchAddress => {
+    const entry: MatchAddress = { address: e.address.trim() };
+    if (e.pubSub) entry.pubSub = e.pubSub;
+    if (isConsumer && e.subscriptions?.length) entry.subscriptions = [...e.subscriptions];
+    return entry;
+  };
+
+  const producerEntries = validAddresses
+    .filter((e) => e.direction === 'produces' || e.direction === 'both')
+    .map((e) => toCapabilityEntry(e, false));
+
+  const consumerEntries = validAddresses
+    .filter((e) => e.direction === 'consumes' || e.direction === 'both')
+    .map((e) => toCapabilityEntry(e, true));
+
+  if (privateEntries.length) {
+    cr.spec.addresses = privateEntries;
+  } else {
+    delete cr.spec.addresses;
+  }
+
+  if (sharedEntries.length) {
+    cr.spec.sharedAddresses = sharedEntries;
+  } else {
+    delete cr.spec.sharedAddresses;
+  }
+
+  if (producerEntries.length || consumerEntries.length) {
+    cr.spec.capabilities = [
+      {
+        ...(producerEntries.length ? { producerOf: producerEntries } : {}),
+        ...(consumerEntries.length ? { consumerOf: consumerEntries } : {}),
+      },
+    ];
+  } else {
+    delete cr.spec.capabilities;
   }
 };
 
@@ -123,6 +160,71 @@ const mergeMatchLabelsWithYaml = (
   return merged;
 };
 
+/**
+ * Reconstructs the address list from the three CRD spec fields
+ * when loading a CR from YAML or an existing resource.
+ */
+const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
+  const addresses: Address[] = [];
+
+  const cap = cr.spec.capabilities?.[0];
+  const producerNames: string[] = (cap?.producerOf ?? []).map((a) => a.address);
+  const consumerNames: string[] = (cap?.consumerOf ?? []).map((a) => a.address);
+  const producerSet = new Set(producerNames);
+  const consumerSet = new Set(consumerNames);
+
+  const resolveDirection = (name: string): AddressDirection => {
+    const isProducer = producerSet.has(name);
+    const isConsumer = consumerSet.has(name);
+    if (isProducer && isConsumer) return 'both';
+    if (isProducer) return 'produces';
+    if (isConsumer) return 'consumes';
+    return 'none';
+  };
+
+  const ownedAddressNames = new Set<string>();
+
+  for (const entry of cr.spec.addresses ?? []) {
+    ownedAddressNames.add(entry.address);
+    addresses.push({
+      address: entry.address,
+      ownership: 'private',
+      direction: resolveDirection(entry.address),
+      pubSub: entry.pubSub,
+      subscriptions: entry.subscriptions,
+    });
+  }
+
+  for (const entry of cr.spec.sharedAddresses ?? []) {
+    ownedAddressNames.add(entry.address);
+    addresses.push({
+      address: entry.address,
+      ownership: 'shared',
+      direction: resolveDirection(entry.address),
+      pubSub: entry.pubSub,
+      subscriptions: entry.subscriptions,
+    });
+  }
+
+  const seenCapability = new Set<string>();
+  for (const addr of [...producerNames, ...consumerNames]) {
+    if (!seenCapability.has(addr) && !ownedAddressNames.has(addr)) {
+      addresses.push({
+        address: addr,
+        ownership: 'external',
+        direction: resolveDirection(addr),
+      });
+    }
+    seenCapability.add(addr);
+  }
+
+  if (!addresses.length) {
+    return [{ address: '', ownership: 'private', direction: 'produces' }];
+  }
+
+  return addresses;
+};
+
 // --- reducer ---
 
 export const brokerAppReducer = (
@@ -130,27 +232,40 @@ export const brokerAppReducer = (
   action: BrokerAppFormAction,
 ): BrokerAppFormState => {
   let cr = { ...state.cr, spec: { ...state.cr.spec } };
-  let { matchLabels } = state;
+  let { matchLabels, addresses } = state;
 
   switch (action.type) {
     case 'SET_NAME':
       cr.metadata = { ...cr.metadata, name: action.payload };
       break;
 
-    case 'ADD_ADDRESS': {
-      const current = getAddresses(cr, action.field);
-      if (current.includes(action.payload)) return state;
-      setAddresses(cr, action.field, [...current, action.payload]);
+    case 'ADD_ADDRESS':
+      addresses = [...addresses, { address: '', ownership: 'private', direction: 'produces' }];
       break;
-    }
 
     case 'REMOVE_ADDRESS':
-      setAddresses(
-        cr,
-        action.field,
-        getAddresses(cr, action.field).filter((a) => a !== action.payload),
-      );
+      addresses = addresses.filter((_, i) => i !== action.payload.index);
       break;
+
+    case 'UPDATE_ADDRESS': {
+      const { index, ...changes } = action.payload;
+      addresses = addresses.map((e, i) => {
+        if (i !== index) return e;
+        const updated = { ...e, ...changes };
+        if (changes.subscriptions) {
+          updated.subscriptions = [...changes.subscriptions];
+        }
+        if (changes.ownership === 'external') {
+          updated.pubSub = undefined;
+          updated.subscriptions = undefined;
+        }
+        if (changes.pubSub === false) {
+          updated.subscriptions = undefined;
+        }
+        return updated;
+      });
+      break;
+    }
 
     case 'ADD_MATCH_LABEL':
       matchLabels = [...matchLabels, { id: String(Date.now()), key: '', value: '' }];
@@ -173,8 +288,10 @@ export const brokerAppReducer = (
       matchLabels = action.preserveLabels
         ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.selector?.matchLabels)
         : matchLabelsFromRecord(cr.spec.selector?.matchLabels);
+      addresses = hydrateAddresses(cr);
       syncSelectorFromLabels(cr, matchLabels);
-      return { ...state, cr, matchLabels, hasChanges: !action.resetChanges };
+      syncAddressesToCR(cr, addresses);
+      return { ...state, cr, matchLabels, addresses, hasChanges: !action.resetChanges };
 
     case 'SET_CPU_REQUEST':
       if (action.payload) {
@@ -229,7 +346,8 @@ export const brokerAppReducer = (
   }
 
   syncSelectorFromLabels(cr, matchLabels);
-  return { ...state, cr, matchLabels, hasChanges: true };
+  syncAddressesToCR(cr, addresses);
+  return { ...state, cr, matchLabels, addresses, hasChanges: true };
 };
 
 export const createInitialBrokerAppState = (namespace: string): BrokerAppFormState => ({
@@ -240,6 +358,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
     spec: {},
   },
   matchLabels: [{ id: String(Date.now()), key: '', value: '' }],
+  addresses: [{ address: '', ownership: 'private' as const, direction: 'produces' as const }],
   hasChanges: false,
 });
 

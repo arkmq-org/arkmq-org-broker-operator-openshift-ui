@@ -1,0 +1,60 @@
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  grid-auto-rows: min-content;
+  gap: var(--pf-v6-global--spacer--md, 1rem);
+  max-height: 42rem;
+  overflow-y: auto;
+  padding: var(--pf-v6-global--spacer--sm, 0.5rem);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-add-card {
+  cursor: pointer;
+  background-color: var(
+    --pf-t--global--color--brand--default,
+    var(--pf-v6-global--primary-color--100)
+  );
+  color: var(
+    --pf-t--global--text--color--on-brand--default,
+    var(--pf-v6-global--BackgroundColor--100)
+  );
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-card-name--empty {
+  color: var(--pf-v6-global--Color--200);
+  font-style: italic;
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-card--error {
+  outline: var(--pf-v6-global--BorderWidth--sm, 1px) solid
+    var(--pf-v6-global--danger-color--100);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-add-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pf-v6-global--spacer--sm, 0.5rem);
+  min-height: 6rem;
+  font-size: var(--pf-v6-global--FontSize--md, 0.875rem);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-add-card-icon {
+  font-size: var(--pf-v6-global--FontSize--2xl, 1.5rem);
+}
+
+@keyframes address-card-flip-in {
+  0% {
+    transform: perspective(800px) rotateY(-30deg) scale(0.95);
+  }
+
+  100% {
+    transform: perspective(800px) rotateY(0deg) scale(1);
+  }
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-card--flip-in {
+  animation: address-card-flip-in 400ms ease-out both;
+  backface-visibility: hidden;
+}

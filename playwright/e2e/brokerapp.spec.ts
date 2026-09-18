@@ -178,14 +178,19 @@ spec:
     // 2. Fill in the app name
     await page.locator('[data-test="brokerapp-name"]').fill(appName);
 
-    // 3. Add multiple addresses to "Produces To"
-    const producerGroup = page.getByRole('list', { name: 'Produces To' });
-    for (const addr of addresses) {
-      await producerGroup.getByText('Add address').click();
-      await page.locator('#brokerapp-produces').fill(addr);
-      await page.locator('#brokerapp-produces').press('Enter');
-      // Wait for the chip label to appear before adding the next address
-      await expect(page.getByText(addr, { exact: true }).first()).toBeVisible({ timeout: 5000 });
+    // 3. Add multiple addresses via the card-based address manager.
+    //    The first address edits the default blank card; subsequent ones use the add card.
+    for (let i = 0; i < addresses.length; i++) {
+      if (i === 0) {
+        await page.locator('[data-test="edit-address-0"]').click();
+      } else {
+        await page.locator('[data-test="add-address-btn"]').click();
+      }
+      await page.locator(`[data-test="address-name-input-${String(i)}"]`).fill(addresses[i]);
+      await page.locator('[data-test="modal-done-btn"]').click();
+      await expect(page.getByText(addresses[i], { exact: true }).first()).toBeVisible({
+        timeout: 5000,
+      });
     }
 
     // 4. Submit the form
@@ -209,6 +214,107 @@ spec:
         ', ',
       )}`,
     );
+  });
+
+  // ── Test: Create app with private addresses → verify spec.addresses ──────
+
+  test('private addresses with pubSub and subscriptions appear in spec', async ({ page }) => {
+    const appName = 'e2e-app-private-addrs';
+
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/~new`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
+
+    await page.locator('[data-test="brokerapp-name"]').fill(appName);
+
+    // 1. Edit the default blank card — add a plain point-to-point address (no pubSub)
+    await page.locator('[data-test="edit-address-0"]').click();
+    await page.locator('[data-test="address-name-input-0"]').fill('orders.queue');
+    await page.locator('[data-test="modal-done-btn"]').click();
+
+    // 2. Add a pub/sub address with subscriptions via the add-card modal
+    await page.locator('[data-test="add-address-btn"]').click();
+    await page.locator('[data-test="address-name-input-1"]').fill('events.topic');
+    // PatternFly Switch renders a decorative <span> over the <input> that
+    // intercepts pointer events. Click the visible <label> instead.
+    await page.locator('label[for="address-pubsub-1"]').click();
+
+    // Add two subscriptions
+    await page.getByText('Add subscription').click();
+    const subInput = page.getByPlaceholder('e.g., my-subscription');
+    await subInput.fill('durable-sub-a');
+    await subInput.press('Enter');
+    await expect(page.getByText('durable-sub-a')).toBeVisible({ timeout: 5000 });
+
+    await page.getByText('Add subscription').click();
+    const subInput2 = page.getByPlaceholder('e.g., my-subscription');
+    await subInput2.fill('durable-sub-b');
+    await subInput2.press('Enter');
+    await expect(page.getByText('durable-sub-b')).toBeVisible({ timeout: 5000 });
+
+    await page.locator('[data-test="modal-done-btn"]').click();
+
+    // 3. Submit the form
+    await page.locator('[data-test="brokerapp-create-btn"]').click();
+    await page.waitForURL('**/broker.arkmq.org~v1beta2~BrokerApp**', { timeout: 30000 });
+    console.log('✓ Form submitted — navigated to BrokerApp list');
+
+    // 4. Verify spec.addresses via kubectl
+    await sleep(2000);
+    const addressesJson = kubectl(
+      `get brokerapp ${appName} -n ${TEST_NAMESPACE} -o jsonpath='{.spec.addresses}'`,
+    );
+    const addresses = JSON.parse(addressesJson) as {
+      address: string;
+      pubSub?: boolean;
+      subscriptions?: string[];
+    }[];
+
+    expect(addresses).toHaveLength(2);
+
+    const plainEntry = addresses.find((a) => a.address === 'orders.queue');
+    expect(plainEntry).toBeDefined();
+    expect(plainEntry?.pubSub).toBeUndefined();
+    expect(plainEntry?.subscriptions).toBeUndefined();
+    console.log('✓ Plain address "orders.queue" present without pubSub');
+
+    const pubSubEntry = addresses.find((a) => a.address === 'events.topic');
+    expect(pubSubEntry).toBeDefined();
+    expect(pubSubEntry?.pubSub).toBe(true);
+    expect(pubSubEntry?.subscriptions).toEqual(
+      expect.arrayContaining(['durable-sub-a', 'durable-sub-b']),
+    );
+    expect(pubSubEntry?.subscriptions).toHaveLength(2);
+    console.log('✓ Pub/sub address "events.topic" present with subscriptions');
+  });
+
+  // ── Test: Duplicate private address shows validation error ──────────────────
+
+  test('duplicate private address shows inline validation error', async ({ page }) => {
+    await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+    await page.goto(`/k8s/ns/${TEST_NAMESPACE}/brokerapps/~new`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
+
+    // Edit the default entry and save with 'duplicate.addr'
+    await page.locator('[data-test="edit-address-0"]').click();
+    await page.locator('[data-test="address-name-input-0"]').fill('duplicate.addr');
+    await page.locator('[data-test="modal-done-btn"]').click();
+
+    // Add a second entry with the same address
+    await page.locator('[data-test="add-address-btn"]').click();
+    await page.locator('[data-test="address-name-input-1"]').fill('duplicate.addr');
+    await page.locator('[data-test="modal-done-btn"]').click();
+
+    await expect(page.getByText('Duplicate address')).toBeVisible({ timeout: 5000 });
+    console.log('✓ Duplicate address validation error is visible');
+
+    // Verify the Create button is disabled
+    await expect(page.locator('[data-test="brokerapp-create-btn"]')).toBeDisabled();
+    console.log('✓ Create button is disabled with duplicate address');
   });
 
   // ── Test: Create app with non-matching labels → verify it stays pending ──────
@@ -509,11 +615,13 @@ spec:
     });
     await page.waitForSelector('[data-test="edit-brokerapp-title"]', { timeout: 30000 });
 
-    // Add a producerOf address via the Messaging Capabilities section.
-    const producerGroup = page.getByRole('list', { name: 'Produces To' });
-    await producerGroup.getByText('Add address').click();
-    await page.locator('#brokerapp-produces').fill(newAddress);
-    await page.locator('#brokerapp-produces').press('Enter');
+    // Add a producerOf address via the card-based address manager.
+    // The edit page hydrates one blank default card (index 0) — the add card
+    // creates a new entry at index 1 and opens the edit modal for it.
+    await page.locator('[data-test="add-address-btn"]').click();
+    await page.locator('[data-test="address-name-input-1"]').fill(newAddress);
+    await expect(page.locator('[data-test="address-direction-produces-1"]')).toBeChecked();
+    await page.locator('[data-test="modal-done-btn"]').click();
     await expect(page.getByText(newAddress, { exact: true }).first()).toBeVisible({
       timeout: 5000,
     });
