@@ -68,6 +68,14 @@
     }
   },
   {
+    "type": "console.page/route",
+    "properties": {
+      "exact": true,
+      "path": "/k8s/ns/:ns/broker.arkmq.org~v1beta2~BrokerService/:name/edit",
+      "component": { "$codeRef": "EditBrokerServicePage" }
+    }
+  },
+  {
     "type": "console.page/resource/details",
     "properties": {
       "model": {

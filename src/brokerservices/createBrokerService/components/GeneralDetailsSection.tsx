@@ -23,9 +23,14 @@ import { validateDNS1123, validateLabelEntries } from '../../../validation/k8s';
 
 export interface GeneralDetailsSectionProps {
   namespace: string;
+  /** When true, name is shown read-only for existing BrokerService resources. */
+  isNameReadOnly?: boolean;
 }
 
-export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespace }) => {
+export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({
+  namespace,
+  isNameReadOnly = false,
+}) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const { cr, labels } = useBrokerServiceFormState();
   const dispatch = useBrokerServiceFormDispatch();
@@ -58,6 +63,7 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespac
           id="broker-service-name"
           name="broker-service-name"
           value={name}
+          isDisabled={isNameReadOnly}
           onChange={(_event, value) => {
             dispatch({ type: 'SET_NAME', payload: value });
           }}
@@ -68,7 +74,9 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespac
         <FormHelperText>
           <HelperText>
             <HelperTextItem variant={nameError ? 'error' : 'default'}>
-              {nameError ?? t('Unique name for the BrokerService resource.')}
+              {isNameReadOnly
+                ? t('Resource name cannot be changed after creation.')
+                : (nameError ?? t('Unique name for the BrokerService resource.'))}
             </HelperTextItem>
           </HelperText>
         </FormHelperText>
@@ -86,7 +94,9 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({ namespac
         <FormHelperText>
           <HelperText>
             <HelperTextItem>
-              {t('Use the project selector above to change the namespace.')}
+              {isNameReadOnly
+                ? t('Namespace cannot be changed after creation.')
+                : t('Use the project selector above to change the namespace.')}
             </HelperTextItem>
           </HelperText>
         </FormHelperText>

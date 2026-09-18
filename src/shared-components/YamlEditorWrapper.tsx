@@ -9,12 +9,15 @@ interface YamlEditorWrapperProps {
   initialResource: object;
   onChange: (yaml: string) => void;
   onSave?: (content: string) => void;
+  /** When true, renders create-mode YAML actions; omit for update flows. */
+  create?: boolean;
 }
 
 export const YamlEditorWrapper: React.FC<YamlEditorWrapperProps> = ({
   initialResource,
   onChange,
   onSave,
+  create = true,
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
 
@@ -23,6 +26,7 @@ export const YamlEditorWrapper: React.FC<YamlEditorWrapperProps> = ({
       <Suspense fallback={<Spinner aria-label={t('Loading editor')} />}>
         <ResourceYAMLEditor
           initialResource={initialResource}
+          {...(create ? { create: true } : {})}
           hideHeader
           onChange={onChange}
           onSave={onSave}

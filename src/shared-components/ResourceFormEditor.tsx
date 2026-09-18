@@ -20,6 +20,44 @@ import { FormActionGroup } from './FormActionGroup';
 
 export type SwitchResult = { ok: true } | { ok: false; error: string };
 
+interface YamlEditorWithChangeTrackingProps {
+  initialResource: object;
+  create: boolean;
+  onContentChange: (content: string, hasUnsavedChanges: boolean) => void;
+  onSave: (yaml: string) => void;
+}
+
+/** Tracks YAML edits in an isolated instance that remounts when the editor session resets. */
+const YamlEditorWithChangeTracking: React.FC<YamlEditorWithChangeTrackingProps> = ({
+  initialResource,
+  create,
+  onContentChange,
+  onSave,
+}) => {
+  const baselineYamlRef = useRef<string | null>(null);
+
+  const handleYamlChange = useCallback(
+    (content: string) => {
+      if (baselineYamlRef.current === null) {
+        baselineYamlRef.current = content;
+        onContentChange(content, false);
+        return;
+      }
+      onContentChange(content, content !== baselineYamlRef.current);
+    },
+    [onContentChange],
+  );
+
+  return (
+    <YamlEditorWrapper
+      initialResource={initialResource}
+      create={create}
+      onChange={handleYamlChange}
+      onSave={onSave}
+    />
+  );
+};
+
 interface ResourceFormEditorProps {
   initialResource: object;
   isFormValid?: boolean;
@@ -28,11 +66,14 @@ interface ResourceFormEditorProps {
   onSwitchToForm: (yaml: string) => SwitchResult;
   onCancel: () => void;
   submitLabel?: string;
-  onReload?: () => void;
+  onReload?: () => void | Promise<void>;
   /** Enables cancel/reload confirmation modals when the form has unsaved changes. */
   hasChanges?: boolean;
   /** Resource kind shown in the reload modal title (e.g. "BrokerApp"). */
   resourceName?: string;
+  isReloading?: boolean;
+  /** Bumps when the backing resource is re-fetched so the YAML editor remounts. */
+  editorResetKey?: number;
   createButtonTestId?: string;
   cancelButtonTestId?: string;
   reloadButtonTestId?: string;
@@ -50,6 +91,8 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   onReload,
   hasChanges = false,
   resourceName,
+  isReloading = false,
+  editorResetKey = 0,
   createButtonTestId,
   cancelButtonTestId,
   reloadButtonTestId,
@@ -63,12 +106,17 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   const [yamlConvertError, setYamlConvertError] = useState<string | undefined>(undefined);
   const yamlContentRef = useRef('');
   const [yamlKey, setYamlKey] = useState(0);
-
+  const [hasUnsavedYamlChanges, setHasUnsavedYamlChanges] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isReloadModalOpen, setIsReloadModalOpen] = useState(false);
 
-  const handleYamlChange = useCallback((content: string) => {
+  const hasAnyUnsavedChanges = hasChanges || hasUnsavedYamlChanges;
+  const yamlSessionKey = `${String(yamlKey)}-${String(editorResetKey)}`;
+  const isCreateMode = !onReload;
+
+  const handleYamlContentChange = useCallback((content: string, yamlChanged: boolean) => {
     yamlContentRef.current = content;
+    setHasUnsavedYamlChanges(yamlChanged);
     setSubmitError(undefined);
   }, []);
 
@@ -82,6 +130,7 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
       }
     }
     if (newType === EditorType.YAML) {
+      setHasUnsavedYamlChanges(false);
       setYamlKey((k) => k + 1);
     }
     setEditorType(newType);
@@ -95,8 +144,36 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
   /** Closes the modal and remounts the YAML editor from initialResource, discarding the user's edits. */
   const handleResetToDefault = () => {
     setYamlConvertError(undefined);
+    setHasUnsavedYamlChanges(false);
     setYamlKey((k) => k + 1);
   };
+
+  const performReload = useCallback(async () => {
+    setSubmitError(undefined);
+    setHasUnsavedYamlChanges(false);
+    try {
+      await onReload?.();
+    } finally {
+      setYamlKey((k) => k + 1);
+    }
+  }, [onReload]);
+
+  const handleCancel = useCallback(() => {
+    if (hasAnyUnsavedChanges) {
+      setIsCancelModalOpen(true);
+    } else {
+      onCancel();
+    }
+  }, [hasAnyUnsavedChanges, onCancel]);
+
+  const handleReload = useCallback(() => {
+    if (!onReload) return;
+    if (hasAnyUnsavedChanges) {
+      setIsReloadModalOpen(true);
+    } else {
+      void performReload();
+    }
+  }, [hasAnyUnsavedChanges, onReload, performReload]);
 
   const handleFormSubmit = async () => {
     setSubmitError(undefined);
@@ -122,23 +199,6 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
       setIsSubmitting(false);
     }
   };
-
-  const handleCancel = useCallback(() => {
-    if (hasChanges) {
-      setIsCancelModalOpen(true);
-    } else {
-      onCancel();
-    }
-  }, [hasChanges, onCancel]);
-
-  const handleReload = useCallback(() => {
-    if (!onReload) return;
-    if (hasChanges) {
-      setIsReloadModalOpen(true);
-    } else {
-      onReload();
-    }
-  }, [hasChanges, onReload]);
 
   return (
     <>
@@ -179,6 +239,7 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
                 onCancel={handleCancel}
                 submitLabel={submitLabel}
                 onReload={onReload ? handleReload : undefined}
+                isReloading={isReloading}
                 createButtonTestId={createButtonTestId}
                 cancelButtonTestId={cancelButtonTestId}
                 reloadButtonTestId={reloadButtonTestId}
@@ -187,10 +248,11 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
           </StackItem>
         ) : (
           <StackItem>
-            <YamlEditorWrapper
-              key={yamlKey}
+            <YamlEditorWithChangeTracking
+              key={yamlSessionKey}
               initialResource={initialResource}
-              onChange={handleYamlChange}
+              create={isCreateMode}
+              onContentChange={handleYamlContentChange}
               onSave={(yaml) => {
                 void handleYamlSave(yaml);
               }}
@@ -284,7 +346,7 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
               variant="primary"
               onClick={() => {
                 setIsReloadModalOpen(false);
-                onReload();
+                void performReload();
               }}
               data-test="confirm-reload-btn"
             >

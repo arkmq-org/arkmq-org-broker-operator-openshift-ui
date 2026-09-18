@@ -10,6 +10,7 @@ interface FormActionGroupProps {
   onCancel: () => void;
   submitLabel?: string;
   onReload?: () => void;
+  isReloading?: boolean;
   createButtonTestId?: string;
   cancelButtonTestId?: string;
   reloadButtonTestId?: string;
@@ -23,6 +24,7 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
   onCancel,
   submitLabel,
   onReload,
+  isReloading = false,
   createButtonTestId,
   cancelButtonTestId,
   reloadButtonTestId,
@@ -38,6 +40,7 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
       )}
       <ActionGroup>
         <Button
+          type="button"
           variant="primary"
           onClick={onSubmit}
           isLoading={isSubmitting}
@@ -48,15 +51,18 @@ export const FormActionGroup: React.FC<FormActionGroupProps> = ({
         </Button>
         {onReload && (
           <Button
+            type="button"
             variant="secondary"
             onClick={onReload}
-            isDisabled={isSubmitting}
+            isLoading={isReloading}
+            isDisabled={isSubmitting || isReloading}
             data-test={reloadButtonTestId}
           >
             {t('Reload')}
           </Button>
         )}
         <Button
+          type="button"
           variant="link"
           onClick={onCancel}
           isDisabled={isSubmitting}

@@ -72,6 +72,20 @@ describe('GeneralDetailsSection', () => {
     expect(namespaceInput).toBeDisabled();
   });
 
+  it('disables the name field when isNameReadOnly is true', () => {
+    render(
+      <BrokerServiceFormStateContext.Provider value={makeStateWithLabels()}>
+        <BrokerServiceFormDispatchContext.Provider value={jest.fn()}>
+          <GeneralDetailsSection namespace={TEST_NAMESPACE} isNameReadOnly />
+        </BrokerServiceFormDispatchContext.Provider>
+      </BrokerServiceFormStateContext.Provider>,
+    );
+
+    const nameInput = screen.getByTestId('broker-service-name-input');
+    expect(nameInput).toHaveValue('my-messaging-service');
+    expect(nameInput).toBeDisabled();
+  });
+
   it('updates the broker service name when the user types', async () => {
     const user = userEvent.setup();
     render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);

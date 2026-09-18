@@ -22,6 +22,7 @@ export interface ResourceListRowActionsProps {
   editFormPath?: string;
   dataTest?: string;
 }
+
 export const ResourceListRowActions: FC<ResourceListRowActionsProps> = ({
   resource,
   model,

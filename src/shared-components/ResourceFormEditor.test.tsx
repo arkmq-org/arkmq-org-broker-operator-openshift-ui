@@ -1,9 +1,13 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResourceFormEditor } from './ResourceFormEditor';
 
+jest.mock('./YamlEditorWrapper', () => ({
+  YamlEditorWrapper: () => <div data-test="yaml-editor-mock" />,
+}));
+
 const mockOnCancel = jest.fn();
-const mockOnReload = jest.fn();
+const mockOnReload = jest.fn().mockResolvedValue(undefined);
 const mockOnFormSubmit = jest.fn().mockResolvedValue(undefined);
 const mockOnYamlSave = jest.fn().mockResolvedValue(undefined);
 const mockOnSwitchToForm = jest.fn(() => ({ ok: true as const }));
@@ -23,6 +27,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockOnFormSubmit.mockResolvedValue(undefined);
   mockOnYamlSave.mockResolvedValue(undefined);
+  mockOnReload.mockResolvedValue(undefined);
   mockOnSwitchToForm.mockReturnValue({ ok: true as const });
 });
 
@@ -87,7 +92,9 @@ describe('ResourceFormEditor', () => {
 
       await user.click(screen.getByTestId('reload-btn'));
 
-      expect(mockOnReload).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(mockOnReload).toHaveBeenCalled();
+      });
     });
 
     it('shows confirmation modal when hasChanges is true', async () => {
@@ -135,7 +142,9 @@ describe('ResourceFormEditor', () => {
       await user.click(screen.getByTestId('reload-btn'));
       await user.click(screen.getByTestId('confirm-reload-btn'));
 
-      expect(mockOnReload).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(mockOnReload).toHaveBeenCalled();
+      });
     });
 
     it('dismisses modal without reloading when cancel is clicked', async () => {

@@ -43,6 +43,10 @@ const BrokerServiceDetailsPage: FC<BrokerServiceDetailsPageProps> = ({ namespace
   }) as [BrokerService, boolean, unknown];
 
   const listPath = `/k8s/ns/${namespace}/${BrokerServiceModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerServiceModel.apiVersion}~${BrokerServiceModel.kind}`;
+  const detailsPath = name ? `${listPath}/${name}` : listPath;
+  const editFormPath = name
+    ? `${detailsPath}/edit?returnUrl=${encodeURIComponent(detailsPath)}`
+    : listPath;
   const statusLabels = {
     Running: t('Running'),
     Warning: t('Warning'),
@@ -141,6 +145,7 @@ const BrokerServiceDetailsPage: FC<BrokerServiceDetailsPageProps> = ({ namespace
                 editActionLabel={t('Edit BrokerService')}
                 deleteActionLabel={t('Delete BrokerService')}
                 listPath={listPath}
+                editFormPath={editFormPath}
                 dataTest={`broker-service-details-actions-${namespace}-${name}`}
               />
             </FlexItem>

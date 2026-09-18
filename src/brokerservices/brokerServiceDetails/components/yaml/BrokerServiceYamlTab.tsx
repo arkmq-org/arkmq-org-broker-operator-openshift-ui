@@ -12,8 +12,8 @@ export interface BrokerServiceYamlTabProps {
 }
 
 /**
- * Editable YAML tab for BrokerService details.
- * Edit BrokerService from the list opens this tab via the /yaml route.
+ * Editable YAML tab on the BrokerService details page.
+ * The custom edit form is reached via the /edit route from list and details actions.
  */
 export const BrokerServiceYamlTab: FC<BrokerServiceYamlTabProps> = ({ obj }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');

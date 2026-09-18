@@ -370,3 +370,168 @@ test.describe('BrokerService Details Page', () => {
     await expect(page.locator('[data-test="broker-service-overview-tab"]')).toBeVisible();
   });
 });
+
+test.describe('BrokerService Edit Page', () => {
+  const EDIT_NAMESPACE = 'broker-service-edit-e2e';
+  const EDIT_SERVICE_NAME = 'edit-test-broker';
+
+  const detailsPath = `/k8s/ns/${EDIT_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerService/${EDIT_SERVICE_NAME}`;
+  const editPath = `${detailsPath}/edit?returnUrl=${encodeURIComponent(detailsPath)}`;
+
+  async function openEditPageFromDetailsActions(page: Page) {
+    await gotoBrokerServiceList(page, EDIT_NAMESPACE);
+    await page
+      .locator(`[data-test="broker-service-link-${EDIT_NAMESPACE}-${EDIT_SERVICE_NAME}"]`)
+      .click();
+    await page.waitForURL(
+      new RegExp(`/k8s/ns/${EDIT_NAMESPACE}/.*${EDIT_SERVICE_NAME}(?!.*~new)`),
+      {
+        timeout: 30000,
+      },
+    );
+
+    await page
+      .locator(
+        `[data-test="broker-service-details-actions-${EDIT_NAMESPACE}-${EDIT_SERVICE_NAME}"]`,
+      )
+      .click();
+    await page.getByRole('menuitem', { name: 'Edit BrokerService' }).click();
+    await page.waitForURL(new RegExp(`${EDIT_SERVICE_NAME}/edit`), { timeout: 30000 });
+    await expect(page.locator('[data-test="edit-brokerservice-title"]')).toBeVisible();
+  }
+
+  test.beforeAll(() => {
+    createNamespace(EDIT_NAMESPACE);
+    console.log('\nStarting BrokerService Edit Page tests\n');
+  });
+
+  test.afterAll(() => {
+    kubectl(`delete brokerservice --all -n ${EDIT_NAMESPACE}`, { ignoreError: true });
+    deleteNamespace(EDIT_NAMESPACE);
+    console.log('\nEdit page cleanup complete\n');
+  });
+
+  test.afterEach(() => {
+    kubectl(`delete brokerservice --all -n ${EDIT_NAMESPACE}`, { ignoreError: true });
+  });
+
+  test('navigates to edit from details actions and shows read-only identity fields', async ({
+    page,
+  }) => {
+    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, { tier: 'e2e' }));
+    await waitForCondition(
+      'brokerservice',
+      EDIT_SERVICE_NAME,
+      EDIT_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await openEditPageFromDetailsActions(page);
+
+    await expect(page.locator('[data-test="broker-service-name-input"]')).toHaveValue(
+      EDIT_SERVICE_NAME,
+    );
+    await expect(page.locator('[data-test="broker-service-name-input"]')).toBeDisabled();
+    await expect(page.locator('[data-test="broker-service-namespace-input"]')).toHaveValue(
+      EDIT_NAMESPACE,
+    );
+    await expect(page.locator('[data-test="broker-service-namespace-input"]')).toBeDisabled();
+    await expect(page.locator('[data-test="memory-value-input"]')).toHaveValue('2');
+    await expect(page.locator('[data-test="save-broker-service-button"]')).toBeVisible();
+    await expect(page.locator('[data-test="reload-broker-service-button"]')).toBeVisible();
+    await expect(page.locator('[data-test="cancel-broker-service-button"]')).toBeVisible();
+  });
+
+  test('saves memory changes to the cluster and returns to details', async ({ page }) => {
+    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    await waitForCondition(
+      'brokerservice',
+      EDIT_SERVICE_NAME,
+      EDIT_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await page.goto(editPath, { waitUntil: 'load' });
+    await expect(page.locator('[data-test="edit-brokerservice-title"]')).toBeVisible({
+      timeout: 30000,
+    });
+
+    const memoryInput = page.locator('[data-test="memory-value-input"]');
+    await memoryInput.fill('4');
+    await page.locator('[data-test="save-broker-service-button"]').click();
+
+    await page.waitForURL(new RegExp(`${EDIT_SERVICE_NAME}(?!.*/edit)`), { timeout: 30000 });
+
+    const resource = getResource('brokerservice', EDIT_SERVICE_NAME, EDIT_NAMESPACE);
+    const spec = resource.spec as { resources?: { limits?: { memory?: string } } };
+    expect(spec.resources?.limits?.memory).toBe('4Gi');
+  });
+
+  test('reload discards unsaved memory edits and restores cluster values', async ({ page }) => {
+    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    await waitForCondition(
+      'brokerservice',
+      EDIT_SERVICE_NAME,
+      EDIT_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await page.goto(editPath, { waitUntil: 'load' });
+    await expect(page.locator('[data-test="edit-brokerservice-title"]')).toBeVisible({
+      timeout: 30000,
+    });
+
+    const memoryInput = page.locator('[data-test="memory-value-input"]');
+    await memoryInput.fill('8');
+    await expect(memoryInput).toHaveValue('8');
+
+    await page.locator('[data-test="reload-broker-service-button"]').click();
+    await page.locator('[data-test="confirm-reload-btn"]').click();
+
+    await expect(memoryInput).toHaveValue('2', { timeout: 30000 });
+
+    const resource = getResource('brokerservice', EDIT_SERVICE_NAME, EDIT_NAMESPACE);
+    const spec = resource.spec as { resources?: { limits?: { memory?: string } } };
+    expect(spec.resources?.limits?.memory).toBe('2Gi');
+  });
+
+  test('cancel with unsaved changes returns to details via returnUrl', async ({ page }) => {
+    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    await waitForCondition(
+      'brokerservice',
+      EDIT_SERVICE_NAME,
+      EDIT_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await page.goto(editPath, { waitUntil: 'load' });
+    await expect(page.locator('[data-test="edit-brokerservice-title"]')).toBeVisible({
+      timeout: 30000,
+    });
+
+    await page.locator('[data-test="memory-value-input"]').fill('6');
+    await page.locator('[data-test="cancel-broker-service-button"]').click();
+    await page.locator('[data-test="confirm-cancel-btn"]').click();
+
+    await page.waitForURL(new RegExp(`${EDIT_SERVICE_NAME}(?!.*/edit)`), { timeout: 30000 });
+    await expect(page.locator('[data-test="broker-service-details-title"]')).toContainText(
+      EDIT_SERVICE_NAME,
+    );
+
+    const resource = getResource('brokerservice', EDIT_SERVICE_NAME, EDIT_NAMESPACE);
+    const spec = resource.spec as { resources?: { limits?: { memory?: string } } };
+    expect(spec.resources?.limits?.memory).toBe('2Gi');
+  });
+});

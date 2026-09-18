@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react';
 import type { BrokerService } from '../../k8s/types';
 import {
   brokerServiceReducer,
+  createBrokerServiceStateFromCr,
   createInitialBrokerServiceState,
   useBrokerServiceFormDispatch,
   useBrokerServiceFormState,
@@ -268,13 +269,68 @@ describe('brokerServiceReducer', () => {
 
     const next = brokerServiceReducer(state, { type: 'SET_MODEL', payload: newCr });
 
-    expect(next.cr).toBe(newCr);
+    expect(next.cr).toEqual(newCr);
+    expect(next.cr).not.toBe(newCr);
     expect(next.labels).toEqual([
       { key: 'forWorkQueue', value: 'true' },
       { key: 'app', value: 'messaging' },
     ]);
     expect(next.memoryValue).toBe('512');
     expect(next.memoryUnit).toBe('Mi');
+  });
+
+  it('SET_MODEL removes newly added label rows after reload', () => {
+    const clusterCr: BrokerService = {
+      apiVersion: 'broker.arkmq.org/v1beta2',
+      kind: 'BrokerService',
+      metadata: {
+        name: 'broker',
+        namespace: TEST_NAMESPACE,
+        labels: { app: 'messaging', env: 'prod' },
+      },
+      spec: { resources: { limits: { memory: '2Gi' } } },
+    };
+    let state = createBrokerServiceStateFromCr(clusterCr);
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 2, key: 'team' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 2, value: 'platform' },
+    });
+
+    expect(state.labels).toHaveLength(3);
+
+    const reloaded = brokerServiceReducer(state, { type: 'SET_MODEL', payload: clusterCr });
+
+    expect(reloaded.labels).toEqual([
+      { key: 'app', value: 'messaging' },
+      { key: 'env', value: 'prod' },
+    ]);
+  });
+
+  it('SET_MODEL discards in-memory edits and does not mutate the cluster baseline object', () => {
+    const clusterCr: BrokerService = {
+      apiVersion: 'broker.arkmq.org/v1beta2',
+      kind: 'BrokerService',
+      metadata: {
+        name: 'broker',
+        namespace: TEST_NAMESPACE,
+        labels: { app: 'messaging' },
+      },
+      spec: { resources: { limits: { memory: '2Gi' } } },
+    };
+    let state = createBrokerServiceStateFromCr(clusterCr);
+    state = brokerServiceReducer(state, { type: 'SET_MEMORY_VALUE', payload: '8' });
+    expect(state.memoryValue).toBe('8');
+
+    const reloaded = brokerServiceReducer(state, { type: 'SET_MODEL', payload: clusterCr });
+
+    expect(reloaded.memoryValue).toBe('2');
+    expect(reloaded.cr.spec?.resources?.limits?.memory).toBe('2Gi');
+    expect(clusterCr.spec?.resources?.limits?.memory).toBe('2Gi');
   });
 
   it('SET_MODEL with empty spec clears labels and resets memory defaults', () => {

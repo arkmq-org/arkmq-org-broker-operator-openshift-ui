@@ -36,6 +36,7 @@
   "BrokerApp not found": "BrokerApp not found",
   "BrokerApps": "BrokerApps",
   "BrokerApps pagination": "BrokerApps pagination",
+  "BrokerService": "BrokerService",
   "BrokerService details": "BrokerService details",
   "BrokerService not found": "BrokerService not found",
   "BrokerServices": "BrokerServices",
@@ -125,10 +126,12 @@
   "Messaging Capabilities": "Messaging Capabilities",
   "Metric filter": "Metric filter",
   "Metrics": "Metrics",
+  "Modify the configuration of an existing BrokerService. Changes will be applied to the running broker cluster after saving.": "Modify the configuration of an existing BrokerService. Changes will be applied to the running broker cluster after saving.",
   "Name": "Name",
   "Name can only contain letters, numbers, spaces, and hyphens.": "Name can only contain letters, numbers, spaces, and hyphens.",
   "Name is required.": "Name is required.",
   "Namespace": "Namespace",
+  "Namespace cannot be changed after creation.": "Namespace cannot be changed after creation.",
   "Namespace is required.": "Namespace is required.",
   "No addresses configured": "No addresses configured",
   "No annotations": "No annotations",
@@ -200,5 +203,6 @@
   "You do not have permission to create BrokerApps in this namespace.": "You do not have permission to create BrokerApps in this namespace.",
   "You do not have permission to create BrokerServices in this namespace.": "You do not have permission to create BrokerServices in this namespace.",
   "You do not have permission to update BrokerApps in this namespace.": "You do not have permission to update BrokerApps in this namespace.",
+  "You do not have permission to update BrokerServices in this namespace.": "You do not have permission to update BrokerServices in this namespace.",
   "Your YAML could not be converted to the form. Choose how to proceed.": "Your YAML could not be converted to the form. Choose how to proceed."
 }

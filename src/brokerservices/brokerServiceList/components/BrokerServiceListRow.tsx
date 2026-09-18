@@ -39,6 +39,14 @@ export const BrokerServiceListRow = (
   const labels = service.metadata?.labels ?? {};
   const labelEntries = Object.entries(labels);
   const { labelKey, color } = getReadyConditionDisplay(service.status?.conditions);
+  const listPath =
+    name && namespace
+      ? `/k8s/ns/${namespace}/${BrokerServiceModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerServiceModel.apiVersion}~${BrokerServiceModel.kind}`
+      : undefined;
+  const editFormPath =
+    listPath && name
+      ? `${listPath}/${name}/edit?returnUrl=${encodeURIComponent(listPath)}`
+      : undefined;
 
   return [
     {
@@ -100,6 +108,7 @@ export const BrokerServiceListRow = (
           model={BrokerServiceModel}
           editActionLabel={editActionLabel}
           deleteActionLabel={deleteActionLabel}
+          editFormPath={editFormPath}
           dataTest={name && namespace ? `broker-service-actions-${namespace}-${name}` : undefined}
         />
       ),
