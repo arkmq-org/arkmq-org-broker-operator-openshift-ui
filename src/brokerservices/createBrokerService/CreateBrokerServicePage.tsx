@@ -2,36 +2,19 @@ import type { FC } from 'react';
 import { useReducer } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import * as jsYaml from 'js-yaml';
 import { k8sCreate, useAccessReview } from '@openshift-console/dynamic-plugin-sdk';
-import {
-  Content,
-  EmptyState,
-  EmptyStateBody,
-  PageSection,
-  Spinner,
-  Stack,
-  StackItem,
-  Title,
-} from '@patternfly/react-core';
+import { EmptyState, EmptyStateBody, PageSection, Spinner } from '@patternfly/react-core';
 import { BrokerServiceModel } from '../../k8s/models';
 import type { BrokerService } from '../../k8s/types';
-import {
-  validateDNS1123,
-  validateLabelEntries,
-  validateMemoryValue,
-  validateYamlDuplicateBrokerServiceLabels,
-} from '../../validation/k8s';
-import { ResourceFormEditor } from '../../shared-components/ResourceFormEditor';
-import { GeneralDetailsSection } from './components/GeneralDetailsSection';
-import { InfrastructureSection } from './components/InfrastructureSection';
 import {
   brokerServiceReducer,
   createInitialBrokerServiceState,
   BrokerServiceFormStateContext,
   BrokerServiceFormDispatchContext,
 } from '../../reducers/brokerservice/reducer';
+import { BrokerServiceFormPage } from '../BrokerServiceFormPage';
 
+/** Container for the "Create BrokerService" flow. Sets up the reducer with an empty initial state and submits via k8sCreate. */
 const CreateBrokerServicePage: FC = () => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const { ns: namespace = 'default' } = useParams<{ ns: string }>();
@@ -49,17 +32,7 @@ const CreateBrokerServicePage: FC = () => {
     createInitialBrokerServiceState(namespace),
   );
 
-  const { cr, memoryValue, labels } = formState;
-  const isFormValid =
-    validateDNS1123(cr.metadata?.name ?? '') === null &&
-    validateMemoryValue(memoryValue) === null &&
-    validateLabelEntries(labels) === null;
   const listPath = `/k8s/ns/${namespace}/broker.arkmq.org~v1beta2~BrokerService`;
-
-  const submit = async (crToSubmit: BrokerService) => {
-    await k8sCreate({ model: BrokerServiceModel, data: crToSubmit });
-    void navigate(listPath);
-  };
 
   if (canCreateLoading) {
     return (
@@ -84,67 +57,23 @@ const CreateBrokerServicePage: FC = () => {
   return (
     <BrokerServiceFormStateContext.Provider value={formState}>
       <BrokerServiceFormDispatchContext.Provider value={dispatch}>
-        <>
-          <PageSection>
-            <Stack hasGutter>
-              <StackItem>
-                <Title headingLevel="h1" size="2xl" data-test="create-brokerservice-title">
-                  {t('Create BrokerService')}
-                </Title>
-              </StackItem>
-              <StackItem>
-                <Content>
-                  {t(
-                    'Provision a shared messaging infrastructure broker cluster. This resource defines the underlying broker deployment that applications will connect to via BrokerApp resources.',
-                  )}
-                </Content>
-              </StackItem>
-            </Stack>
-          </PageSection>
-          <PageSection>
-            <ResourceFormEditor
-              initialResource={cr}
-              isFormValid={isFormValid}
-              createButtonTestId="create-broker-service-button"
-              cancelButtonTestId="cancel-broker-service-button"
-              onFormSubmit={() => submit(cr)}
-              onYamlSave={(yaml) => {
-                const duplicateLabelError = validateYamlDuplicateBrokerServiceLabels(yaml);
-                if (duplicateLabelError) {
-                  throw new Error(duplicateLabelError);
-                }
-                return submit(jsYaml.load(yaml) as BrokerService);
-              }}
-              onSwitchToForm={(yaml) => {
-                const duplicateLabelError = validateYamlDuplicateBrokerServiceLabels(yaml);
-                if (duplicateLabelError) {
-                  return { ok: false, error: duplicateLabelError };
-                }
-                try {
-                  const parsed = jsYaml.load(yaml) as BrokerService;
-                  dispatch({
-                    type: 'SET_MODEL',
-                    payload: parsed,
-                    preserveLabels: validateLabelEntries(labels) !== null,
-                  });
-                  return { ok: true };
-                } catch {
-                  return {
-                    ok: false,
-                    error: t('Cannot switch to Form view: YAML is not valid'),
-                  };
-                }
-              }}
-              onCancel={() => {
-                void navigate(listPath);
-              }}
-            >
-              <GeneralDetailsSection namespace={namespace} />
-
-              <InfrastructureSection />
-            </ResourceFormEditor>
-          </PageSection>
-        </>
+        <BrokerServiceFormPage
+          title={t('Create BrokerService')}
+          description={t(
+            'Provision a shared messaging infrastructure broker cluster. This resource defines the underlying broker deployment that applications will connect to via BrokerApp resources.',
+          )}
+          namespace={namespace}
+          onSubmit={async (cr: BrokerService) => {
+            await k8sCreate({ model: BrokerServiceModel, data: cr });
+            void navigate(listPath);
+          }}
+          onCancel={() => {
+            void navigate(listPath);
+          }}
+          titleTestId="create-brokerservice-title"
+          submitButtonTestId="create-broker-service-button"
+          cancelButtonTestId="cancel-broker-service-button"
+        />
       </BrokerServiceFormDispatchContext.Provider>
     </BrokerServiceFormStateContext.Provider>
   );

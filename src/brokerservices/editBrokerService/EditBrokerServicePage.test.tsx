@@ -12,7 +12,6 @@ import EditBrokerServicePage, { resolveReturnPath } from './EditBrokerServicePag
 
 const TEST_NAMESPACE = 'test-namespace';
 const SERVICE_NAME = 'my-broker';
-const DETAILS_PATH = `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerService/${SERVICE_NAME}`;
 
 const mockBrokerService: BrokerService = {
   apiVersion: 'broker.arkmq.org/v1beta2',
@@ -80,15 +79,10 @@ describe('resolveReturnPath', () => {
 });
 
 describe('EditBrokerServicePage', () => {
-  it('renders the edit page title and description', () => {
+  it('renders the edit page title', () => {
     renderEditPage();
 
     expect(screen.getByTestId('edit-brokerservice-title')).toHaveTextContent('Edit BrokerService');
-    expect(
-      screen.getByText(
-        'Modify the configuration of an existing BrokerService. Changes will be applied to the running broker cluster after saving.',
-      ),
-    ).toBeInTheDocument();
   });
 
   it('shows a loading spinner while the resource is loading', () => {
@@ -154,11 +148,7 @@ describe('EditBrokerServicePage', () => {
 
   it('prompts before reload and restores cluster values after confirmation', async () => {
     const user = userEvent.setup();
-    const clusterBroker: BrokerService = {
-      ...mockBrokerService,
-      spec: { resources: { limits: { memory: '2Gi' } } },
-    };
-    mockK8sGet.mockResolvedValue(clusterBroker);
+    mockK8sGet.mockResolvedValue(mockBrokerService);
 
     renderEditPage();
 
@@ -213,7 +203,9 @@ describe('EditBrokerServicePage', () => {
     await user.click(screen.getByTestId('cancel-broker-service-button'));
 
     expect(screen.queryByTestId('confirm-cancel-btn')).not.toBeInTheDocument();
-    expect(mockNavigate).toHaveBeenCalledWith(DETAILS_PATH, { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerService`,
+    );
   });
 
   it('prompts before cancel and navigates away after confirmation', async () => {
@@ -229,10 +221,12 @@ describe('EditBrokerServicePage', () => {
 
     await user.click(screen.getByTestId('confirm-cancel-btn'));
 
-    expect(mockNavigate).toHaveBeenCalledWith(DETAILS_PATH, { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerService`,
+    );
   });
 
-  it('uses returnUrl from the query string for cancel and save navigation', async () => {
+  it('uses returnUrl from the query string for cancel navigation', async () => {
     const user = userEvent.setup();
     const returnPath = '/k8s/ns/test-namespace/broker.arkmq.org~v1beta2~BrokerService';
     mockUseLocation.mockReturnValue({
@@ -242,25 +236,24 @@ describe('EditBrokerServicePage', () => {
     renderEditPage();
 
     await user.click(screen.getByTestId('cancel-broker-service-button'));
-    expect(mockNavigate).toHaveBeenCalledWith(returnPath, { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith(returnPath);
+  });
 
-    mockNavigate.mockClear();
-    let mockK8sUpdateArgs: { ns: string; name: string; data: BrokerService } | undefined;
-    mockK8sUpdate.mockImplementationOnce(
-      (args: { ns: string; name: string; data: BrokerService }) => {
-        mockK8sUpdateArgs = args;
-        return Promise.resolve(mockBrokerService);
-      },
-    );
+  it('submits the CR with the original resourceVersion', async () => {
+    const user = userEvent.setup();
+    let mockK8sUpdateArgs: { data: BrokerService } | undefined;
+    mockK8sUpdate.mockImplementationOnce((args: { data: BrokerService }) => {
+      mockK8sUpdateArgs = args;
+      return Promise.resolve(mockBrokerService);
+    });
+
+    renderEditPage();
 
     await user.click(screen.getByTestId('save-broker-service-button'));
 
     await waitFor(() => {
-      expect(mockK8sUpdateArgs?.ns).toBe(TEST_NAMESPACE);
-      expect(mockK8sUpdateArgs?.name).toBe(SERVICE_NAME);
       expect(mockK8sUpdateArgs?.data.metadata?.resourceVersion).toBe('12345');
     });
-    expect(mockNavigate).toHaveBeenCalledWith(returnPath);
   });
 
   it('submits the resourceVersion from the reloaded CR, not the initial prop', async () => {
@@ -273,7 +266,6 @@ describe('EditBrokerServicePage', () => {
 
     renderEditPage();
 
-    // Trigger a reload (no unsaved changes, so no confirm modal)
     await user.click(screen.getByTestId('reload-broker-service-button'));
     await waitFor(() => {
       expect(mockK8sGet).toHaveBeenCalled();

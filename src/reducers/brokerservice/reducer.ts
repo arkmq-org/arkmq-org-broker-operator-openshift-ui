@@ -12,6 +12,7 @@ export interface BrokerServiceFormState {
   labels: LabelEntry[];
   memoryValue: string;
   memoryUnit: 'Mi' | 'Gi';
+  hasChanges: boolean;
 }
 
 export type BrokerServiceFormAction =
@@ -27,7 +28,7 @@ export type BrokerServiceFormAction =
    * An empty or whitespace-only payload removes spec.image so the operator uses its default.
    */
   | { type: 'SET_IMAGE'; payload: string }
-  | { type: 'SET_MODEL'; payload: BrokerService; preserveLabels?: boolean };
+  | { type: 'SET_MODEL'; payload: BrokerService; preserveLabels?: boolean; resetChanges?: boolean };
 
 // First occurrence wins so duplicate form rows do not overwrite YAML preview values.
 const labelsToRecord = (labels: LabelEntry[]): Record<string, string> | undefined => {
@@ -74,7 +75,7 @@ const parseMemory = (memoryStr: string | undefined): { value: string; unit: 'Mi'
 const buildMemoryString = (value: string, unit: 'Mi' | 'Gi'): string => `${value}${unit}`;
 
 /** Clones a BrokerService CR before storing it in form state, isolating edits from the watched cluster object. */
-export const cloneBrokerService = (cr: BrokerService): BrokerService =>
+const cloneBrokerService = (cr: BrokerService): BrokerService =>
   JSON.parse(JSON.stringify(cr)) as BrokerService;
 
 // --- reducer ---
@@ -87,6 +88,7 @@ export const brokerServiceReducer = (
     case 'SET_NAME':
       return {
         ...state,
+        hasChanges: true,
         cr: {
           ...state.cr,
           metadata: { ...state.cr.metadata, name: action.payload },
@@ -94,12 +96,13 @@ export const brokerServiceReducer = (
       };
 
     case 'ADD_LABEL':
-      return { ...state, labels: [...state.labels, { key: '', value: '' }] };
+      return { ...state, hasChanges: true, labels: [...state.labels, { key: '', value: '' }] };
 
     case 'REMOVE_LABEL': {
       const labels = state.labels.filter((_, i) => i !== action.payload);
       return {
         ...state,
+        hasChanges: true,
         labels,
         cr: {
           ...state.cr,
@@ -113,6 +116,7 @@ export const brokerServiceReducer = (
       labels[action.payload.index] = { ...labels[action.payload.index], key: action.payload.key };
       return {
         ...state,
+        hasChanges: true,
         labels,
         cr: {
           ...state.cr,
@@ -129,6 +133,7 @@ export const brokerServiceReducer = (
       };
       return {
         ...state,
+        hasChanges: true,
         labels,
         cr: {
           ...state.cr,
@@ -140,6 +145,7 @@ export const brokerServiceReducer = (
     case 'SET_MEMORY_VALUE': {
       return {
         ...state,
+        hasChanges: true,
         memoryValue: action.payload,
         cr: {
           ...state.cr,
@@ -156,6 +162,7 @@ export const brokerServiceReducer = (
     case 'SET_MEMORY_UNIT': {
       return {
         ...state,
+        hasChanges: true,
         memoryUnit: action.payload,
         cr: {
           ...state.cr,
@@ -177,7 +184,7 @@ export const brokerServiceReducer = (
       } else {
         delete spec.image;
       }
-      return { ...state, cr: { ...state.cr, spec } };
+      return { ...state, hasChanges: true, cr: { ...state.cr, spec } };
     }
 
     case 'SET_MODEL': {
@@ -187,6 +194,7 @@ export const brokerServiceReducer = (
         const mergedLabels = mergeFormLabelsWithYaml(state.labels, newCr.metadata?.labels);
         return {
           ...state,
+          hasChanges: !action.resetChanges,
           cr: {
             ...newCr,
             metadata: {
@@ -201,6 +209,7 @@ export const brokerServiceReducer = (
       }
       return {
         ...state,
+        hasChanges: !action.resetChanges,
         cr: newCr,
         labels: labelsFromRecord(newCr.metadata?.labels),
         memoryValue: mem.value,
@@ -221,6 +230,7 @@ const formStateFromCr = (cr: BrokerService): BrokerServiceFormState => {
     labels: labelsFromRecord(clonedCr.metadata?.labels),
     memoryValue: mem.value,
     memoryUnit: mem.unit,
+    hasChanges: false,
   };
 };
 
