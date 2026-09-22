@@ -80,146 +80,91 @@ const cloneBrokerService = (cr: BrokerService): BrokerService =>
 
 // --- reducer ---
 
+/** Syncs the label array into the CR's metadata.labels field. */
+const syncLabelsToMetadata = (cr: BrokerService, labels: LabelEntry[]): void => {
+  cr.metadata = { ...cr.metadata, labels: labelsToRecord(labels) };
+};
+
+/** Syncs memory value and unit into the CR's spec.resources.limits.memory field. */
+const syncMemoryToSpec = (
+  cr: BrokerService,
+  memoryValue: string,
+  memoryUnit: 'Mi' | 'Gi',
+): void => {
+  cr.spec = {
+    ...cr.spec,
+    resources: { limits: { memory: buildMemoryString(memoryValue, memoryUnit) } },
+  };
+};
+
 export const brokerServiceReducer = (
   state: BrokerServiceFormState,
   action: BrokerServiceFormAction,
 ): BrokerServiceFormState => {
+  let cr = { ...state.cr, spec: { ...state.cr.spec } };
+  let { labels, memoryValue, memoryUnit } = state;
+
   switch (action.type) {
     case 'SET_NAME':
-      return {
-        ...state,
-        hasChanges: true,
-        cr: {
-          ...state.cr,
-          metadata: { ...state.cr.metadata, name: action.payload },
-        },
-      };
+      cr.metadata = { ...cr.metadata, name: action.payload };
+      break;
 
     case 'ADD_LABEL':
-      return { ...state, hasChanges: true, labels: [...state.labels, { key: '', value: '' }] };
+      labels = [...labels, { key: '', value: '' }];
+      break;
 
-    case 'REMOVE_LABEL': {
-      const labels = state.labels.filter((_, i) => i !== action.payload);
-      return {
-        ...state,
-        hasChanges: true,
-        labels,
-        cr: {
-          ...state.cr,
-          metadata: { ...state.cr.metadata, labels: labelsToRecord(labels) },
-        },
-      };
-    }
+    case 'REMOVE_LABEL':
+      labels = labels.filter((_, i) => i !== action.payload);
+      break;
 
-    case 'UPDATE_LABEL_KEY': {
-      const labels = [...state.labels];
+    case 'UPDATE_LABEL_KEY':
+      labels = [...labels];
       labels[action.payload.index] = { ...labels[action.payload.index], key: action.payload.key };
-      return {
-        ...state,
-        hasChanges: true,
-        labels,
-        cr: {
-          ...state.cr,
-          metadata: { ...state.cr.metadata, labels: labelsToRecord(labels) },
-        },
-      };
-    }
+      break;
 
-    case 'UPDATE_LABEL_VALUE': {
-      const labels = [...state.labels];
+    case 'UPDATE_LABEL_VALUE':
+      labels = [...labels];
       labels[action.payload.index] = {
         ...labels[action.payload.index],
         value: action.payload.value,
       };
-      return {
-        ...state,
-        hasChanges: true,
-        labels,
-        cr: {
-          ...state.cr,
-          metadata: { ...state.cr.metadata, labels: labelsToRecord(labels) },
-        },
-      };
-    }
+      break;
 
-    case 'SET_MEMORY_VALUE': {
-      return {
-        ...state,
-        hasChanges: true,
-        memoryValue: action.payload,
-        cr: {
-          ...state.cr,
-          spec: {
-            ...state.cr.spec,
-            resources: {
-              limits: { memory: buildMemoryString(action.payload, state.memoryUnit) },
-            },
-          },
-        },
-      };
-    }
+    case 'SET_MEMORY_VALUE':
+      memoryValue = action.payload;
+      break;
 
-    case 'SET_MEMORY_UNIT': {
-      return {
-        ...state,
-        hasChanges: true,
-        memoryUnit: action.payload,
-        cr: {
-          ...state.cr,
-          spec: {
-            ...state.cr.spec,
-            resources: {
-              limits: { memory: buildMemoryString(state.memoryValue, action.payload) },
-            },
-          },
-        },
-      };
-    }
+    case 'SET_MEMORY_UNIT':
+      memoryUnit = action.payload;
+      break;
 
     case 'SET_IMAGE': {
       const trimmed = action.payload.trim();
-      const spec = { ...state.cr.spec };
       if (trimmed) {
-        spec.image = trimmed;
+        cr.spec.image = trimmed;
       } else {
-        delete spec.image;
+        delete cr.spec.image;
       }
-      return { ...state, hasChanges: true, cr: { ...state.cr, spec } };
+      break;
     }
 
-    case 'SET_MODEL': {
-      const newCr = cloneBrokerService(action.payload);
-      const mem = parseMemory(newCr.spec?.resources?.limits?.memory);
-      if (action.preserveLabels) {
-        const mergedLabels = mergeFormLabelsWithYaml(state.labels, newCr.metadata?.labels);
-        return {
-          ...state,
-          hasChanges: !action.resetChanges,
-          cr: {
-            ...newCr,
-            metadata: {
-              ...newCr.metadata,
-              labels: labelsToRecord(mergedLabels),
-            },
-          },
-          labels: mergedLabels,
-          memoryValue: mem.value,
-          memoryUnit: mem.unit,
-        };
-      }
-      return {
-        ...state,
-        hasChanges: !action.resetChanges,
-        cr: newCr,
-        labels: labelsFromRecord(newCr.metadata?.labels),
-        memoryValue: mem.value,
-        memoryUnit: mem.unit,
-      };
-    }
+    case 'SET_MODEL':
+      cr = { ...cloneBrokerService(action.payload), spec: { ...action.payload.spec } };
+      labels = action.preserveLabels
+        ? mergeFormLabelsWithYaml(state.labels, cr.metadata?.labels)
+        : labelsFromRecord(cr.metadata?.labels);
+      ({ value: memoryValue, unit: memoryUnit } = parseMemory(cr.spec.resources?.limits?.memory));
+      syncLabelsToMetadata(cr, labels);
+      syncMemoryToSpec(cr, memoryValue, memoryUnit);
+      return { ...state, cr, labels, memoryValue, memoryUnit, hasChanges: !action.resetChanges };
 
     default:
       return state;
   }
+
+  syncLabelsToMetadata(cr, labels);
+  syncMemoryToSpec(cr, memoryValue, memoryUnit);
+  return { ...state, cr, labels, memoryValue, memoryUnit, hasChanges: true };
 };
 
 const formStateFromCr = (cr: BrokerService): BrokerServiceFormState => {
