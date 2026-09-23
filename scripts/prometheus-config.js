@@ -1,8 +1,10 @@
 /**
  * Prometheus User Workload Monitoring Configuration Script
  *
- * This script enables Prometheus user workload monitoring in OpenShift
- * by applying the necessary ConfigMap and verifying the deployment.
+ * Enables Prometheus user workload monitoring in OpenShift and generates the
+ * ScrapeConfig objects that the operator will eventually create on its own.
+ * Until arkmq-org/activemq-artemis-operator#1515 lands upstream, this script
+ * is the way to wire scraping on a dev cluster.
  */
 
 const { exec } = require('child_process');
@@ -10,12 +12,52 @@ const { promisify } = require('util');
 
 const execAsync = promisify(exec);
 
-// Platform-specific configuration (override via env vars for non-OpenShift platforms)
 const MONITORING_NAMESPACE =
   process.env.MONITORING_NAMESPACE || 'openshift-user-workload-monitoring';
 const CLUSTER_MONITORING_NAMESPACE =
   process.env.CLUSTER_MONITORING_NAMESPACE || 'openshift-monitoring';
 const MONITORING_CONFIG = process.env.MONITORING_CONFIG || 'cluster-monitoring-config';
+
+const METRICS_PORT = 8888;
+const METRICS_PATH = '/metrics';
+const WIRING_SUFFIX = '-metrics';
+const CLUSTER_DOMAIN = process.env.CLUSTER_DOMAIN || 'cluster.local';
+
+const DEFAULT_CA_SECRET = 'arkmq-org-broker-manager-ca';
+const DEFAULT_CA_KEY = 'ca.pem';
+const DEFAULT_PROMETHEUS_CERT = 'prometheus-cert';
+const APP_CERT_SUFFIX = '-app-cert';
+
+/**
+ * Fully qualified pod DNS name matching the operator's OrdinalFQDNS.
+ */
+function ordinalFQDN(serviceName, namespace, ordinal = 0) {
+  return `${serviceName}-ss-${ordinal}.${serviceName}-hdls-svc.${namespace}.svc.${CLUSTER_DOMAIN}`;
+}
+
+/**
+ * Labels matching the operator's monitoring.Labels.
+ */
+function monitoringLabels(component, instance, serviceName, appName) {
+  const labels = {
+    'broker.arkmq.org/monitoring': 'true',
+    'app.kubernetes.io/managed-by': 'arkmq-org-broker-operator',
+    'app.kubernetes.io/component': component,
+    'app.kubernetes.io/instance': instance,
+    'broker.arkmq.org/service': serviceName,
+  };
+  if (appName) {
+    labels['broker.arkmq.org/app'] = appName;
+  }
+  return labels;
+}
+
+function formatLabels(labels, indent = 4) {
+  const pad = ' '.repeat(indent);
+  return Object.entries(labels)
+    .map(([k, v]) => `${pad}${k}: "${v}"`)
+    .join('\n');
+}
 
 /**
  * Apply YAML content using kubectl
@@ -56,7 +98,6 @@ async function waitForPodsReady(timeoutMs = 300000) {
       const podsData = await getPods(MONITORING_NAMESPACE);
 
       if (podsData && podsData.items && podsData.items.length > 0) {
-        // Filter out error/completed pods from kubectl run (prom-targets-*, prom-query-*)
         const relevantPods = podsData.items.filter(
           (pod) =>
             !pod.metadata.name.startsWith('prom-targets-') &&
@@ -137,10 +178,7 @@ data:
 async function verifyMonitoring() {
   console.log('\n📊 Verifying monitoring setup...\n');
 
-  // Wait for namespace
   await waitForNamespace();
-
-  // Wait for pods to be ready
   await waitForPodsReady();
 
   console.log('\n✅ User workload monitoring is enabled and ready!');
@@ -167,88 +205,124 @@ async function disableMonitoring() {
 }
 
 /**
- * Generate metrics Service YAML for Prometheus scraping
+ * Generate a ScrapeConfig for a BrokerService, matching the operator's
+ * monitoring.BuildScrapeConfig with the service identity.
  */
-function generateMetricsService(options = {}) {
-  const { brokerName = 'artemis-broker', namespace = 'default', metricsPort = 8888 } = options;
-
-  return `---
-# Metrics Service for Prometheus scraping
-apiVersion: v1
-kind: Service
-metadata:
-  name: ${brokerName}-metrics
-  namespace: ${namespace}
-  labels:
-    app: ${brokerName}
-spec:
-  selector:
-    ActiveMQArtemis: ${brokerName}
-  ports:
-  - name: metrics
-    port: ${metricsPort}
-    targetPort: ${metricsPort}
-    protocol: TCP
-  type: ClusterIP
-`;
-}
-
-/**
- * Generate ServiceMonitor YAML for scraping broker metrics with mTLS
- */
-function generateServiceMonitor(options = {}) {
+function generateServiceScrapeConfig(options = {}) {
   const {
-    brokerName = 'artemis-broker',
+    serviceName = 'artemis-broker',
     namespace = 'default',
-    brokerFqdn = `${options.brokerName || 'artemis-broker'}-ss-0.${
-      options.brokerName || 'artemis-broker'
-    }-hdls-svc.${namespace}.svc.cluster.local`,
-    prometheusCertSecret = 'prometheus-cert',
-    caSecret = 'arkmq-org-broker-manager-ca',
+    caSecret = DEFAULT_CA_SECRET,
+    caKey = DEFAULT_CA_KEY,
+    prometheusCertSecret = DEFAULT_PROMETHEUS_CERT,
   } = options;
 
+  const wiringName = serviceName + WIRING_SUFFIX;
+  const fqdn = ordinalFQDN(serviceName, namespace);
+  const labels = monitoringLabels('broker-service', serviceName, serviceName);
+
   return `---
-# ServiceMonitor for scraping locked-down broker metrics with mTLS
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
 metadata:
-  name: ${brokerName}-monitor
+  name: ${wiringName}
   namespace: ${namespace}
   labels:
-    app: ${brokerName}
+${formatLabels(labels)}
 spec:
-  selector:
-    matchLabels:
-      app: ${brokerName}
-  endpoints:
-  - port: metrics
-    scheme: https
-    path: /metrics
-    tlsConfig:
-      serverName: '${brokerFqdn}'
-      ca:
-        secret:
-          name: ${caSecret}
-          key: ca.pem
-      cert:
-        secret:
-          name: ${prometheusCertSecret}
-          key: tls.crt
-      keySecret:
+  staticConfigs:
+  - targets:
+    - "${fqdn}:${METRICS_PORT}"
+    labels:
+      job: "${wiringName}"
+      brokerservice: "${serviceName}"
+      brokerservice_namespace: "${namespace}"
+  metricsPath: ${METRICS_PATH}
+  scheme: HTTPS
+  tlsConfig:
+    serverName: "${fqdn}"
+    ca:
+      secret:
+        name: ${caSecret}
+        key: ${caKey}
+    cert:
+      secret:
         name: ${prometheusCertSecret}
-        key: tls.key
+        key: tls.crt
+    keySecret:
+      name: ${prometheusCertSecret}
+      key: tls.key
 `;
 }
 
 /**
- * Setup complete monitoring stack (Service + ServiceMonitor + namespace label)
+ * Generate a ScrapeConfig for a BrokerApp, matching the operator's
+ * monitoring.BuildScrapeConfig with the app's own certificate identity.
  */
-async function setupMonitoring(options = {}) {
-  const { brokerName = 'artemis-broker', namespace = 'default' } = options;
+function generateAppScrapeConfig(options = {}) {
+  const {
+    appName,
+    appNamespace,
+    serviceName = 'artemis-broker',
+    serviceNamespace = 'default',
+    caSecret = DEFAULT_CA_SECRET,
+    caKey = DEFAULT_CA_KEY,
+  } = options;
 
-  console.log('📊 Setting up Prometheus monitoring...\n');
+  if (!appName) {
+    throw new Error('--app-name is required for setup-app-monitoring');
+  }
 
-  // Label namespace for user monitoring
+  const wiringName = appName + WIRING_SUFFIX;
+  const fqdn = ordinalFQDN(serviceName, serviceNamespace);
+  const appCertSecret = appName + APP_CERT_SUFFIX;
+  const ns = appNamespace || serviceNamespace;
+  const labels = monitoringLabels('broker-app', appName, serviceName, appName);
+
+  return `---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ${wiringName}
+  namespace: ${ns}
+  labels:
+${formatLabels(labels)}
+spec:
+  staticConfigs:
+  - targets:
+    - "${fqdn}:${METRICS_PORT}"
+    labels:
+      job: "${wiringName}"
+      brokerapp: "${appName}"
+      brokerapp_namespace: "${ns}"
+      brokerservice: "${serviceName}"
+      brokerservice_namespace: "${serviceNamespace}"
+  metricsPath: ${METRICS_PATH}
+  scheme: HTTPS
+  tlsConfig:
+    serverName: "${fqdn}"
+    ca:
+      secret:
+        name: ${caSecret}
+        key: ${caKey}
+    cert:
+      secret:
+        name: ${appCertSecret}
+        key: tls.crt
+    keySecret:
+      name: ${appCertSecret}
+      key: tls.key
+`;
+}
+
+/**
+ * Setup BrokerService scrape config + namespace label
+ */
+async function setupServiceMonitoring(options = {}) {
+  const { serviceName = 'artemis-broker', namespace = 'default' } = options;
+
+  console.log(`📊 Setting up Prometheus scraping for BrokerService ${serviceName}...\n`);
+
   console.log('📝 Labeling namespace for user monitoring...');
   try {
     await execAsync(
@@ -260,20 +334,38 @@ async function setupMonitoring(options = {}) {
     throw error;
   }
 
-  // Create metrics Service
-  console.log('\n📝 Creating metrics Service...');
-  const serviceYaml = generateMetricsService(options);
-  await applyYaml(serviceYaml);
-  console.log('✓ Metrics Service created');
+  console.log('\n📝 Creating ScrapeConfig...');
+  await applyYaml(generateServiceScrapeConfig(options));
+  console.log('✓ ScrapeConfig created');
 
-  // Create ServiceMonitor
-  console.log('\n📝 Creating ServiceMonitor...');
-  const serviceMonitorYaml = generateServiceMonitor(options);
-  await applyYaml(serviceMonitorYaml);
-  console.log('✓ ServiceMonitor created');
+  console.log(`\n✅ Service monitoring setup complete for ${serviceName}.`);
+}
 
-  console.log('\n✅ Monitoring setup complete!');
-  console.log(`\nPrometheus will scrape metrics from ${brokerName} via mTLS.`);
+/**
+ * Setup BrokerApp scrape config + namespace label
+ */
+async function setupAppMonitoring(options = {}) {
+  const { appName, appNamespace, serviceNamespace = 'default' } = options;
+  const ns = appNamespace || serviceNamespace;
+
+  console.log(`📊 Setting up Prometheus scraping for BrokerApp ${appName}...\n`);
+
+  console.log('📝 Labeling namespace for user monitoring...');
+  try {
+    await execAsync(
+      `kubectl label namespace ${ns} openshift.io/user-monitoring=true --overwrite`,
+    );
+    console.log('✓ Namespace labeled');
+  } catch (error) {
+    console.error('❌ Failed to label namespace:', error.message);
+    throw error;
+  }
+
+  console.log('\n📝 Creating ScrapeConfig...');
+  await applyYaml(generateAppScrapeConfig(options));
+  console.log('✓ ScrapeConfig created');
+
+  console.log(`\n✅ App monitoring setup complete for ${appName}.`);
 }
 
 /**
@@ -282,18 +374,24 @@ async function setupMonitoring(options = {}) {
 async function main() {
   const command = process.argv[2];
 
-  // Parse command-line options
   const args = process.argv.slice(3);
   const options = {};
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--broker-name' && args[i + 1]) {
-      options.brokerName = args[i + 1];
+    if (args[i] === '--service-name' && args[i + 1]) {
+      options.serviceName = args[i + 1];
       i++;
     } else if (args[i] === '--namespace' && args[i + 1]) {
       options.namespace = args[i + 1];
+      options.serviceNamespace = args[i + 1];
       i++;
-    } else if (args[i] === '--broker-fqdn' && args[i + 1]) {
-      options.brokerFqdn = args[i + 1];
+    } else if (args[i] === '--service-namespace' && args[i + 1]) {
+      options.serviceNamespace = args[i + 1];
+      i++;
+    } else if (args[i] === '--app-name' && args[i + 1]) {
+      options.appName = args[i + 1];
+      i++;
+    } else if (args[i] === '--app-namespace' && args[i + 1]) {
+      options.appNamespace = args[i + 1];
       i++;
     }
   }
@@ -307,36 +405,39 @@ Usage:
   yarn prometheus-config <command> [options]
 
 Commands:
-  enable              Enable user workload monitoring
-  verify              Verify monitoring setup
-  disable             Disable user workload monitoring (cleanup)
-  setup-monitoring    Setup complete monitoring stack (Service + ServiceMonitor + namespace label)
-  help                Show this help message
+  enable                  Enable user workload monitoring
+  verify                  Verify monitoring setup
+  disable                 Disable user workload monitoring (cleanup)
+  setup-service-monitoring  Create ScrapeConfig for a BrokerService
+  setup-app-monitoring      Create ScrapeConfig for a BrokerApp
+  help                    Show this help message
 
-Options for setup-monitoring:
-  --broker-name <name>    Broker name (default: artemis-broker)
-  --namespace <ns>        Target namespace (default: default)
-  --broker-fqdn <fqdn>    Broker FQDN for TLS validation (auto-generated if omitted)
+Options for setup-service-monitoring:
+  --service-name <name>   BrokerService name (default: artemis-broker)
+  --namespace <ns>        Service namespace (default: default)
 
-Environment Variables (for non-OpenShift platforms):
-  MONITORING_NAMESPACE              Namespace where user workload monitoring pods run
-                                    (default: openshift-user-workload-monitoring)
-  CLUSTER_MONITORING_NAMESPACE      Namespace where cluster monitoring config is stored
-                                    (default: openshift-monitoring)
-  MONITORING_CONFIG                 Name of the ConfigMap that enables monitoring
-                                    (default: cluster-monitoring-config)
+Options for setup-app-monitoring:
+  --app-name <name>             BrokerApp name (required)
+  --app-namespace <ns>          App namespace (defaults to --service-namespace)
+  --service-name <name>         BrokerService the app is bound to (default: artemis-broker)
+  --service-namespace <ns>      Service namespace (default: default)
+
+Environment Variables:
+  MONITORING_NAMESPACE              (default: openshift-user-workload-monitoring)
+  CLUSTER_MONITORING_NAMESPACE      (default: openshift-monitoring)
+  MONITORING_CONFIG                 (default: cluster-monitoring-config)
+  CLUSTER_DOMAIN                    (default: cluster.local)
 
 Examples:
-  # Enable user workload monitoring on OpenShift
   yarn prometheus-config enable
 
-  # Enable on custom platform
-  MONITORING_NAMESPACE=monitoring yarn prometheus-config enable
+  yarn prometheus-config setup-service-monitoring \\
+    --service-name my-service --namespace my-ns
 
-  # Setup monitoring for a broker
-  yarn prometheus-config setup-monitoring --broker-name my-broker --namespace my-namespace
+  yarn prometheus-config setup-app-monitoring \\
+    --app-name my-app --app-namespace my-ns \\
+    --service-name my-service --service-namespace my-ns
 
-  # Verify monitoring is working
   yarn prometheus-config verify
 `);
     } else if (command === 'enable') {
@@ -345,8 +446,13 @@ Examples:
       await verifyMonitoring();
     } else if (command === 'disable') {
       await disableMonitoring();
+    } else if (command === 'setup-service-monitoring') {
+      await setupServiceMonitoring(options);
+    } else if (command === 'setup-app-monitoring') {
+      await setupAppMonitoring(options);
     } else if (command === 'setup-monitoring') {
-      await setupMonitoring(options);
+      console.log('⚠️  setup-monitoring is deprecated, use setup-service-monitoring instead.');
+      await setupServiceMonitoring(options);
     } else {
       console.error(`Unknown command: ${command}`);
       console.log('Run "yarn prometheus-config help" for usage information');
