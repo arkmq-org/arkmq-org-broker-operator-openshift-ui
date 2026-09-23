@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useReducer } from 'react';
 import { GalleryItem } from '@patternfly/react-core';
+import { QueryBrowser } from '@openshift-console/dynamic-plugin-sdk';
 import { useTranslation } from 'react-i18next';
 import { MetricsActions } from './MetricsActions';
 import { MetricsChartGrid, MetricsChartPanel, MetricsDataUnavailable } from './MetricsCharts';
@@ -10,6 +11,7 @@ import {
   type MetricsFilterOption,
   createInitialMetricsToolbarState,
   metricsToolbarReducer,
+  spanToMilliseconds,
 } from './metricsTypes';
 
 export type { MetricsChartConfig } from './metricsTypes';
@@ -19,6 +21,8 @@ export interface MetricsLayoutProps {
   charts: MetricsChartConfig[];
   /** Resource-specific metrics-type dropdown options. */
   metricsFilterOptions: MetricsFilterOption[];
+  /** Namespace for Prometheus queries (routes to user workload monitoring). */
+  namespace?: string;
   /** Prefix for chart panel data-test ids, e.g. broker-service-metric. */
   dataTestPrefix?: string;
 }
@@ -27,6 +31,7 @@ export interface MetricsLayoutProps {
 export const MetricsLayout: FC<MetricsLayoutProps> = ({
   charts,
   metricsFilterOptions,
+  namespace,
   dataTestPrefix = 'metrics-chart',
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -51,7 +56,18 @@ export const MetricsLayout: FC<MetricsLayoutProps> = ({
         {state.visibleCharts.map((chart) => (
           <GalleryItem key={chart.id}>
             <MetricsChartPanel title={chart.title} dataTest={`${dataTestPrefix}-${chart.id}`}>
-              <MetricsDataUnavailable />
+              {namespace && chart.queries.length > 0 ? (
+                <QueryBrowser
+                  namespace={namespace}
+                  queries={chart.queries}
+                  timespan={spanToMilliseconds(state.span)}
+                  pollInterval={state.refreshIntervalMs ?? undefined}
+                  showLegend
+                  units={chart.units}
+                />
+              ) : (
+                <MetricsDataUnavailable />
+              )}
             </MetricsChartPanel>
           </GalleryItem>
         ))}

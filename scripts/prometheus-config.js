@@ -352,9 +352,7 @@ async function setupAppMonitoring(options = {}) {
 
   console.log('📝 Labeling namespace for user monitoring...');
   try {
-    await execAsync(
-      `kubectl label namespace ${ns} openshift.io/user-monitoring=true --overwrite`,
-    );
+    await execAsync(`kubectl label namespace ${ns} openshift.io/user-monitoring=true --overwrite`);
     console.log('✓ Namespace labeled');
   } catch (error) {
     console.error('❌ Failed to label namespace:', error.message);

@@ -78,3 +78,21 @@ export const HorizontalNav: FC<{
 
 export const ResourceYAMLEditor: FC<{ initialResource: object; create?: boolean }> = () =>
   createElement('div', { 'data-test': 'resource-yaml-editor' });
+
+export const QueryBrowser: FC<{
+  queries: string[];
+  namespace?: string;
+  timespan?: number;
+  pollInterval?: number;
+  showLegend?: boolean;
+  units?: string;
+}> = ({ queries }) =>
+  createElement('div', { 'data-test': 'query-browser', 'data-queries': JSON.stringify(queries) });
+
+export enum PrometheusEndpoint {
+  LABEL = 'api/v1/label',
+  QUERY = 'api/v1/query',
+  QUERY_RANGE = 'api/v1/query_range',
+  RULES = 'api/v1/rules',
+  TARGETS = 'api/v1/targets',
+}

@@ -39,6 +39,10 @@ export interface MetricsChartConfig {
   id: string;
   title: string;
   metricsType: MetricsType;
+  /** PromQL queries rendered by QueryBrowser. Empty array shows the "data unavailable" state. */
+  queries: string[];
+  /** Y-axis unit label passed to QueryBrowser (e.g. 'bytes', 'cores'). */
+  units?: string;
 }
 
 export interface MetricsToolbarState {
@@ -69,6 +73,28 @@ export function filterChartsByMetricsType(
   metricsType: MetricsType,
 ): MetricsChartConfig[] {
   return charts.filter((chart) => isMetricsChartVisible(chart.metricsType, metricsType));
+}
+
+/** Converts a time-range selection to milliseconds for QueryBrowser's timespan prop. */
+export function spanToMilliseconds(span: Span): number {
+  const match = /^(\d+)(s|m|h|d|w)$/.exec(span);
+  if (!match) return 30 * 60_000;
+
+  const amount = Number(match[1]);
+  switch (match[2]) {
+    case 's':
+      return amount * 1000;
+    case 'm':
+      return amount * 60_000;
+    case 'h':
+      return amount * 3_600_000;
+    case 'd':
+      return amount * 86_400_000;
+    case 'w':
+      return amount * 604_800_000;
+    default:
+      return 30 * 60_000;
+  }
 }
 
 /** Converts a refresh selection to milliseconds for Prometheus polling. Refresh Off is null. */

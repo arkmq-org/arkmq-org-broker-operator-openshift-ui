@@ -32,7 +32,7 @@ export const BrokerAppOverviewTab: FC<BrokerAppOverviewTabProps> = ({ obj }) => 
           ) : null}
         </StackItem>
         <StackItem>
-          <BrokerAppMetrics />
+          <BrokerAppMetrics namespace={obj?.metadata?.namespace} name={obj?.metadata?.name} />
         </StackItem>
         <StackItem>
           <ConnectionInformationSection service={obj?.status?.service} />

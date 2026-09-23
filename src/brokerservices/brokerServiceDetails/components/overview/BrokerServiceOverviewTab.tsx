@@ -26,7 +26,7 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
           {obj ? <ResourceLabelsAndAnnotations resource={obj} /> : null}
         </StackItem>
         <StackItem>
-          <BrokerServiceMetrics />
+          <BrokerServiceMetrics namespace={obj?.metadata?.namespace} name={obj?.metadata?.name} />
         </StackItem>
         <StackItem>{obj ? <LoadedAppsSection brokerService={obj} /> : null}</StackItem>
         <StackItem>

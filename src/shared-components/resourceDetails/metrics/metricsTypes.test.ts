@@ -5,11 +5,24 @@ import {
   isMetricsChartVisible,
   metricsToolbarReducer,
   pollTimeToMilliseconds,
+  spanToMilliseconds,
 } from './metricsTypes';
 
 const charts = [
-  { id: 'memory-total', title: 'Memory Usage (Total)', metricsType: MetricsType.MemoryUsage },
-  { id: 'cpu-total', title: 'CPU Usage (Total)', metricsType: MetricsType.CPUUsage },
+  {
+    id: 'memory-total',
+    title: 'Memory Usage (Total)',
+    metricsType: MetricsType.MemoryUsage,
+    queries: ['sum(container_memory_working_set_bytes{namespace="default"})'],
+    units: 'bytes',
+  },
+  {
+    id: 'cpu-total',
+    title: 'CPU Usage (Total)',
+    metricsType: MetricsType.CPUUsage,
+    queries: ['sum(rate(container_cpu_usage_seconds_total{namespace="default"}[5m]))'],
+    units: 'cores',
+  },
 ];
 
 describe('createInitialMetricsToolbarState', () => {
@@ -92,5 +105,18 @@ describe('pollTimeToMilliseconds', () => {
   it('converts refresh intervals to milliseconds', () => {
     expect(pollTimeToMilliseconds('15s')).toBe(15_000);
     expect(pollTimeToMilliseconds('1m')).toBe(60_000);
+  });
+});
+
+describe('spanToMilliseconds', () => {
+  it('converts time range selections to milliseconds', () => {
+    expect(spanToMilliseconds('5m')).toBe(300_000);
+    expect(spanToMilliseconds('1h')).toBe(3_600_000);
+    expect(spanToMilliseconds('1d')).toBe(86_400_000);
+    expect(spanToMilliseconds('2w')).toBe(2 * 604_800_000);
+  });
+
+  it('defaults to 30 minutes for 30m', () => {
+    expect(spanToMilliseconds('30m')).toBe(30 * 60_000);
   });
 });

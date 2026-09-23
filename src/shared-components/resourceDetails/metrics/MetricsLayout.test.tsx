@@ -11,16 +11,35 @@ const filterOptions = [
 ];
 
 const charts = [
-  { id: 'memory-total', title: 'Memory Usage (Total)', metricsType: MetricsType.MemoryUsage },
-  { id: 'cpu-total', title: 'CPU Usage (Total)', metricsType: MetricsType.CPUUsage },
-  { id: 'queue-depth', title: 'Queue Depth per App', metricsType: MetricsType.BrokerMetrics },
+  {
+    id: 'memory-total',
+    title: 'Memory Usage (Total)',
+    metricsType: MetricsType.MemoryUsage,
+    queries: ['sum(container_memory_working_set_bytes{namespace="default"})'],
+    units: 'bytes',
+  },
+  {
+    id: 'cpu-total',
+    title: 'CPU Usage (Total)',
+    metricsType: MetricsType.CPUUsage,
+    queries: ['sum(rate(container_cpu_usage_seconds_total{namespace="default"}[5m]))'],
+    units: 'cores',
+  },
+  {
+    id: 'queue-depth',
+    title: 'Queue Depth per App',
+    metricsType: MetricsType.BrokerMetrics,
+    queries: ['broker_queue_message_count{brokerservice="my-service"}'],
+  },
 ];
+
+const chartsWithoutQueries = charts.map((c) => ({ ...c, queries: [] }));
 
 describe('MetricsLayout', () => {
   it('renders the Metrics title, toolbar, and all chart panels by default', () => {
     render(
       <MetricsLayout
-        charts={charts}
+        charts={chartsWithoutQueries}
         metricsFilterOptions={filterOptions}
         dataTestPrefix="broker-service-metric"
       />,
@@ -38,7 +57,7 @@ describe('MetricsLayout', () => {
     const user = userEvent.setup();
     render(
       <MetricsLayout
-        charts={charts}
+        charts={chartsWithoutQueries}
         metricsFilterOptions={filterOptions}
         dataTestPrefix="broker-service-metric"
       />,
@@ -50,5 +69,33 @@ describe('MetricsLayout', () => {
     expect(screen.getByTestId('broker-service-metric-memory-total')).toBeInTheDocument();
     expect(screen.queryByTestId('broker-service-metric-cpu-total')).not.toBeInTheDocument();
     expect(screen.queryByTestId('broker-service-metric-queue-depth')).not.toBeInTheDocument();
+  });
+
+  it('renders QueryBrowser when namespace and queries are provided', () => {
+    render(
+      <MetricsLayout
+        charts={charts}
+        metricsFilterOptions={filterOptions}
+        namespace="default"
+        dataTestPrefix="broker-service-metric"
+      />,
+    );
+
+    const browsers = screen.getAllByTestId('query-browser');
+    expect(browsers).toHaveLength(3);
+    expect(screen.queryByText('Data unavailable')).not.toBeInTheDocument();
+  });
+
+  it('falls back to MetricsDataUnavailable when namespace is missing', () => {
+    render(
+      <MetricsLayout
+        charts={charts}
+        metricsFilterOptions={filterOptions}
+        dataTestPrefix="broker-service-metric"
+      />,
+    );
+
+    expect(screen.queryByTestId('query-browser')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Data unavailable')).toHaveLength(3);
   });
 });
