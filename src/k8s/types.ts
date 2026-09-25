@@ -9,6 +9,8 @@ export interface MatchAddress {
   address: string;
   /** Cross-app reference app name; empty for local addresses. */
   appName?: string;
+  /** Cross-app reference app namespace; empty for local addresses. */
+  appNamespace?: string;
   pubSub?: boolean;
   subscriptions?: string[];
 }

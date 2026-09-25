@@ -193,6 +193,11 @@ export const AddressManager: React.FC = () => {
                           {t('Pub/Sub')}
                         </Label>
                       )}
+                      {!!(entry.appName && entry.appNamespace) && (
+                        <Label color="purple" isCompact>
+                          {entry.appNamespace}/{entry.appName}
+                        </Label>
+                      )}
                     </LabelGroup>
                   </StackItem>
                   {entry.subscriptions && entry.subscriptions.length > 0 && (
@@ -294,8 +299,12 @@ const AddressEditModal: React.FC<{
   );
   const [localPubSub, setLocalPubSub] = useState(entry.pubSub ?? false);
   const [localSubscriptions, setLocalSubscriptions] = useState<string[]>(entry.subscriptions ?? []);
+  const [localAppName, setLocalAppName] = useState(entry.appName ?? '');
+  const [localAppNamespace, setLocalAppNamespace] = useState(entry.appNamespace ?? '');
 
   const [nameTouched, setNameTouched] = useState(false);
+  const [appNameTouched, setAppNameTouched] = useState(false);
+  const [appNamespaceTouched, setAppNamespaceTouched] = useState(false);
 
   const localAddresses = state.addresses.map((e, i) =>
     i === index ? { ...e, address: localAddress } : e,
@@ -320,8 +329,21 @@ const AddressEditModal: React.FC<{
     !isExternal && localPubSub && localConsumes && !localSubscriptions.length
       ? 'At least one subscription is required for pub/sub consumers'
       : undefined;
+  const hasPartialRef =
+    isExternal &&
+    ((localAppName.trim() && !localAppNamespace.trim()) ||
+      (!localAppName.trim() && localAppNamespace.trim()));
+  const appNameError =
+    appNameTouched && hasPartialRef && !localAppName.trim()
+      ? 'App name is required when app namespace is set'
+      : undefined;
+  const appNamespaceError =
+    appNamespaceTouched && hasPartialRef && !localAppNamespace.trim()
+      ? 'App namespace is required when app name is set'
+      : undefined;
   const duplicateError = duplicateErrors[index];
-  const isModalValid = !requiredError && !duplicateError && !directionError && !subscriptionError;
+  const isModalValid =
+    !requiredError && !duplicateError && !directionError && !subscriptionError && !hasPartialRef;
 
   const handleDone = () => {
     const resolvedDirection: AddressDirection =
@@ -342,6 +364,8 @@ const AddressEditModal: React.FC<{
         direction: resolvedDirection,
         pubSub: isExternal ? false : localPubSub,
         subscriptions: localSubscriptions,
+        appName: isExternal ? localAppName.trim() || undefined : undefined,
+        appNamespace: isExternal ? localAppNamespace.trim() || undefined : undefined,
       },
     });
 
@@ -472,6 +496,83 @@ const AddressEditModal: React.FC<{
               </SplitItem>
             </Split>
           </StackItem>
+
+          {isExternal && (
+            <StackItem>
+              <Split hasGutter>
+                <SplitItem isFilled>
+                  <FormGroup
+                    label={t('App name')}
+                    fieldId={`address-app-name-${String(index)}`}
+                    labelHelp={
+                      <FieldLabelHelp
+                        ariaLabel={t('More info for App name field')}
+                        tooltip={t(
+                          'Name of the BrokerApp that owns this address. Required together with app namespace for cross-app references.',
+                        )}
+                      />
+                    }
+                  >
+                    <TextInput
+                      id={`address-app-name-${String(index)}`}
+                      value={localAppName}
+                      onChange={(_e, val) => {
+                        setLocalAppName(val);
+                      }}
+                      onBlur={() => {
+                        setAppNameTouched(true);
+                      }}
+                      placeholder={t('e.g., order-generator')}
+                      validated={appNameError ? 'error' : 'default'}
+                      data-test={`address-app-name-input-${String(index)}`}
+                    />
+                    {appNameError && (
+                      <FormHelperText>
+                        <HelperText>
+                          <HelperTextItem variant="error">{t(appNameError)}</HelperTextItem>
+                        </HelperText>
+                      </FormHelperText>
+                    )}
+                  </FormGroup>
+                </SplitItem>
+                <SplitItem isFilled>
+                  <FormGroup
+                    label={t('App namespace')}
+                    fieldId={`address-app-namespace-${String(index)}`}
+                    labelHelp={
+                      <FieldLabelHelp
+                        ariaLabel={t('More info for App namespace field')}
+                        tooltip={t(
+                          'Namespace of the BrokerApp that owns this address. Required together with app name for cross-app references.',
+                        )}
+                      />
+                    }
+                  >
+                    <TextInput
+                      id={`address-app-namespace-${String(index)}`}
+                      value={localAppNamespace}
+                      onChange={(_e, val) => {
+                        setLocalAppNamespace(val);
+                      }}
+                      onBlur={() => {
+                        setAppNamespaceTouched(true);
+                      }}
+                      placeholder={t('e.g., service-app-project')}
+                      validated={appNamespaceError ? 'error' : 'default'}
+                      data-test={`address-app-namespace-input-${String(index)}`}
+                    />
+                    {appNamespaceError && (
+                      <FormHelperText>
+                        <HelperText>
+                          <HelperTextItem variant="error">{t(appNamespaceError)}</HelperTextItem>
+                        </HelperText>
+                      </FormHelperText>
+                    )}
+                  </FormGroup>
+                </SplitItem>
+              </Split>
+            </StackItem>
+          )}
 
           {!isExternal && (
             <StackItem>

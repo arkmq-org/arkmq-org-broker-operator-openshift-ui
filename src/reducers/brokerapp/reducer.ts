@@ -18,6 +18,10 @@ export interface Address {
   direction: AddressDirection;
   pubSub?: boolean;
   subscriptions?: string[];
+  /** Name of the remote BrokerApp that owns this address (external only). */
+  appName?: string;
+  /** Namespace of the remote BrokerApp that owns this address (external only). */
+  appNamespace?: string;
 }
 
 export interface BrokerAppFormState {
@@ -34,7 +38,16 @@ export type BrokerAppFormAction =
   | {
       type: 'UPDATE_ADDRESS';
       payload: { index: number } & Partial<
-        Pick<Address, 'address' | 'ownership' | 'direction' | 'pubSub' | 'subscriptions'>
+        Pick<
+          Address,
+          | 'address'
+          | 'ownership'
+          | 'direction'
+          | 'pubSub'
+          | 'subscriptions'
+          | 'appName'
+          | 'appNamespace'
+        >
       >;
     }
   | { type: 'ADD_MATCH_LABEL' }
@@ -101,6 +114,8 @@ const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
 
   const toCapabilityEntry = (e: Address, isConsumer: boolean): MatchAddress => {
     const entry: MatchAddress = { address: e.address.trim() };
+    if (e.appName) entry.appName = e.appName;
+    if (e.appNamespace) entry.appNamespace = e.appNamespace;
     if (!isConsumer && e.pubSub) entry.pubSub = e.pubSub;
     if (isConsumer && e.subscriptions?.length) entry.subscriptions = [...e.subscriptions];
     return entry;
@@ -175,10 +190,19 @@ const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   const addresses: Address[] = [];
 
   const cap = cr.spec.capabilities?.[0];
-  const producerNames: string[] = (cap?.producerOf ?? []).map((a) => a.address);
-  const consumerNames: string[] = (cap?.consumerOf ?? []).map((a) => a.address);
+  const producerEntries = cap?.producerOf ?? [];
+  const consumerEntries = cap?.consumerOf ?? [];
+  const producerNames: string[] = producerEntries.map((a) => a.address);
+  const consumerNames: string[] = consumerEntries.map((a) => a.address);
   const producerSet = new Set(producerNames);
   const consumerSet = new Set(consumerNames);
+
+  const capabilityByAddress = new Map<string, MatchAddress>();
+  for (const entry of [...producerEntries, ...consumerEntries]) {
+    if (!capabilityByAddress.has(entry.address)) {
+      capabilityByAddress.set(entry.address, entry);
+    }
+  }
 
   const resolveDirection = (name: string): AddressDirection => {
     const isProducer = producerSet.has(name);
@@ -216,10 +240,13 @@ const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   const seenCapability = new Set<string>();
   for (const addr of [...producerNames, ...consumerNames]) {
     if (!seenCapability.has(addr) && !ownedAddressNames.has(addr)) {
+      const capEntry = capabilityByAddress.get(addr);
       addresses.push({
         address: addr,
         ownership: 'external',
         direction: resolveDirection(addr),
+        appName: capEntry?.appName,
+        appNamespace: capEntry?.appNamespace,
       });
     }
     seenCapability.add(addr);
@@ -261,6 +288,10 @@ export const brokerAppReducer = (
         if (changes.ownership === 'external') {
           updated.pubSub = undefined;
           updated.subscriptions = undefined;
+        }
+        if (changes.ownership && changes.ownership !== 'external') {
+          updated.appName = undefined;
+          updated.appNamespace = undefined;
         }
         if (changes.pubSub === false) {
           updated.subscriptions = undefined;
