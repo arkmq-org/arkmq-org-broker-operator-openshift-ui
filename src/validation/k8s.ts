@@ -1,3 +1,4 @@
+import { parse as celParse } from 'cel-js';
 import { type Document, parseDocument } from 'yaml';
 import type { BrokerAppCR, BrokerAppSpec, BrokerService } from '../k8s/types';
 
@@ -225,6 +226,26 @@ export const validateMemoryQuantity = (value: string): string | null => {
 };
 
 /**
+ * Validates a CEL app selector expression using a proper AST parser (cel-js).
+ * Empty expressions are valid (operator falls back to same-namespace-only default).
+ * Uses the cel-js library to parse the expression into a CST, catching syntax
+ * errors that simple regex or character-based checks would miss.
+ *
+ * @param expression - Raw CEL expression string from the form field
+ * @returns First parse error message, or null when the expression is syntactically valid
+ */
+export const validateCelExpression = (expression: string): string | null => {
+  if (!expression.trim()) return null;
+
+  const result = celParse(expression);
+  if (!result.isSuccess) {
+    return result.errors[0] ?? 'Invalid CEL expression';
+  }
+
+  return null;
+};
+
+/**
  * Validate memory value (must be a positive number)
  */
 export const validateMemoryValue = (value: string): string | null => {
@@ -388,6 +409,12 @@ export const validateBrokerServiceCR = (cr: BrokerService, yaml?: string): strin
   const envVars = cr.spec?.env ?? [];
   const envDupError = validateEnvVarEntries(envVars);
   if (envDupError) errors.push(fmt('spec.env', envDupError));
+
+  const celExpr = cr.spec?.appSelectorExpression;
+  if (celExpr) {
+    const celError = validateCelExpression(celExpr);
+    if (celError) errors.push(fmt('spec.appSelectorExpression', celError));
+  }
 
   return errors.length ? errors.join('\n') : null;
 };

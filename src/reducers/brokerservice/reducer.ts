@@ -49,6 +49,12 @@ export type BrokerServiceFormAction =
   | { type: 'REMOVE_ENV_VAR'; payload: number }
   | { type: 'UPDATE_ENV_VAR_NAME'; payload: { index: number; name: string } }
   | { type: 'UPDATE_ENV_VAR_VALUE'; payload: { index: number; value: string } }
+  /**
+   * Sets the CEL app selector expression for cross-namespace binding control.
+   * An empty or whitespace-only payload removes spec.appSelectorExpression
+   * so the operator falls back to same-namespace-only default.
+   */
+  | { type: 'SET_APP_SELECTOR_EXPRESSION'; payload: string }
   | {
       type: 'SET_MODEL';
       payload: BrokerService;
@@ -234,6 +240,16 @@ export const brokerServiceReducer = (
         i === action.payload.index ? { ...e, value: action.payload.value } : e,
       );
       break;
+
+    case 'SET_APP_SELECTOR_EXPRESSION': {
+      const expression = action.payload.trim();
+      if (expression) {
+        cr.spec.appSelectorExpression = expression;
+      } else {
+        delete cr.spec.appSelectorExpression;
+      }
+      break;
+    }
 
     case 'SET_MODEL':
       if (action.yaml) {
