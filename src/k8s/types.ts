@@ -80,6 +80,13 @@ export interface BrokerServiceSpec {
    * When absent the operator uses its built-in default image.
    */
   image?: string;
+  /**
+   * CEL expression that controls which BrokerApps can bind to this service.
+   * Available variables: app, service, appNamespace, serviceNamespace.
+   * When absent or empty the operator enforces same-namespace only
+   * (app.metadata.namespace == service.metadata.namespace).
+   */
+  appSelectorExpression?: string;
   resources?: {
     limits?: {
       memory?: string;

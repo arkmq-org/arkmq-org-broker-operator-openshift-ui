@@ -29,6 +29,12 @@ export type BrokerServiceFormAction =
    * An empty or whitespace-only payload removes spec.image so the operator uses its default.
    */
   | { type: 'SET_IMAGE'; payload: string }
+  /**
+   * Sets the CEL app selector expression for cross-namespace binding control.
+   * An empty or whitespace-only payload removes spec.appSelectorExpression
+   * so the operator falls back to same-namespace-only default.
+   */
+  | { type: 'SET_APP_SELECTOR_EXPRESSION'; payload: string }
   | {
       type: 'SET_MODEL';
       payload: BrokerService;
@@ -154,6 +160,16 @@ export const brokerServiceReducer = (
       }
       break;
     }
+    case 'SET_APP_SELECTOR_EXPRESSION': {
+      const expression = action.payload.trim();
+      if (expression) {
+        cr.spec.appSelectorExpression = expression;
+      } else {
+        delete cr.spec.appSelectorExpression;
+      }
+      break;
+    }
+
     case 'SET_MODEL':
       if (action.yaml) {
         const error = validateBrokerServiceCR(action.payload, action.yaml);

@@ -208,6 +208,46 @@ export const validateMemoryQuantity = (value: string): string | null => {
 };
 
 /**
+ * Basic client-side validation for CEL app selector expressions.
+ * Empty expressions are valid (operator falls back to same-namespace-only default).
+ * Checks balanced parentheses/brackets and rejects characters illegal in CEL.
+ *
+ * @param expression - Raw CEL expression string from the form field
+ * @returns Error message string, or null when the expression is structurally valid
+ */
+export const validateCelExpression = (expression: string): string | null => {
+  if (!expression.trim()) return null;
+
+  const stack: string[] = [];
+  const matchingClose: Record<string, string> = { '(': ')', '[': ']' };
+  const matchingOpen: Record<string, string> = { ')': '(', ']': '[' };
+
+  for (const ch of expression) {
+    if (ch in matchingClose) {
+      stack.push(ch);
+    } else if (ch in matchingOpen) {
+      if (stack.length === 0 || stack[stack.length - 1] !== matchingOpen[ch]) {
+        return `Unmatched "${ch}" in expression`;
+      }
+      stack.pop();
+    }
+  }
+
+  if (stack.length > 0) {
+    const unclosed = stack[stack.length - 1];
+    return `Unmatched "${unclosed}" in expression`;
+  }
+
+  for (const ch of [';', '{', '}']) {
+    if (expression.includes(ch)) {
+      return `Character "${ch}" is not valid in a CEL expression`;
+    }
+  }
+
+  return null;
+};
+
+/**
  * Validate memory value (must be a positive number)
  */
 export const validateMemoryValue = (value: string): string | null => {
@@ -366,6 +406,12 @@ export const validateBrokerServiceCR = (cr: BrokerService, yaml?: string): strin
       const numError = validateMemoryValue(memMatch[1]);
       if (numError) errors.push(fmt('spec.resources.limits.memory', numError));
     }
+  }
+
+  const celExpr = cr.spec?.appSelectorExpression;
+  if (celExpr) {
+    const celError = validateCelExpression(celExpr);
+    if (celError) errors.push(fmt('spec.appSelectorExpression', celError));
   }
 
   return errors.length ? errors.join('\n') : null;
