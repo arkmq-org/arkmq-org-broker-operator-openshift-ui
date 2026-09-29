@@ -8,15 +8,16 @@ import { MetricsType } from '../../../../../shared-components/resourceDetails/me
 export interface BrokerServiceMetricsProps {
   /** BrokerService namespace, passed to Prometheus for user workload routing. */
   namespace?: string;
-  /** BrokerService CR name, used to build pod selectors and series label filters. */
+  /** BrokerService CR name, used to build pod selectors and the scrape's job name. */
   name?: string;
 }
 
 /**
  * Builds the PromQL queries that target a BrokerService's broker pod and the
- * series the operator's ScrapeConfig collects under the service's prometheus
- * identity. Container metrics (memory, CPU) use the pod selector; broker
- * metrics use the brokerservice series label that the ScrapeConfig adds.
+ * series its operator-generated ServiceMonitor collects, under the job
+ * <service>-metrics. Container metrics (memory, CPU) use the pod selector.
+ * Queue metrics read the service view: the copy of every app's queue filed in
+ * the service's namespace, whichever namespace owns it.
  */
 function useServiceCharts(
   t: (key: string) => string,
@@ -27,7 +28,7 @@ function useServiceCharts(
     const containerFilter =
       namespace && name ? `namespace="${namespace}", pod=~"${name}-ss-.*", container!=""` : '';
     const serviceFilter =
-      namespace && name ? `brokerservice="${name}", brokerservice_namespace="${namespace}"` : '';
+      namespace && name ? `job="${name}-metrics", namespace="${namespace}", view="service"` : '';
 
     return [
       {

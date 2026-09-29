@@ -13,9 +13,9 @@ export interface BrokerAppMetricsProps {
 }
 
 /**
- * Builds the PromQL queries that target a BrokerApp's own queues.
- * The app is scraped under its own certificate, so the broker exposes only
- * this app's queues. The brokerapp series label comes from the ScrapeConfig.
+ * Builds the PromQL queries that target a BrokerApp's own queues. The broker
+ * labels each queue with the app that owns it, and the service's
+ * ServiceMonitor files that owner copy in the app's namespace.
  */
 function useAppCharts(
   t: (key: string) => string,
@@ -24,7 +24,7 @@ function useAppCharts(
 ): MetricsChartConfig[] {
   return useMemo(() => {
     const appFilter =
-      namespace && name ? `brokerapp="${name}", brokerapp_namespace="${namespace}"` : '';
+      namespace && name ? `namespace="${namespace}", brokerapp="${name}", view="owner"` : '';
 
     return [
       {

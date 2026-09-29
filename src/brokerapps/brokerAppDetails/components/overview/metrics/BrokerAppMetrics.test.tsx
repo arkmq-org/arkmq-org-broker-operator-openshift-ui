@@ -20,4 +20,15 @@ describe('BrokerAppMetrics', () => {
     expect(browsers).toHaveLength(2);
     expect(screen.queryByText('Data unavailable')).not.toBeInTheDocument();
   });
+
+  it('queries the queues the app owns, as filed in its namespace', () => {
+    render(<BrokerAppMetrics namespace="my-ns" name="my-app" />);
+    const queries = screen
+      .getAllByTestId('query-browser')
+      .flatMap((browser) => JSON.parse(browser.getAttribute('data-queries') ?? '[]') as string[]);
+    expect(queries).toEqual([
+      'broker_queue_message_count{namespace="my-ns", brokerapp="my-app", view="owner"}',
+      'broker_queue_consumer_count{namespace="my-ns", brokerapp="my-app", view="owner"}',
+    ]);
+  });
 });
