@@ -68,8 +68,10 @@ function queryPrometheusViaPod(promNs: string, query: string): PrometheusQueryRe
 /**
  * Get Prometheus targets by exec'ing into the Prometheus pod
  */
-function getPrometheusTargetsViaPod(promNs: string): PrometheusTargetsResponse {
-  const promUrl = `http://localhost:9090/api/v1/targets`;
+function getPrometheusTargetsViaPod(promNs: string, scrapePool: string): PrometheusTargetsResponse {
+  // The platform Prometheus has megabytes of targets, more than execSync
+  // buffers; asking for one scrape pool keeps the response small.
+  const promUrl = `http://localhost:9090/api/v1/targets?scrapePool=${encodeURIComponent(scrapePool)}`;
 
   const result = kubectl(
     `exec -n ${promNs} ${PROMETHEUS_POD} -c prometheus -- curl -s '${promUrl}' --max-time 10`,
@@ -252,14 +254,19 @@ spec:
 
     console.log('⏳ Querying Prometheus via ephemeral curl pod...');
 
-    // Wait for ServiceMonitor to be discovered by Prometheus (can take up to 90s for certs to propagate + mTLS handshake)
+    // Wait for ServiceMonitor to be discovered by Prometheus: the platform
+    // Prometheus can take a couple of minutes to load a new one
     console.log('⏳ Waiting for Prometheus to discover ServiceMonitor target...');
     let targetFound = false;
     let targetUp = false;
-    const maxAttempts = 45; // 45 attempts * 2s = 90s max wait
+    const maxAttempts = 90; // 90 attempts * 2s = 180s max wait
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const targetsResponse = getPrometheusTargetsViaPod(promNs);
+      // the owner view, the first endpoint of the generated ServiceMonitor
+      const targetsResponse = getPrometheusTargetsViaPod(
+        promNs,
+        `serviceMonitor/${TEST_NAMESPACE}/test-broker-metrics/0`,
+      );
 
       if (targetsResponse.status === 'success' && targetsResponse.data) {
         const activeTargets = targetsResponse.data.activeTargets;
@@ -342,7 +349,15 @@ spec:
     // Query for the APP.JOBS queue created by BrokerApp
     // the owner's copy, filed in the owning app's namespace
     const queueMetricsQuery = `broker_queue_message_count{namespace="${TEST_NAMESPACE}",queue="APP.JOBS",view="owner"}`;
-    const queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    // the target being up does not mean the queue has been scraped yet
+    let queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    for (let attempt = 1; attempt < 60; attempt++) {
+      if (queueMetricsResponse.status === 'success' && queueMetricsResponse.data?.result.length) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    }
 
     expect(queueMetricsResponse.status).toBe('success');
     expect(queueMetricsResponse.data).toBeDefined();
@@ -351,6 +366,13 @@ spec:
       throw new Error('Prometheus returned no data');
     }
 
+    if (queueMetricsResponse.data.result.length === 0) {
+      // show what the queue was filed under instead, if anything
+      const anyCopy = queryPrometheusViaPod(promNs, `broker_queue_message_count{queue="APP.JOBS"}`);
+      anyCopy.data?.result.forEach((r) =>
+        console.log(`  APP.JOBS series: ${JSON.stringify(r.metric)}`),
+      );
+    }
     expect(queueMetricsResponse.data.result.length).toBeGreaterThan(0);
 
     const queueMetric = queueMetricsResponse.data.result[0];
