@@ -315,6 +315,11 @@ This project includes scripts to manage Prometheus user workload monitoring and 
 
 ### Enabling User Workload Monitoring
 
+The metrics charts do not need user workload monitoring: the platform Prometheus scrapes the
+operator's `ServiceMonitor`, and the console queries it per namespace. Enable it when tenants need
+alerting or recording rules on their queues, or scrape the broker themselves with their app
+certificate.
+
 **Enable user workload monitoring:**
 
 ```bash
