@@ -49,7 +49,7 @@ export const ResourceDetailsFavoriteButton: FC<ResourceDetailsFavoriteButtonProp
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [favorites, setFavorites, loaded] = useUserPreference<FavoriteEntry[]>(
+  const [favorites, setFavorites, loaded] = useUserPreference<FavoriteEntry[] | undefined>(
     FAVORITES_USER_PREFERENCE_KEY,
     [],
     true,
@@ -58,7 +58,8 @@ export const ResourceDetailsFavoriteButton: FC<ResourceDetailsFavoriteButtonProp
   if (activePerspective !== 'admin') {
     return null;
   }
-  const favoriteEntries = favorites;
+  // the in-cluster console reads preferences from a ConfigMap, undefined until loaded
+  const favoriteEntries = favorites ?? [];
   const isStarred = loaded && favoriteEntries.some((favorite) => favorite.url === currentUrlPath);
   const alphanumericRegex = /^[a-zA-Z0-9\s-]*$/;
 
