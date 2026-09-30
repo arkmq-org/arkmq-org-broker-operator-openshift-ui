@@ -8,8 +8,6 @@ import type { BrokerService } from '../../../../../k8s/types';
 import { getReadyConditionDisplay } from '../../../../../shared-components/resourceList/getReadyConditionDisplay';
 import { useBoundBrokerApps } from './useBoundBrokerApps';
 
-export { filterLoadedBrokerApps } from './useBoundBrokerApps';
-
 export interface LoadedAppsSectionProps {
   /** BrokerService whose bound BrokerApps are listed. */
   brokerService: BrokerService;

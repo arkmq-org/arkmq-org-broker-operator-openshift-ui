@@ -7,7 +7,7 @@ import { ConditionsTable } from '../../../../shared-components/resourceDetails/C
 import { ResourceLabelsAndAnnotations } from '../../../../shared-components/resourceDetails/ResourceLabelsAndAnnotations';
 import { BrokerServiceMetrics } from './Metrics/BrokerServiceMetrics';
 import { LoadedAppsSection } from './loadedApps/LoadedAppsSection';
-import { useBoundBrokerApps } from './loadedApps/useBoundBrokerApps';
+import { boundAppNamespaces } from './loadedApps/useBoundBrokerApps';
 
 export interface BrokerServiceOverviewTabProps {
   /** Watched BrokerService CR passed through HorizontalNav. */
@@ -17,14 +17,7 @@ export interface BrokerServiceOverviewTabProps {
 /** Overview tab for BrokerService details. */
 export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ obj }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const [boundApps] = useBoundBrokerApps(obj);
-  const appNamespaces = useMemo(
-    () =>
-      Array.from(new Set(boundApps.map((app) => app.metadata?.namespace ?? '')))
-        .filter(Boolean)
-        .sort(),
-    [boundApps],
-  );
+  const appNamespaces = useMemo(() => boundAppNamespaces(obj), [obj]);
 
   return (
     <PageSection data-test="broker-service-overview-tab">

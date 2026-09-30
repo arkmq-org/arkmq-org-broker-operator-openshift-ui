@@ -95,5 +95,7 @@ export type BrokerService = K8sResourceCommon & {
   spec?: BrokerServiceSpec;
   status?: {
     conditions?: K8sResourceCondition[];
+    /** The BrokerApps applied to the service, each as <namespace>/<name>. */
+    provisionedApps?: string[];
   };
 };
