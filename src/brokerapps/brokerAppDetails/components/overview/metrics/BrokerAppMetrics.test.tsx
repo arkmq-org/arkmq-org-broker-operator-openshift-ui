@@ -27,8 +27,8 @@ describe('BrokerAppMetrics', () => {
       .getAllByTestId('query-browser')
       .flatMap((browser) => JSON.parse(browser.getAttribute('data-queries') ?? '[]') as string[]);
     expect(queries).toEqual([
-      'broker_queue_message_count{namespace="my-ns", brokerapp="my-app", view="owner"}',
-      'broker_queue_consumer_count{namespace="my-ns", brokerapp="my-app", view="owner"}',
+      'broker_queue_message_count{namespace="my-ns", brokerapp="my-app"}',
+      'broker_queue_consumer_count{namespace="my-ns", brokerapp="my-app"}',
     ]);
   });
 });

@@ -6,6 +6,7 @@ export const k8sList = jest.fn();
 export const k8sUpdate = jest.fn();
 export const k8sDelete = jest.fn();
 export const useK8sWatchResource = jest.fn(() => [[], false, undefined]);
+export const usePrometheusPoll = jest.fn(() => [undefined, false, undefined]);
 export const useAccessReview = jest.fn(() => [true, false]);
 export const useDeleteModal = jest.fn(() => jest.fn());
 export const useLabelsModal = jest.fn(() => jest.fn());
@@ -53,11 +54,13 @@ export const Timestamp: FC<{ timestamp: string }> = ({ timestamp }) =>
 export const ErrorStatus: FC<{ title: string }> = ({ title }) =>
   createElement('span', { 'data-test': 'error-status' }, title);
 
-export const getGroupVersionKindForModel = jest.fn((model: { apiGroup: string; apiVersion: string; kind: string }) => ({
-  group: model.apiGroup,
-  version: model.apiVersion,
-  kind: model.kind,
-}));
+export const getGroupVersionKindForModel = jest.fn(
+  (model: { apiGroup: string; apiVersion: string; kind: string }) => ({
+    group: model.apiGroup,
+    version: model.apiVersion,
+    kind: model.kind,
+  }),
+);
 
 export const ResourceIcon: FC<{ groupVersionKind?: object }> = () =>
   createElement('span', { 'data-test': 'resource-icon' });
@@ -71,7 +74,9 @@ export const HorizontalNav: FC<{
   return createElement(
     'div',
     { 'data-test': 'horizontal-nav' },
-    ...pages.map((page) => createElement('span', { key: page.name, 'data-test': `nav-tab-${page.name}` }, page.name)),
+    ...pages.map((page) =>
+      createElement('span', { key: page.name, 'data-test': `nav-tab-${page.name}` }, page.name),
+    ),
     FirstPage ? createElement(FirstPage, { obj: resource }) : null,
   );
 };

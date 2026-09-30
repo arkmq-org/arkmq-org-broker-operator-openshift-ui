@@ -43,6 +43,11 @@ export interface MetricsChartConfig {
   queries: string[];
   /** Y-axis unit label passed to QueryBrowser (e.g. 'bytes', 'cores'). */
   units?: string;
+  /**
+   * Run the queries in each of the layout's app namespaces and plot them together,
+   * for series filed with the apps rather than with the resource itself.
+   */
+  acrossAppNamespaces?: boolean;
 }
 
 export interface MetricsToolbarState {

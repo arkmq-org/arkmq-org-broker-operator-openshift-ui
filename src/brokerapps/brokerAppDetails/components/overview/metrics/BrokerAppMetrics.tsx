@@ -23,8 +23,7 @@ function useAppCharts(
   name?: string,
 ): MetricsChartConfig[] {
   return useMemo(() => {
-    const appFilter =
-      namespace && name ? `namespace="${namespace}", brokerapp="${name}", view="owner"` : '';
+    const appFilter = namespace && name ? `namespace="${namespace}", brokerapp="${name}"` : '';
 
     return [
       {

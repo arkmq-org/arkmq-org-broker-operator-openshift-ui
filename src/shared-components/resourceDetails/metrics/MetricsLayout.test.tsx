@@ -29,7 +29,7 @@ const charts = [
     id: 'queue-depth',
     title: 'Queue Depth per App',
     metricsType: MetricsType.BrokerMetrics,
-    queries: ['broker_queue_message_count{job="my-service-metrics", view="service"}'],
+    queries: ['broker_queue_message_count{job="my-service-metrics"}'],
   },
 ];
 
