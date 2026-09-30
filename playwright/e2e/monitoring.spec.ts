@@ -347,8 +347,8 @@ spec:
     // Query for actual broker queue metrics (proves real metrics are being scraped)
     console.log('\n⏳ Querying for broker queue metrics...');
     // Query for the APP.JOBS queue created by BrokerApp
-    // the owner's copy, filed in the owning app's namespace
-    const queueMetricsQuery = `broker_queue_message_count{namespace="${TEST_NAMESPACE}",queue="APP.JOBS",view="owner"}`;
+    // filed in the owning app's namespace
+    const queueMetricsQuery = `broker_queue_message_count{namespace="${TEST_NAMESPACE}",queue="APP.JOBS"}`;
     // the target being up does not mean the queue has been scraped yet
     let queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
     for (let attempt = 1; attempt < 60; attempt++) {

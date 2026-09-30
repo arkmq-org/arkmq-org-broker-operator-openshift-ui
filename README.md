@@ -349,9 +349,10 @@ Removes the `cluster-monitoring-config` ConfigMap to disable user workload monit
 The operator generates the scrape wiring itself: each `BrokerService` gets a
 `ServiceMonitor` named `<service>-metrics`, scraping the broker over mTLS as the
 `prometheus` identity. The broker labels each queue with the app owning it and
-that app's namespace, and the `ServiceMonitor` also files a copy of every queue
-in the service's namespace, told apart by a `view` label. The BrokerService
-page charts the `service` view, the BrokerApp page the app's `owner` view.
+that app's namespace, where its series are filed, once. The BrokerApp page
+charts the app's queues from its own namespace; the BrokerService page charts
+the queues of every bound app from each app's namespace, so reading them takes
+read access to metrics in those namespaces.
 
 Only the platform Prometheus keeps the namespace the broker sets, so on
 OpenShift the service's namespace has to be opted into platform monitoring:
