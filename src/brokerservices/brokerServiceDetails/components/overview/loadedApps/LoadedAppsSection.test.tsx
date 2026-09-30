@@ -91,4 +91,20 @@ describe('LoadedAppsSection', () => {
     ).toHaveTextContent('-');
     expect(screen.queryByText('ignored')).not.toBeInTheDocument();
   });
+
+  it('lists apps bound from another namespace, watching every namespace', () => {
+    const tenantApp = makeApp('tenant-app', { name: 'my-messaging-service', namespace: 'default' });
+    tenantApp.metadata = { name: 'tenant-app', namespace: 'tenant-a' };
+    mockUseK8sWatchResource.mockReturnValue([[tenantApp], true, undefined]);
+
+    render(<LoadedAppsSection brokerService={brokerService} />);
+
+    expect(screen.getByTestId('loaded-app-link-tenant-a-tenant-app')).toHaveTextContent(
+      'tenant-app',
+    );
+    const [lastWatch] = mockUseK8sWatchResource.mock.calls[
+      mockUseK8sWatchResource.mock.calls.length - 1
+    ] as [{ namespace?: string }];
+    expect(lastWatch.namespace).toBeUndefined();
+  });
 });

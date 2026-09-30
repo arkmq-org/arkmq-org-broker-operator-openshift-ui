@@ -1,15 +1,14 @@
 import type { FC } from 'react';
-import {
-  getGroupVersionKindForModel,
-  ResourceLink,
-  useK8sWatchResource,
-} from '@openshift-console/dynamic-plugin-sdk';
+import { getGroupVersionKindForModel, ResourceLink } from '@openshift-console/dynamic-plugin-sdk';
 import { Label, Spinner, Title } from '@patternfly/react-core';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { useTranslation } from 'react-i18next';
 import { BrokerAppModel } from '../../../../../k8s/models';
-import type { BrokerAppCR, BrokerService } from '../../../../../k8s/types';
+import type { BrokerService } from '../../../../../k8s/types';
 import { getReadyConditionDisplay } from '../../../../../shared-components/resourceList/getReadyConditionDisplay';
+import { useBoundBrokerApps } from './useBoundBrokerApps';
+
+export { filterLoadedBrokerApps } from './useBoundBrokerApps';
 
 export interface LoadedAppsSectionProps {
   /** BrokerService whose bound BrokerApps are listed. */
@@ -17,46 +16,11 @@ export interface LoadedAppsSectionProps {
 }
 
 /**
- * Filters BrokerApps bound to a BrokerService via status.service (not selectors).
- */
-export function filterLoadedBrokerApps(
-  apps: BrokerAppCR[],
-  serviceName: string,
-  serviceNamespace: string,
-): BrokerAppCR[] {
-  if (!serviceName || !serviceNamespace) {
-    return [];
-  }
-
-  return apps.filter((app) => {
-    const boundService = app.status?.service;
-    return boundService?.name === serviceName && boundService.namespace === serviceNamespace;
-  });
-}
-
-/**
  * Overview Loaded Apps table. Consumer Count is a placeholder until Prometheus.
  */
 export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const serviceName = brokerService.metadata?.name ?? '';
-  const serviceNamespace = brokerService.metadata?.namespace ?? '';
-
-  const [apps, loaded, loadError] = useK8sWatchResource<BrokerAppCR[]>({
-    groupVersionKind: {
-      group: BrokerAppModel.apiGroup,
-      version: BrokerAppModel.apiVersion,
-      kind: BrokerAppModel.kind,
-    },
-    isList: true,
-    namespace: serviceNamespace,
-  }) as [BrokerAppCR[], boolean, unknown];
-
-  const loadedApps = filterLoadedBrokerApps(
-    Array.isArray(apps) ? apps : [],
-    serviceName,
-    serviceNamespace,
-  );
+  const [loadedApps, loaded, loadError] = useBoundBrokerApps(brokerService);
 
   const statusLabels = {
     Running: t('Provisioned'),
