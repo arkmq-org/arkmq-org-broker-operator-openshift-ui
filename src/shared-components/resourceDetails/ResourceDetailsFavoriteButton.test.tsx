@@ -33,6 +33,16 @@ describe('ResourceDetailsFavoriteButton', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders while the favorites preference has not loaded', () => {
+    mockUseUserPreference.mockReturnValue([undefined, jest.fn(), false]);
+    render(
+      <MemoryRouter>
+        <ResourceDetailsFavoriteButton defaultName="my-broker-service" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText('Add to favorites')).toBeInTheDocument();
+  });
+
   it('shows remove from favorites when the current path is already saved', () => {
     mockUseUserPreference.mockReturnValue([
       [{ name: 'my-broker-service', url: '/k8s/ns/default/brokerservices/my-broker-service' }],
