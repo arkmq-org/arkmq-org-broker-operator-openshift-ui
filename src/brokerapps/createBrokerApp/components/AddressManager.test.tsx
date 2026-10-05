@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useReducer } from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import { useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 import {
   brokerAppReducer,
@@ -9,6 +9,12 @@ import {
   BrokerAppFormDispatchContext,
 } from '../../../reducers/brokerapp/reducer';
 import { AddressManager } from './AddressManager';
+
+const waitForPopperUpdates = async (): Promise<void> => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
 
 const Wrapper: React.FC = () => {
   const [state, dispatch] = useReducer(brokerAppReducer, createInitialBrokerAppState('default'));
@@ -550,21 +556,31 @@ const setupExternalMocks = () => {
   );
 };
 
-const selectExternal = () => {
+const selectExternal = async (): Promise<void> => {
   fireEvent.click(screen.getByText('External'));
+  await waitForPopperUpdates();
 };
 
-const selectTypeaheadOption = (ariaLabel: string, optionText: string) => {
+const selectTypeaheadOption = async (ariaLabel: string, optionText: string): Promise<void> => {
   const input = screen.getByLabelText(ariaLabel);
   fireEvent.change(input, { target: { value: '' } });
   fireEvent.click(input);
   fireEvent.click(screen.getByText(optionText));
+  await waitForPopperUpdates();
 };
 
-const selectExternalApp = (ns = 'service-project', app = 'order-generator') => {
-  selectExternal();
-  selectTypeaheadOption('App namespace', ns);
-  selectTypeaheadOption('App name', app);
+const selectExternalApp = async (
+  ns = 'service-project',
+  app = 'order-generator',
+): Promise<void> => {
+  await selectExternal();
+  await selectTypeaheadOption('App namespace', ns);
+  await selectTypeaheadOption('App name', app);
+};
+
+const openTypeahead = async (ariaLabel: string): Promise<void> => {
+  fireEvent.click(screen.getByLabelText(ariaLabel));
+  await waitForPopperUpdates();
 };
 
 describe('AddressManager — external address typeahead', () => {
@@ -574,12 +590,13 @@ describe('AddressManager — external address typeahead', () => {
     addEntry();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await waitForPopperUpdates();
     mockWatchResource.mockReset();
   });
 
-  it('shows namespace and app name dropdowns when external is selected', () => {
-    selectExternal();
+  it('shows namespace and app name dropdowns when external is selected', async () => {
+    await selectExternal();
     expect(screen.getByLabelText('App namespace')).toBeInTheDocument();
     expect(screen.getByLabelText('App name')).toBeInTheDocument();
   });
@@ -589,48 +606,49 @@ describe('AddressManager — external address typeahead', () => {
     expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
   });
 
-  it('shows placeholder text when no namespace is selected', () => {
-    selectExternal();
+  it('shows placeholder text when no namespace is selected', async () => {
+    await selectExternal();
     expect(screen.getByPlaceholderText('Select a namespace first')).toBeInTheDocument();
   });
 
-  it('shows app name placeholder after selecting a namespace', () => {
-    selectExternal();
-    selectTypeaheadOption('App namespace', 'service-project');
+  it('shows app name placeholder after selecting a namespace', async () => {
+    await selectExternal();
+    await selectTypeaheadOption('App namespace', 'service-project');
     expect(screen.getByPlaceholderText('Select a BrokerApp')).toBeInTheDocument();
   });
 
-  it('shows the cross-app reference label on the card after saving', () => {
-    selectExternalApp();
-    selectTypeaheadOption('Address', 'ORDERS.NEW');
+  it('shows the cross-app reference label on the card after saving', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
   });
 
-  it('shows shared addresses from the selected BrokerApp in the address typeahead', () => {
-    selectExternalApp();
-    fireEvent.click(screen.getByLabelText('Address'));
+  it('shows shared addresses from the selected BrokerApp in the address typeahead', async () => {
+    await selectExternalApp();
+    await openTypeahead('Address');
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.PROCESSED')).toBeInTheDocument();
   });
 
-  it('shows a create option for a custom address value', () => {
-    selectExternalApp();
+  it('shows a create option for a custom address value', async () => {
+    await selectExternalApp();
     const addressInput = screen.getByLabelText('Address');
     fireEvent.click(addressInput);
     fireEvent.change(addressInput, { target: { value: 'CUSTOM.ADDR' } });
+    await waitForPopperUpdates();
     expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
   });
 
-  it('clears app name when namespace changes', () => {
-    selectExternalApp();
-    selectTypeaheadOption('App namespace', 'ns-alpha');
+  it('clears app name when namespace changes', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('App namespace', 'ns-alpha');
     expect(screen.getByLabelText('App name')).toHaveValue('');
   });
 
-  it('dispatches appName and appNamespace to the reducer on save', () => {
-    selectExternalApp();
-    selectTypeaheadOption('Address', 'ORDERS.NEW');
+  it('dispatches appName and appNamespace to the reducer on save', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('External')).toBeInTheDocument();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
@@ -645,13 +663,14 @@ describe('AddressManager — switching ownership away from external', () => {
     addEntry();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await waitForPopperUpdates();
     mockWatchResource.mockReset();
   });
 
-  it('hides namespace/app fields and clears cross-app label when switching to private', () => {
-    selectExternalApp();
-    selectTypeaheadOption('Address', 'ORDERS.NEW');
+  it('hides namespace/app fields and clears cross-app label when switching to private', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
 
@@ -666,9 +685,9 @@ describe('AddressManager — switching ownership away from external', () => {
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
   });
 
-  it('hides namespace/app fields and clears cross-app label when switching to shared', () => {
-    selectExternalApp();
-    selectTypeaheadOption('Address', 'ORDERS.NEW');
+  it('hides namespace/app fields and clears cross-app label when switching to shared', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
 
@@ -685,36 +704,40 @@ describe('AddressManager — switching ownership away from external', () => {
 });
 
 describe('AddressManager — external create option on namespace/app typeaheads', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setupExternalMocks();
     render(<Wrapper />);
     addEntry();
-    selectExternal();
+    await selectExternal();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await waitForPopperUpdates();
     mockWatchResource.mockReset();
   });
 
-  it('shows a create option for a namespace not in the list', () => {
+  it('shows a create option for a namespace not in the list', async () => {
     const nsInput = screen.getByLabelText('App namespace');
     fireEvent.click(nsInput);
     fireEvent.change(nsInput, { target: { value: 'new-namespace' } });
+    await waitForPopperUpdates();
     expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
   });
 
-  it('shows a create option for an app name not in the list', () => {
-    selectTypeaheadOption('App namespace', 'service-project');
+  it('shows a create option for an app name not in the list', async () => {
+    await selectTypeaheadOption('App namespace', 'service-project');
     const appInput = screen.getByLabelText('App name');
     fireEvent.click(appInput);
     fireEvent.change(appInput, { target: { value: 'new-app' } });
+    await waitForPopperUpdates();
     expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
   });
 
-  it('does not show a create option when the value matches an existing item', () => {
+  it('does not show a create option when the value matches an existing item', async () => {
     const nsInput = screen.getByLabelText('App namespace');
     fireEvent.click(nsInput);
     fireEvent.change(nsInput, { target: { value: 'service-project' } });
+    await waitForPopperUpdates();
     expect(screen.queryByText('Create "{{value}}"')).not.toBeInTheDocument();
   });
 });

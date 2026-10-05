@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import * as jsYaml from 'js-yaml';
 import CreateBrokerAppPage from './CreateBrokerAppPage';
 
@@ -48,6 +48,29 @@ jest.mock('../../shared-components/ResourceFormEditor', () => ({
   },
 }));
 
+const buildYaml = (spec: Record<string, unknown>) =>
+  jsYaml.dump({
+    apiVersion: 'broker.arkmq.org/v1beta2',
+    kind: 'BrokerApp',
+    metadata: { name: 'test', namespace: 'test-ns' },
+    spec,
+  });
+
+const switchToForm = (yaml: string): { ok: boolean; error?: string } | undefined => {
+  if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
+  const onSwitchToForm = capturedOnSwitchToForm;
+  let result: { ok: boolean; error?: string } | undefined;
+  act(() => {
+    result = onSwitchToForm(yaml);
+  });
+  return result;
+};
+
+const getOnYamlSave = (): ((yaml: string) => void | Promise<void>) => {
+  if (!capturedOnYamlSave) throw new Error('onYamlSave was not captured — render first');
+  return capturedOnYamlSave;
+};
+
 describe('CreateBrokerAppPage', () => {
   it('renders the page title', () => {
     render(<CreateBrokerAppPage />);
@@ -90,55 +113,39 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
   });
 
   it('rejects YAML with duplicate addresses on switch to form', () => {
-    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
-    const result = capturedOnSwitchToForm(
+    const result = switchToForm(
       buildYaml({
         addresses: [{ address: 'orders' }, { address: 'orders' }],
         capabilities: [{ producerOf: [{ address: 'orders' }] }],
       }),
     );
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('Duplicate address "orders"');
+    expect(result?.ok).toBe(false);
+    expect(result?.error).toContain('Duplicate address "orders"');
   });
 
   it('rejects YAML with overlapping private and shared addresses on switch to form', () => {
-    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
-    const result = capturedOnSwitchToForm(
+    const result = switchToForm(
       buildYaml({
         addresses: [{ address: 'overlap' }],
         sharedAddresses: [{ address: 'overlap' }],
       }),
     );
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain(
+    expect(result?.ok).toBe(false);
+    expect(result?.error).toContain(
       'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
     );
   });
 
   it('accepts valid YAML on switch to form', () => {
-    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
-    const result = capturedOnSwitchToForm(
+    const result = switchToForm(
       buildYaml({
         addresses: [{ address: 'orders' }],
         sharedAddresses: [{ address: 'events' }],
       }),
     );
-    expect(result.ok).toBe(true);
+    expect(result?.ok).toBe(true);
   });
 });
-
-const buildYaml = (spec: Record<string, unknown>) =>
-  jsYaml.dump({
-    apiVersion: 'broker.arkmq.org/v1beta2',
-    kind: 'BrokerApp',
-    metadata: { name: 'test', namespace: 'test-ns' },
-    spec,
-  });
-
-const getOnYamlSave = (): ((yaml: string) => void | Promise<void>) => {
-  if (!capturedOnYamlSave) throw new Error('onYamlSave was not captured — render first');
-  return capturedOnYamlSave;
-};
 
 describe('CreateBrokerAppPage — YAML submit path', () => {
   beforeEach(() => render(<CreateBrokerAppPage />));
