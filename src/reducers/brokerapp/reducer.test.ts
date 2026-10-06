@@ -10,17 +10,6 @@ import type { AddressOwnership } from './reducer';
 describe('brokerAppReducer', () => {
   const ns = 'test-ns';
 
-  let nowCounter = 0;
-
-  beforeEach(() => {
-    nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('SET_NAME updates the CR metadata name', () => {
     let state = createInitialBrokerAppState(ns);
     state = brokerAppReducer(state, { type: 'SET_NAME', payload: 'my-broker-app' });
@@ -192,6 +181,16 @@ describe('brokerAppReducer', () => {
         type: 'ADD_MATCH_LABEL',
       });
       expect(state.hasChanges).toBe(true);
+    });
+
+    it('ADD_MATCH_LABEL never assigns the same id twice, even back-to-back', () => {
+      let state = createInitialBrokerAppState(ns);
+      state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+      state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+      state = brokerAppReducer(state, { type: 'ADD_MATCH_LABEL' });
+
+      const ids = state.matchLabels.map((label) => label.id);
+      expect(new Set(ids).size).toBe(ids.length);
     });
 
     it('REMOVE_MATCH_LABEL sets hasChanges to true', () => {
@@ -400,15 +399,6 @@ describe('brokerAppReducer resource fields', () => {
 });
 
 describe('SET_MODEL validation', () => {
-  beforeEach(() => {
-    let nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('returns current state when yaml is provided and CR has an invalid name', () => {
     const yaml =
       'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: INVALID\n  namespace: test-ns\nspec: {}\n';
@@ -504,15 +494,6 @@ const makeCR = (name: string, spec = {}) => ({
 });
 
 describe('address reducer actions', () => {
-  beforeEach(() => {
-    let nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('initial state has no addresses', () => {
     const state = createInitialBrokerAppState('test-ns');
     expect(state.addresses).toHaveLength(0);
@@ -714,15 +695,6 @@ describe('address reducer actions', () => {
 });
 
 describe('subscription via UPDATE_ADDRESS', () => {
-  beforeEach(() => {
-    let nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('UPDATE_ADDRESS with subscriptions writes them to spec.addresses', () => {
     const state = applyActions(
       { type: 'ADD_ADDRESS' },
@@ -778,15 +750,6 @@ describe('subscription via UPDATE_ADDRESS', () => {
 });
 
 describe('SET_MODEL hydration', () => {
-  beforeEach(() => {
-    let nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   it('hydrates private addresses from spec.addresses', () => {
     const state = applyActions({
       type: 'SET_MODEL',
@@ -976,15 +939,6 @@ describe('SET_MODEL hydration', () => {
 });
 
 describe('appName/appNamespace on external addresses', () => {
-  beforeEach(() => {
-    let nowCounter = 0;
-    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   const EXTERNAL_WITH_REF = {
     type: 'UPDATE_ADDRESS' as const,
     payload: {

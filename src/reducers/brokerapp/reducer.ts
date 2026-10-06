@@ -155,12 +155,16 @@ const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
 
 // --- helpers ---
 
+// Monotonically increasing counter for match label row ids, so two rows can never get the same id.
+let matchLabelIdSeq = 0;
+const nextMatchLabelId = (): string => `label-${(matchLabelIdSeq++).toString()}`;
+
 const matchLabelsFromRecord = (record: Record<string, string> | undefined): MatchLabel[] => {
   if (!record || !Object.keys(record).length) {
-    return [{ id: String(Date.now()), key: '', value: '' }];
+    return [{ id: nextMatchLabelId(), key: '', value: '' }];
   }
-  return Object.entries(record).map(([key, value], i) => ({
-    id: `imported-${String(i)}-${String(Date.now())}`,
+  return Object.entries(record).map(([key, value]) => ({
+    id: nextMatchLabelId(),
     key,
     value,
   }));
@@ -175,7 +179,7 @@ const mergeMatchLabelsWithYaml = (
   const merged = [...formLabels];
   Object.entries(yamlLabels).forEach(([key, value]) => {
     if (!existingKeys.has(key)) {
-      merged.push({ id: String(Date.now()), key, value });
+      merged.push({ id: nextMatchLabelId(), key, value });
       existingKeys.add(key);
     }
   });
@@ -302,7 +306,7 @@ export const brokerAppReducer = (
     }
 
     case 'ADD_MATCH_LABEL':
-      matchLabels = [...matchLabels, { id: String(Date.now()), key: '', value: '' }];
+      matchLabels = [...matchLabels, { id: nextMatchLabelId(), key: '', value: '' }];
       break;
 
     case 'REMOVE_MATCH_LABEL':
@@ -402,7 +406,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
     metadata: { name: 'my-messaging-app', namespace },
     spec: {},
   },
-  matchLabels: [{ id: String(Date.now()), key: '', value: '' }],
+  matchLabels: [{ id: nextMatchLabelId(), key: '', value: '' }],
   addresses: [],
   hasChanges: false,
 });
