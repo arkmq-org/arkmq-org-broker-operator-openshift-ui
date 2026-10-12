@@ -1,26 +1,15 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MetricsActions } from './MetricsActions';
-import { MetricsType, createInitialMetricsToolbarState } from './metricsTypes';
+import { createInitialMetricsToolbarState } from './metricsTypes';
 
-const metricsFilterOptions = [
-  { value: MetricsType.AllMetrics, label: 'All Metrics' },
-  { value: MetricsType.MemoryUsage, label: 'Memory Usage Metrics' },
-  { value: MetricsType.CPUUsage, label: 'CPU Usage Metrics' },
-  { value: MetricsType.BrokerMetrics, label: 'Broker Metrics' },
-];
+const groups = ['Memory Usage Metrics', 'CPU Usage Metrics', 'Broker Metrics'];
 
-const initialState = createInitialMetricsToolbarState([]);
+const initialState = createInitialMetricsToolbarState();
 
 describe('MetricsActions', () => {
   it('renders all three dropdowns with the current selections', () => {
-    render(
-      <MetricsActions
-        state={initialState}
-        dispatch={jest.fn()}
-        metricsFilterOptions={metricsFilterOptions}
-      />,
-    );
+    render(<MetricsActions state={initialState} dispatch={jest.fn()} groups={groups} />);
 
     expect(screen.getByTestId('metrics-actions')).toBeInTheDocument();
     expect(screen.getByTestId('metrics-actions-metrics-type')).toHaveTextContent('All Metrics');
@@ -28,38 +17,45 @@ describe('MetricsActions', () => {
     expect(screen.getByTestId('metrics-actions-poll-time')).toHaveTextContent('Refresh Off');
   });
 
-  it('dispatches FILTER_BY_METRICS_TYPE when a filter option is selected', async () => {
+  it('dispatches FILTER_BY_GROUP when a group is selected', async () => {
     const user = userEvent.setup();
     const dispatch = jest.fn();
 
-    render(
-      <MetricsActions
-        state={initialState}
-        dispatch={dispatch}
-        metricsFilterOptions={metricsFilterOptions}
-      />,
-    );
+    render(<MetricsActions state={initialState} dispatch={dispatch} groups={groups} />);
 
     await user.click(screen.getByTestId('metrics-actions-metrics-type'));
     await user.click(screen.getByText('CPU Usage Metrics'));
 
     expect(dispatch).toHaveBeenCalledWith({
-      type: 'FILTER_BY_METRICS_TYPE',
-      payload: MetricsType.CPUUsage,
+      type: 'FILTER_BY_GROUP',
+      payload: 'CPU Usage Metrics',
     });
+  });
+
+  it('dispatches FILTER_BY_GROUP with no group when All Metrics is selected', async () => {
+    const user = userEvent.setup();
+    const dispatch = jest.fn();
+
+    render(
+      <MetricsActions
+        state={{ ...initialState, group: 'Broker Metrics' }}
+        dispatch={dispatch}
+        groups={groups}
+      />,
+    );
+
+    expect(screen.getByTestId('metrics-actions-metrics-type')).toHaveTextContent('Broker Metrics');
+    await user.click(screen.getByTestId('metrics-actions-metrics-type'));
+    await user.click(screen.getByText('All Metrics'));
+
+    expect(dispatch).toHaveBeenCalledWith({ type: 'FILTER_BY_GROUP', payload: null });
   });
 
   it('dispatches CHANGE_TIME_RANGE when a time range is selected', async () => {
     const user = userEvent.setup();
     const dispatch = jest.fn();
 
-    render(
-      <MetricsActions
-        state={initialState}
-        dispatch={dispatch}
-        metricsFilterOptions={metricsFilterOptions}
-      />,
-    );
+    render(<MetricsActions state={initialState} dispatch={dispatch} groups={groups} />);
 
     await user.click(screen.getByTestId('metrics-actions-span'));
     await user.click(screen.getByText('last 1 hour'));
@@ -74,13 +70,7 @@ describe('MetricsActions', () => {
     const user = userEvent.setup();
     const dispatch = jest.fn();
 
-    render(
-      <MetricsActions
-        state={initialState}
-        dispatch={dispatch}
-        metricsFilterOptions={metricsFilterOptions}
-      />,
-    );
+    render(<MetricsActions state={initialState} dispatch={dispatch} groups={groups} />);
 
     await user.click(screen.getByTestId('metrics-actions-poll-time'));
     await user.click(screen.getByText('15 seconds'));

@@ -1,0 +1,17 @@
+/* framed like the console's QueryBrowser, so the charts read like the console's own */
+.plugin__arkmq-org-broker-operator-openshift-ui__metrics-chart {
+  border: var(--pf-t--global--border--width--regular) solid
+    var(--pf-t--global--border--color--default);
+  padding: var(--pf-t--global--spacer--sm);
+}
+
+/* four legend entries; past that the legend scrolls under a fixed plot */
+.plugin__arkmq-org-broker-operator-openshift-ui__metrics-chart-legend {
+  max-height: 9rem;
+  overflow-y: auto;
+}
+
+/* a block, so no baseline gap below it makes a short legend overflow */
+.plugin__arkmq-org-broker-operator-openshift-ui__metrics-chart-legend svg {
+  display: block;
+}

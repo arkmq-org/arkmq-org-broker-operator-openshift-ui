@@ -12,10 +12,8 @@ import {
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
-  type MetricsFilterOption,
   type MetricsToolbarAction,
   type MetricsToolbarState,
-  type MetricsType,
   type PollTime,
   type Span,
   pollTimeOptions,
@@ -90,11 +88,14 @@ function pollTimeLabel(t: TFunction, pollTime: PollTime): string {
 export interface MetricsActionsProps {
   /** Current toolbar selections from the Metrics reducer. */
   state: MetricsToolbarState;
-  /** Dispatches typed toolbar actions (poll / span / metrics type). */
+  /** Dispatches typed toolbar actions (poll / span / group). */
   dispatch: Dispatch<MetricsToolbarAction>;
-  /** Resource-specific metrics-type options (Service vs App differ). */
-  metricsFilterOptions: MetricsFilterOption[];
+  /** The groups of the section's charts, listed by the filter after All Metrics. */
+  groups: string[];
 }
+
+/** The filter entry showing every chart; no group can be named empty. */
+const ALL_GROUPS = '';
 
 interface MetricsDropdownOption<T extends string = string> {
   value: T;
@@ -157,13 +158,14 @@ const MetricsDropdown = <T extends string>({
   );
 };
 
-/** Metrics toolbar: type filter, time range, and refresh interval. */
-export const MetricsActions: FC<MetricsActionsProps> = ({
-  state,
-  dispatch,
-  metricsFilterOptions,
-}) => {
+/** Metrics toolbar: group filter, time range, and refresh interval. */
+export const MetricsActions: FC<MetricsActionsProps> = ({ state, dispatch, groups }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+
+  const groupDropdownOptions: MetricsDropdownOption[] = [
+    { value: ALL_GROUPS, label: t('All Metrics') },
+    ...groups.map((group) => ({ value: group, label: group })),
+  ];
 
   const spanDropdownOptions: MetricsDropdownOption<Span>[] = spanOptions.map((span) => ({
     value: span,
@@ -186,10 +188,10 @@ export const MetricsActions: FC<MetricsActionsProps> = ({
       <FlexItem>
         <MetricsDropdown
           ariaLabel={t('Metric filter')}
-          selected={state.metricsType}
-          options={metricsFilterOptions}
-          onSelect={(value: MetricsType) => {
-            dispatch({ type: 'FILTER_BY_METRICS_TYPE', payload: value });
+          selected={state.group ?? ALL_GROUPS}
+          options={groupDropdownOptions}
+          onSelect={(value) => {
+            dispatch({ type: 'FILTER_BY_GROUP', payload: value === ALL_GROUPS ? null : value });
           }}
           dataTest="metrics-actions-metrics-type"
         />

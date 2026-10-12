@@ -6,6 +6,7 @@ import { ConditionsTable } from '../../../../shared-components/resourceDetails/C
 import { ResourceLabelsAndAnnotations } from '../../../../shared-components/resourceDetails/ResourceLabelsAndAnnotations';
 import { BrokerServiceMetrics } from './Metrics/BrokerServiceMetrics';
 import { LoadedAppsSection } from './loadedApps/LoadedAppsSection';
+import { boundAppNamespaces } from './loadedApps/useBoundBrokerApps';
 
 export interface BrokerServiceOverviewTabProps {
   /** Watched BrokerService CR passed through HorizontalNav. */
@@ -15,6 +16,7 @@ export interface BrokerServiceOverviewTabProps {
 /** Overview tab for BrokerService details. */
 export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ obj }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const appNamespaces = boundAppNamespaces(obj);
 
   return (
     <PageSection data-test="broker-service-overview-tab">
@@ -26,7 +28,11 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
           {obj ? <ResourceLabelsAndAnnotations resource={obj} /> : null}
         </StackItem>
         <StackItem>
-          <BrokerServiceMetrics />
+          <BrokerServiceMetrics
+            namespace={obj?.metadata?.namespace}
+            name={obj?.metadata?.name}
+            appNamespaces={appNamespaces}
+          />
         </StackItem>
         <StackItem>{obj ? <LoadedAppsSection brokerService={obj} /> : null}</StackItem>
         <StackItem>

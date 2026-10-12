@@ -97,6 +97,8 @@
     }
   },
   "dependencies": {
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "@patternfly/react-charts": "^8.6.1",
+    "victory": "^37.3.6"
   }
 }
