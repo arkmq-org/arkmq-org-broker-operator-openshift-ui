@@ -37,6 +37,11 @@ interface PrometheusQueryResponse {
   error?: string;
 }
 
+// The operator's ServiceMonitor labels each queue with its owner's namespace,
+// which only the platform Prometheus honours, so that is the one scraping it.
+const PROMETHEUS_NAMESPACE = 'openshift-monitoring';
+const PROMETHEUS_POD = 'prometheus-k8s-0';
+
 /**
  * Query Prometheus API by exec'ing into the Prometheus pod
  */
@@ -45,7 +50,7 @@ function queryPrometheusViaPod(promNs: string, query: string): PrometheusQueryRe
   const promUrl = `http://localhost:9090/api/v1/query?query=${encodedQuery}`;
 
   const result = kubectl(
-    `exec -n ${promNs} prometheus-user-workload-0 -c prometheus -- curl -s '${promUrl}' --max-time 10`,
+    `exec -n ${promNs} ${PROMETHEUS_POD} -c prometheus -- curl -s '${promUrl}' --max-time 10`,
     { timeout: 30000, ignoreError: true },
   );
 
@@ -63,11 +68,13 @@ function queryPrometheusViaPod(promNs: string, query: string): PrometheusQueryRe
 /**
  * Get Prometheus targets by exec'ing into the Prometheus pod
  */
-function getPrometheusTargetsViaPod(promNs: string): PrometheusTargetsResponse {
-  const promUrl = `http://localhost:9090/api/v1/targets`;
+function getPrometheusTargetsViaPod(promNs: string, scrapePool: string): PrometheusTargetsResponse {
+  // The platform Prometheus has megabytes of targets, more than execSync
+  // buffers; asking for one scrape pool keeps the response small.
+  const promUrl = `http://localhost:9090/api/v1/targets?scrapePool=${encodeURIComponent(scrapePool)}`;
 
   const result = kubectl(
-    `exec -n ${promNs} prometheus-user-workload-0 -c prometheus -- curl -s '${promUrl}' --max-time 10`,
+    `exec -n ${promNs} ${PROMETHEUS_POD} -c prometheus -- curl -s '${promUrl}' --max-time 10`,
     { timeout: 30000, ignoreError: true },
   );
 
@@ -98,7 +105,6 @@ test.describe('Prometheus Monitoring - ServiceMonitor Setup', () => {
     console.log('\n🧹 Cleaning up...');
     deleteNamespace(TEST_NAMESPACE);
     yarn('chain-of-trust cleanup');
-    yarn('prometheus-config disable');
     console.log('✓ Cleanup complete');
 
     console.log('\n✅ E2E Tests Complete\n');
@@ -107,36 +113,43 @@ test.describe('Prometheus Monitoring - ServiceMonitor Setup', () => {
   test('complete monitoring setup with ServiceMonitor', async () => {
     console.log('\n📊 Testing complete Prometheus monitoring setup\n');
 
-    // Enable user workload monitoring
-    console.log('Step 1: Enabling user workload monitoring...');
-    yarn('prometheus-config enable');
-    console.log('✓ User workload monitoring enabled');
-
-    // Verify monitoring pods are ready
-    console.log('\nStep 2: Verifying monitoring infrastructure...');
-    yarn('prometheus-config verify', { timeout: 360000 });
-    console.log('✓ Monitoring infrastructure ready');
-
     // Setup PKI infrastructure
-    console.log('\nStep 3: Setting up PKI infrastructure...');
+    console.log('Step 1: Setting up PKI infrastructure...');
     yarn('chain-of-trust setup');
     console.log('✓ PKI infrastructure created');
 
     // Create test namespace
-    console.log('\nStep 4: Creating test namespace...');
+    console.log('\nStep 2: Creating test namespace...');
     createNamespace(TEST_NAMESPACE);
     console.log(`✓ Namespace ${TEST_NAMESPACE} created`);
     //
     // Create broker certificate for the test broker
-    console.log('\nStep 5: Creating broker certificate...');
+    console.log('\nStep 3: Creating broker certificate...');
     yarn(`chain-of-trust create-service-cert --name test-broker --namespace ${TEST_NAMESPACE}`);
 
     // Verify broker certificate was created
     expect(secretExists('test-broker-broker-cert', TEST_NAMESPACE)).toBe(true);
     console.log('✓ Broker certificate created');
 
+    // Create Prometheus certificate
+    console.log('\nStep 3a: Creating Prometheus certificate...');
+    yarn(`chain-of-trust create-prometheus-cert --namespace ${TEST_NAMESPACE}`);
+
+    // Wait for cert-manager to provision the certificate
+    console.log('⏳ Waiting for Prometheus certificate to be ready...');
+    kubectl(
+      `wait --for=condition=Ready certificate/prometheus-cert -n ${TEST_NAMESPACE} --timeout=60s`,
+    );
+    console.log('✓ Prometheus certificate ready');
+
+    // The operator generates the ServiceMonitor while reconciling the
+    // BrokerService, so the certificate it scrapes as has to exist first.
+    console.log('\nStep 3b: Preparing the namespace for platform monitoring...');
+    yarn(`prometheus-config setup-service-monitoring --namespace ${TEST_NAMESPACE}`);
+    console.log('✓ Namespace opted into platform monitoring');
+
     // Deploy a real BrokerService to test metrics scraping
-    console.log('\nStep 6: Deploying real BrokerService with metrics enabled...');
+    console.log('\nStep 4: Deploying real BrokerService with metrics enabled...');
     const brokerServiceYaml = `
 apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerService
@@ -173,12 +186,12 @@ spec:
     console.log('✓ Broker pod is ready');
 
     // Deploy BrokerApp to create queues (ensures metrics are exported)
-    console.log('\nStep 6a: Creating BrokerApp certificate...');
+    console.log('\nStep 4a: Creating BrokerApp certificate...');
     yarn(`chain-of-trust create-app-cert --name test-app --namespace ${TEST_NAMESPACE}`);
     expect(secretExists('test-app-app-cert', TEST_NAMESPACE)).toBe(true);
     console.log('✓ BrokerApp certificate created');
 
-    console.log('\nStep 6b: Deploying BrokerApp to create queues...');
+    console.log('\nStep 4b: Deploying BrokerApp to create queues...');
     const brokerAppYaml = `
 apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerApp
@@ -197,43 +210,25 @@ spec:
 `;
     applyYaml(brokerAppYaml);
 
-    console.log('\nStep 6c: Waiting for BrokerApp to be provisioned...');
+    console.log('\nStep 4c: Waiting for BrokerApp to be provisioned...');
     await waitForCondition('brokerapp', 'test-app', TEST_NAMESPACE, 'Deployed', 'True', 300000);
     console.log('✓ BrokerApp deployed - queues created and metrics exported');
 
-    // Create Prometheus certificate
-    console.log('\nStep 7: Creating Prometheus certificate...');
-    yarn(`chain-of-trust create-prometheus-cert --namespace ${TEST_NAMESPACE}`);
-
-    // Wait for cert-manager to provision the certificate
-    console.log('⏳ Waiting for Prometheus certificate to be ready...');
-    kubectl(
-      `wait --for=condition=Ready certificate/prometheus-cert -n ${TEST_NAMESPACE} --timeout=60s`,
-    );
-    console.log('✓ Prometheus certificate ready');
-
-    // Setup complete monitoring stack (Service + ServiceMonitor + namespace label)
-    console.log('\nStep 8: Setting up monitoring stack...');
-    yarn(
-      `prometheus-config setup-monitoring --broker-name test-broker --namespace ${TEST_NAMESPACE}`,
-    );
-
-    // Verify resources were created
-    const serviceMonitor = kubectl(`get servicemonitor test-broker-monitor -n ${TEST_NAMESPACE}`);
-    expect(serviceMonitor).toContain('test-broker-monitor');
-    const metricsService = kubectl(`get service test-broker-metrics -n ${TEST_NAMESPACE}`);
-    expect(metricsService).toContain('test-broker-metrics');
-    console.log('✓ Monitoring stack created (Service + ServiceMonitor)');
+    // The operator generates the scrape wiring for the BrokerService
+    console.log('\nStep 5: Checking the operator generated the ServiceMonitor...');
+    const serviceMonitor = kubectl(`get servicemonitor test-broker-metrics -n ${TEST_NAMESPACE}`);
+    expect(serviceMonitor).toContain('test-broker-metrics');
+    console.log('✓ ServiceMonitor test-broker-metrics generated by the operator');
 
     // Wait a bit for Prometheus to reload config and discover the ServiceMonitor
     console.log('⏳ Waiting for Prometheus to reload configuration...');
     await new Promise((resolve) => setTimeout(resolve, 10000));
     console.log('✓ Configuration reload complete');
 
-    // 9. Verify Prometheus actually scrapes metrics
-    console.log('\nStep 9: Verifying Prometheus scrapes metrics from the broker...');
+    // 8. Verify Prometheus actually scrapes metrics
+    console.log('\nStep 6: Verifying Prometheus scrapes metrics from the broker...');
 
-    const promNs = 'openshift-user-workload-monitoring';
+    const promNs = PROMETHEUS_NAMESPACE;
     const promService = 'prometheus-operated';
 
     // Verify Prometheus service exists
@@ -246,14 +241,19 @@ spec:
 
     console.log('⏳ Querying Prometheus via ephemeral curl pod...');
 
-    // Wait for ServiceMonitor to be discovered by Prometheus (can take up to 90s for certs to propagate + mTLS handshake)
+    // Wait for ServiceMonitor to be discovered by Prometheus: the platform
+    // Prometheus can take a couple of minutes to load a new one
     console.log('⏳ Waiting for Prometheus to discover ServiceMonitor target...');
     let targetFound = false;
     let targetUp = false;
-    const maxAttempts = 45; // 45 attempts * 2s = 90s max wait
+    const maxAttempts = 90; // 90 attempts * 2s = 180s max wait
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const targetsResponse = getPrometheusTargetsViaPod(promNs);
+      // the owner view, the first endpoint of the generated ServiceMonitor
+      const targetsResponse = getPrometheusTargetsViaPod(
+        promNs,
+        `serviceMonitor/${TEST_NAMESPACE}/test-broker-metrics/0`,
+      );
 
       if (targetsResponse.status === 'success' && targetsResponse.data) {
         const activeTargets = targetsResponse.data.activeTargets;
@@ -268,10 +268,7 @@ spec:
 
         // Find our ServiceMonitor target - try multiple patterns
         const target = activeTargets.find(
-          (t) =>
-            t.labels?.namespace === TEST_NAMESPACE ||
-            t.labels?.job?.includes('test-broker') ||
-            t.scrapeUrl?.includes(TEST_NAMESPACE),
+          (t) => t.labels?.job === 'test-broker-metrics' && t.labels?.namespace === TEST_NAMESPACE,
         );
 
         if (target) {
@@ -337,8 +334,17 @@ spec:
     // Query for actual broker queue metrics (proves real metrics are being scraped)
     console.log('\n⏳ Querying for broker queue metrics...');
     // Query for the APP.JOBS queue created by BrokerApp
+    // filed in the owning app's namespace
     const queueMetricsQuery = `broker_queue_message_count{namespace="${TEST_NAMESPACE}",queue="APP.JOBS"}`;
-    const queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    // the target being up does not mean the queue has been scraped yet
+    let queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    for (let attempt = 1; attempt < 60; attempt++) {
+      if (queueMetricsResponse.status === 'success' && queueMetricsResponse.data?.result.length) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      queueMetricsResponse = queryPrometheusViaPod(promNs, queueMetricsQuery);
+    }
 
     expect(queueMetricsResponse.status).toBe('success');
     expect(queueMetricsResponse.data).toBeDefined();
@@ -347,6 +353,13 @@ spec:
       throw new Error('Prometheus returned no data');
     }
 
+    if (queueMetricsResponse.data.result.length === 0) {
+      // show what the queue was filed under instead, if anything
+      const anyCopy = queryPrometheusViaPod(promNs, `broker_queue_message_count{queue="APP.JOBS"}`);
+      anyCopy.data?.result.forEach((r) =>
+        console.log(`  APP.JOBS series: ${JSON.stringify(r.metric)}`),
+      );
+    }
     expect(queueMetricsResponse.data.result.length).toBeGreaterThan(0);
 
     const queueMetric = queueMetricsResponse.data.result[0];

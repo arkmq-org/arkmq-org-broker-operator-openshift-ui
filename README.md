@@ -311,92 +311,47 @@ break console styles!
 
 ## Prometheus Monitoring
 
-This project includes scripts to manage Prometheus user workload monitoring and secure metrics scraping with mTLS authentication.
+The metrics charts do not need user workload monitoring: the platform Prometheus scrapes the
+operator's `ServiceMonitor`, and the console queries it per namespace. Tenants who want alerting
+or recording rules on their queues, or to scrape the broker with their own app certificate, can
+enable it as the OpenShift monitoring documentation describes.
 
-### Enabling User Workload Monitoring
+### Scraping a BrokerService's Metrics
 
-**Enable user workload monitoring:**
+The operator generates the scrape wiring itself: each `BrokerService` gets a
+`ServiceMonitor` named `<service>-metrics`, scraping the broker over mTLS as the
+`prometheus` identity. The broker labels each queue with the app owning it and
+that app's namespace, where its series are filed, once. The BrokerApp page
+charts the app's queues from its own namespace; the BrokerService page charts
+the queues of every bound app from each app's namespace, so reading them takes
+read access to metrics in those namespaces.
 
-```bash
-yarn prometheus-config enable
-```
+Only the platform Prometheus keeps the namespace the broker sets, so on
+OpenShift the service's namespace has to be opted into platform monitoring:
 
-Applies the `cluster-monitoring-config` ConfigMap to enable user workload monitoring.
-
-**Verify monitoring setup:**
-
-```bash
-yarn prometheus-config verify
-```
-
-Waits for the `openshift-user-workload-monitoring` namespace to exist and for all monitoring pods to be ready.
-
-**Disable monitoring (cleanup):**
-
-```bash
-yarn prometheus-config disable
-```
-
-Removes the `cluster-monitoring-config` ConfigMap to disable user workload monitoring.
-
-### Secure Metrics Scraping with mTLS
-
-For locked-down brokers that require mutual TLS authentication, you can set up secure metrics scraping:
-
-**1. Create Prometheus Certificate:**
-
-First, create a Prometheus client certificate using the PKI infrastructure:
+**1. Create the Prometheus certificate before the BrokerService:**
 
 ```bash
 yarn chain-of-trust create-prometheus-cert --namespace my-namespace
 ```
 
-This creates a `prometheus-cert` secret with CN=prometheus that Prometheus will use to authenticate to the broker's metrics endpoint.
+This creates a `prometheus-cert` secret with CN=prometheus. The operator
+generates the `ServiceMonitor` while reconciling the service, and only if this
+secret exists by then.
 
-**2. Generate ServiceMonitor YAML:**
-
-Generate the ServiceMonitor configuration for mTLS metrics scraping:
-
-```bash
-yarn prometheus-config create-servicemonitor \
-  --broker-name my-broker \
-  --namespace my-namespace
-```
-
-**3. Apply the ServiceMonitor:**
-
-Save the output to a file or pipe directly to kubectl:
+**2. Prepare the service's namespace:**
 
 ```bash
-yarn prometheus-config create-servicemonitor \
-  --broker-name my-broker \
-  --namespace my-namespace | kubectl apply -f -
+yarn prometheus-config setup-service-monitoring --namespace my-namespace
 ```
 
-The ServiceMonitor will configure Prometheus to:
-- Scrape metrics over HTTPS
-- Authenticate using the Prometheus client certificate
-- Validate the broker's server certificate using the CA bundle
-- Target the broker's metrics endpoint (port 8888)
+This labels the namespace `openshift.io/cluster-monitoring=true` and lets the
+platform Prometheus (`openshift-monitoring/prometheus-k8s`) discover targets
+there. User workload monitoring stops watching a namespace so labelled, so keep
+BrokerServices in a namespace of their own.
 
-### Configuration for Non-OpenShift Platforms
-
-The script defaults to OpenShift namespace names, but can be customized using environment variables:
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `MONITORING_NAMESPACE` | `openshift-user-workload-monitoring` | Namespace where user workload monitoring pods run |
-| `CLUSTER_MONITORING_NAMESPACE` | `openshift-monitoring` | Namespace where cluster monitoring config is stored |
-| `MONITORING_CONFIG` | `cluster-monitoring-config` | Name of the ConfigMap that enables monitoring |
-
-**Example for custom platforms:**
-
-```bash
-MONITORING_NAMESPACE=monitoring \
-CLUSTER_MONITORING_NAMESPACE=kube-monitoring \
-MONITORING_CONFIG=monitoring-config \
-yarn prometheus-config enable
-```
+On other platforms, the operator guide describes what a Prometheus needs to
+scrape the generated `ServiceMonitor`.
 
 ### Manual Configuration
 
@@ -470,10 +425,11 @@ Runs tests in the terminal without opening a browser window.
 #### Monitoring Tests
 
 The project includes Playwright tests for monitoring (`playwright/e2e/monitoring.spec.ts`). These tests:
-1. Enable user workload monitoring via `yarn prometheus-config enable`
-2. Verify monitoring is ready via `yarn prometheus-config verify`
-3. Verify ServiceMonitor CRD is available (scaffolding for future plugin metrics tests)
-4. Clean up by running `yarn prometheus-config disable`
+1. Deploy a BrokerService and a BrokerApp, with the prometheus certificate issued and the
+   namespace prepared by `yarn prometheus-config setup-service-monitoring` beforehand
+2. Check the operator generated the `ServiceMonitor`, and that the platform Prometheus scrapes it
+   and files the app's queue in its namespace
+3. Clean up the test namespace and the PKI
 
 The tests are **skipped by default** (including in CI) to avoid requiring cluster admin permissions and additional resources.
 

@@ -278,10 +278,10 @@ async function createPrometheusCert() {
     console.log(`  ✓ Certificate: ${result.certName}`);
     console.log(`  ✓ Secret: ${result.secretName}`);
     console.log(
-      `\nYou can now configure Prometheus to scrape broker metrics with mTLS in namespace ${namespace}`,
+      `\nThe operator scrapes each BrokerService in namespace ${namespace} with this certificate.`,
     );
     console.log(
-      `Use "yarn prometheus-config create-servicemonitor" to generate ServiceMonitor YAML\n`,
+      `On OpenShift, prepare the namespace with "yarn prometheus-config setup-service-monitoring --namespace ${namespace}"\n`,
     );
   } catch (error) {
     console.error('\n❌ Error creating Prometheus certificate:', error.message);
