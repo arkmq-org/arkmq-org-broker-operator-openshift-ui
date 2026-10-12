@@ -1,67 +1,16 @@
 import type { FC } from 'react';
-import {
-  getGroupVersionKindForModel,
-  ResourceLink,
-  useK8sWatchResource,
-} from '@openshift-console/dynamic-plugin-sdk';
+import { getGroupVersionKindForModel, ResourceLink } from '@openshift-console/dynamic-plugin-sdk';
 import { Label, Spinner, Title } from '@patternfly/react-core';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { useTranslation } from 'react-i18next';
 import { BrokerAppModel } from '../../../../../k8s/models';
-import type { BrokerAppCR, BrokerService } from '../../../../../k8s/types';
+import type { BrokerService } from '../../../../../k8s/types';
 import { getReadyConditionDisplay } from '../../../../../shared-components/resourceList/getReadyConditionDisplay';
+import { useBoundBrokerApps } from './useBoundBrokerApps';
 
 export interface LoadedAppsSectionProps {
   /** BrokerService whose bound BrokerApps are listed. */
   brokerService: BrokerService;
-}
-
-export interface ProvisionedAppRef {
-  namespace: string;
-  name: string;
-  generation: number;
-}
-
-/**
- * Parses a `<namespace>/<name>@<generation>` string from status.provisionedApps.
- * Returns null for malformed entries so callers can filter gracefully.
- */
-export function parseProvisionedAppRef(entry: string): ProvisionedAppRef | null {
-  const slashIdx = entry.indexOf('/');
-  const atIdx = entry.indexOf('@');
-  if (slashIdx < 1 || atIdx <= slashIdx + 1) {
-    return null;
-  }
-  const namespace = entry.slice(0, slashIdx);
-  const name = entry.slice(slashIdx + 1, atIdx);
-  const generation = parseInt(entry.slice(atIdx + 1), 10);
-  if (!name || isNaN(generation)) {
-    return null;
-  }
-  return { namespace, name, generation };
-}
-
-/**
- * Returns BrokerApps that appear in the service's provisionedApps list,
- * matching on namespace and name. Malformed entries are silently skipped.
- */
-export function filterLoadedBrokerApps(
-  apps: BrokerAppCR[],
-  provisionedApps: string[],
-): BrokerAppCR[] {
-  if (!provisionedApps.length) {
-    return [];
-  }
-
-  const refs = provisionedApps
-    .map(parseProvisionedAppRef)
-    .filter((ref): ref is ProvisionedAppRef => ref !== null);
-
-  return apps.filter((app) => {
-    const appName = app.metadata?.name;
-    const appNamespace = app.metadata?.namespace;
-    return refs.some((ref) => ref.name === appName && ref.namespace === appNamespace);
-  });
 }
 
 /**
@@ -69,18 +18,7 @@ export function filterLoadedBrokerApps(
  */
 export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const provisionedApps = brokerService.status?.provisionedApps ?? [];
-
-  const [apps, loaded, loadError] = useK8sWatchResource<BrokerAppCR[]>({
-    groupVersionKind: {
-      group: BrokerAppModel.apiGroup,
-      version: BrokerAppModel.apiVersion,
-      kind: BrokerAppModel.kind,
-    },
-    isList: true,
-  }) as [BrokerAppCR[], boolean, unknown];
-
-  const loadedApps = filterLoadedBrokerApps(Array.isArray(apps) ? apps : [], provisionedApps);
+  const [loadedApps, loaded, loadError] = useBoundBrokerApps(brokerService);
 
   const statusLabels = {
     Running: t('Provisioned'),
