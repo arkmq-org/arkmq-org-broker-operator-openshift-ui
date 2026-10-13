@@ -186,16 +186,29 @@ jobs:
           oc apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
           oc wait pod --all --for=condition=Ready --namespace=cert-manager --timeout=30m
 
-      - name: Wait for cert-manager webhook endpoint
+      # An endpoint IP being listed does not mean the API server can call the
+      # webhook yet: trust-manager's install was refused with "no endpoints
+      # available" seconds after one was listed. A server-side dry run goes
+      # through the same admission webhooks the install does, without
+      # creating anything.
+      - name: Wait for cert-manager webhook to serve
         run: |
-          echo "Waiting for cert-manager-webhook endpoint to be registered..."
+          cat > "$RUNNER_TEMP/webhook-probe.yaml" <<'EOF'
+          apiVersion: cert-manager.io/v1
+          kind: Issuer
+          metadata:
+            name: webhook-probe
+            namespace: cert-manager
+          spec:
+            selfSigned: {}
+          EOF
+          echo "Waiting for the API server to reach cert-manager-webhook..."
           timeout 600 bash -c '
-            until kubectl get endpoints cert-manager-webhook -n cert-manager \
-                  -o jsonpath="{.subsets[*].addresses[*].ip}" 2>/dev/null | grep -q "[0-9]"; do
-              echo "  cert-manager-webhook endpoint not ready, retrying in 5s..."
+            until kubectl apply --dry-run=server -f "$RUNNER_TEMP/webhook-probe.yaml" >/dev/null; do
+              echo "  cert-manager-webhook not serving, retrying in 5s..."
               sleep 5
             done'
-          echo "✓ cert-manager-webhook endpoint is ready"
+          echo "✓ cert-manager-webhook is serving"
 
       - name: Install trust-manager
         run: |
