@@ -5,6 +5,8 @@ import {
   validateDuplicateAddressEntries,
   validateEnvVarEntries,
   validateLabelEntries,
+  validateRequiredLabels,
+  validateRequiredMatchLabels,
   validateMemoryValue,
   validateCpuQuantity,
   validateMemoryQuantity,
@@ -90,6 +92,42 @@ describe('validateMemoryValue', () => {
 
   it('returns error when value is negative', () => {
     expect(validateMemoryValue('-1')).toBe('Memory value must be greater than 0');
+  });
+});
+
+describe('validateRequiredLabels', () => {
+  it('returns null when at least one entry has a non-empty key', () => {
+    expect(validateRequiredLabels([{ key: 'app.kubernetes.io/instance' }])).toBeNull();
+  });
+
+  it('returns null when some entries are blank but at least one has a key', () => {
+    expect(validateRequiredLabels([{ key: '' }, { key: 'tier' }])).toBeNull();
+  });
+
+  it('returns error when all entries have empty keys', () => {
+    expect(validateRequiredLabels([{ key: '' }])).toBe('At least one label is required');
+  });
+
+  it('returns error when entries array is empty', () => {
+    expect(validateRequiredLabels([])).toBe('At least one label is required');
+  });
+
+  it('returns error when all keys are whitespace-only', () => {
+    expect(validateRequiredLabels([{ key: '   ' }])).toBe('At least one label is required');
+  });
+});
+
+describe('validateRequiredMatchLabels', () => {
+  it('returns null when at least one entry has a non-empty key', () => {
+    expect(validateRequiredMatchLabels([{ key: 'app.kubernetes.io/instance' }])).toBeNull();
+  });
+
+  it('returns error when all entries have empty keys', () => {
+    expect(validateRequiredMatchLabels([{ key: '' }])).toBe('At least one match label is required');
+  });
+
+  it('returns error when entries array is empty', () => {
+    expect(validateRequiredMatchLabels([])).toBe('At least one match label is required');
   });
 });
 

@@ -5,6 +5,7 @@ import { PageSection, Title } from '@patternfly/react-core';
 import type { BrokerAppCR } from '../k8s/types';
 import {
   validateLabelEntries,
+  validateRequiredMatchLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
   validateBrokerAppCR,
 } from '../validation/k8s';
@@ -50,7 +51,9 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
 
   const { cr, matchLabels, hasChanges } = formState;
   const isFormValid =
-    validateBrokerAppCR(cr) === null && validateLabelEntries(matchLabels) === null;
+    validateBrokerAppCR(cr) === null &&
+    validateLabelEntries(matchLabels) === null &&
+    validateRequiredMatchLabels(matchLabels) === null;
 
   return (
     <>
@@ -80,6 +83,10 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
             const crError = validateBrokerAppCR(parsed, yaml);
             if (crError) {
               throw new Error(crError);
+            }
+            const selectorLabels = parsed.spec.selector?.matchLabels;
+            if (!selectorLabels || !Object.keys(selectorLabels).length) {
+              throw new Error('spec.selector.matchLabels: At least one match label is required');
             }
             return onSubmit(parsed);
           }}

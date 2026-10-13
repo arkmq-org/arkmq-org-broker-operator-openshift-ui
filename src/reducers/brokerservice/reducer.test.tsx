@@ -19,10 +19,16 @@ describe('brokerServiceReducer', () => {
     expect(state.cr).toEqual({
       apiVersion: 'broker.arkmq.org/v1beta2',
       kind: 'BrokerService',
-      metadata: { name: 'my-messaging-service', namespace: TEST_NAMESPACE },
+      metadata: {
+        name: 'my-messaging-service',
+        namespace: TEST_NAMESPACE,
+        labels: { 'app.kubernetes.io/instance': 'my-messaging-service' },
+      },
       spec: { resources: { limits: { memory: '2Gi' } } },
     });
-    expect(state.labels).toEqual([]);
+    expect(state.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
+    ]);
     expect(state.memoryValue).toBe('2');
     expect(state.memoryUnit).toBe('Gi');
     expect(state.envVars).toEqual([]);
@@ -40,32 +46,41 @@ describe('brokerServiceReducer', () => {
     let state = createState();
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
 
-    expect(state.labels).toHaveLength(1);
-    expect(state.cr.metadata?.labels).toBeUndefined();
+    expect(state.labels).toHaveLength(2);
+    expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
+    });
   });
 
   it('UPDATE_LABEL_KEY, UPDATE_LABEL_VALUE, and REMOVE_LABEL sync labels on the CR', () => {
     let state = createState();
 
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
-    expect(state.labels).toHaveLength(1);
+    expect(state.labels).toHaveLength(2);
 
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 0, key: 'forWorkQueue' },
+      payload: { index: 1, key: 'forWorkQueue' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 0, value: 'true' },
+      payload: { index: 1, value: 'true' },
     });
 
-    expect(state.labels[0]).toEqual({ key: 'forWorkQueue', value: 'true' });
-    expect(state.cr.metadata?.labels).toEqual({ forWorkQueue: 'true' });
+    expect(state.labels[1]).toEqual({ key: 'forWorkQueue', value: 'true' });
+    expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
+      forWorkQueue: 'true',
+    });
 
-    state = brokerServiceReducer(state, { type: 'REMOVE_LABEL', payload: 0 });
+    state = brokerServiceReducer(state, { type: 'REMOVE_LABEL', payload: 1 });
 
-    expect(state.labels).toEqual([]);
-    expect(state.cr.metadata?.labels).toBeUndefined();
+    expect(state.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
+    ]);
+    expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
+    });
   });
 
   it('REMOVE_LABEL removes the label from CR metadata labels', () => {
@@ -74,36 +89,44 @@ describe('brokerServiceReducer', () => {
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 0, key: 'forWorkQueue' },
+      payload: { index: 1, key: 'forWorkQueue' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 0, value: 'true' },
+      payload: { index: 1, value: 'true' },
     });
 
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 1, key: 'app' },
+      payload: { index: 2, key: 'app' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 1, value: 'messaging' },
+      payload: { index: 2, value: 'messaging' },
     });
 
     expect(state.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
       { key: 'forWorkQueue', value: 'true' },
       { key: 'app', value: 'messaging' },
     ]);
     expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
       forWorkQueue: 'true',
       app: 'messaging',
     });
 
-    state = brokerServiceReducer(state, { type: 'REMOVE_LABEL', payload: 0 });
+    state = brokerServiceReducer(state, { type: 'REMOVE_LABEL', payload: 1 });
 
-    expect(state.labels).toEqual([{ key: 'app', value: 'messaging' }]);
-    expect(state.cr.metadata?.labels).toEqual({ app: 'messaging' });
+    expect(state.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
+      { key: 'app', value: 'messaging' },
+    ]);
+    expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
+      app: 'messaging',
+    });
   });
 
   it('uses the first value when duplicate label keys are synced to the CR', () => {
@@ -112,27 +135,31 @@ describe('brokerServiceReducer', () => {
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 0, key: 'key1' },
-    });
-    state = brokerServiceReducer(state, {
-      type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 0, value: 'test' },
-    });
-    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
-    state = brokerServiceReducer(state, {
-      type: 'UPDATE_LABEL_KEY',
       payload: { index: 1, key: 'key1' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 1, value: 'some-value' },
+      payload: { index: 1, value: 'test' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 2, key: 'key1' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 2, value: 'some-value' },
     });
 
     expect(state.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
       { key: 'key1', value: 'test' },
       { key: 'key1', value: 'some-value' },
     ]);
-    expect(state.cr.metadata?.labels).toEqual({ key1: 'test' });
+    expect(state.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
+      key1: 'test',
+    });
   });
 
   it('SET_MODEL with preserveLabels keeps form label rows when duplicates exist', () => {
@@ -186,29 +213,29 @@ describe('brokerServiceReducer', () => {
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 0, key: 'key1' },
-    });
-    state = brokerServiceReducer(state, {
-      type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 0, value: 'value1' },
-    });
-    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
-    state = brokerServiceReducer(state, {
-      type: 'UPDATE_LABEL_KEY',
       payload: { index: 1, key: 'key1' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 1, value: 'value2' },
+      payload: { index: 1, value: 'value1' },
     });
     state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_KEY',
-      payload: { index: 2, key: 'key2' },
+      payload: { index: 2, key: 'key1' },
     });
     state = brokerServiceReducer(state, {
       type: 'UPDATE_LABEL_VALUE',
-      payload: { index: 2, value: 'something' },
+      payload: { index: 2, value: 'value2' },
+    });
+    state = brokerServiceReducer(state, { type: 'ADD_LABEL' });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_KEY',
+      payload: { index: 3, key: 'key2' },
+    });
+    state = brokerServiceReducer(state, {
+      type: 'UPDATE_LABEL_VALUE',
+      payload: { index: 3, value: 'something' },
     });
 
     const next = brokerServiceReducer(state, {
@@ -227,12 +254,14 @@ describe('brokerServiceReducer', () => {
     });
 
     expect(next.labels).toEqual([
+      { key: 'app.kubernetes.io/instance', value: 'my-messaging-service' },
       { key: 'key1', value: 'value1' },
       { key: 'key1', value: 'value2' },
       { key: 'key2', value: 'something' },
       { key: 'key3', value: 'test' },
     ]);
     expect(next.cr.metadata?.labels).toEqual({
+      'app.kubernetes.io/instance': 'my-messaging-service',
       key1: 'value1',
       key2: 'something',
       key3: 'test',

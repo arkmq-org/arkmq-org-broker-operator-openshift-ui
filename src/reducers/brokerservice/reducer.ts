@@ -122,7 +122,13 @@ const cloneBrokerService = (cr: BrokerService): BrokerService =>
 
 /** Syncs the label array into the CR's metadata.labels field. */
 const syncLabelsToMetadata = (cr: BrokerService, labels: LabelEntry[]): void => {
-  cr.metadata = { ...cr.metadata, labels: labelsToRecord(labels) };
+  const record = labelsToRecord(labels);
+  if (record) {
+    cr.metadata = { ...cr.metadata, labels: record };
+  } else {
+    cr.metadata = { ...cr.metadata };
+    delete cr.metadata.labels;
+  }
 };
 
 /** Syncs memory value and unit into the CR's spec.resources.limits.memory field. */
@@ -277,13 +283,17 @@ const formStateFromCr = (cr: BrokerService): BrokerServiceFormState => {
 export const createBrokerServiceStateFromCr = (cr: BrokerService): BrokerServiceFormState =>
   formStateFromCr(cr);
 
-export const createInitialBrokerServiceState = (namespace: string): BrokerServiceFormState =>
-  formStateFromCr({
+const DEFAULT_INSTANCE_LABEL_KEY = 'app.kubernetes.io/instance';
+
+export const createInitialBrokerServiceState = (namespace: string): BrokerServiceFormState => {
+  const defaultName = 'my-messaging-service';
+  return formStateFromCr({
     apiVersion: 'broker.arkmq.org/v1beta2',
     kind: 'BrokerService',
     metadata: {
-      name: 'my-messaging-service',
+      name: defaultName,
       namespace,
+      labels: { [DEFAULT_INSTANCE_LABEL_KEY]: defaultName },
     },
     spec: {
       resources: {
@@ -293,6 +303,7 @@ export const createInitialBrokerServiceState = (namespace: string): BrokerServic
       },
     },
   });
+};
 
 export const BrokerServiceFormStateContext = createContext<BrokerServiceFormState | undefined>(
   undefined,
