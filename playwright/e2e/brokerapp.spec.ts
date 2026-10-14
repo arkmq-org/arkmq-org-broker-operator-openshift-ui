@@ -175,8 +175,12 @@ spec:
     });
     await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
 
-    // 2. Fill in the app name
+    // 2. Fill in the app name and a match label (required by the operator)
     await page.locator('[data-test="brokerapp-name"]').fill(appName);
+    await page.getByRole('textbox', { name: 'Label key' }).click();
+    await page.getByRole('textbox', { name: 'Label key' }).fill('app.kubernetes.io/instance');
+    await page.getByRole('textbox', { name: 'Label value' }).click();
+    await page.getByRole('textbox', { name: 'Label value' }).fill(SERVICE_NAME);
 
     // 3. Add multiple addresses via the card-based address manager.
     for (let i = 0; i < addresses.length; i++) {
@@ -223,6 +227,10 @@ spec:
     await page.waitForSelector('[data-test="create-brokerapp-title"]', { timeout: 30000 });
 
     await page.locator('[data-test="brokerapp-name"]').fill(appName);
+    await page.getByRole('textbox', { name: 'Label key' }).click();
+    await page.getByRole('textbox', { name: 'Label key' }).fill('app.kubernetes.io/instance');
+    await page.getByRole('textbox', { name: 'Label value' }).click();
+    await page.getByRole('textbox', { name: 'Label value' }).fill(SERVICE_NAME);
 
     // 1. Add a plain point-to-point address (no pubSub)
     await page.locator('[data-test="add-address-btn"]').click();

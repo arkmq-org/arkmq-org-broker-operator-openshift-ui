@@ -59,7 +59,7 @@ jest.mock('../shared-components/ResourceFormEditor', () => ({
         data-test="yaml-save-btn"
         onClick={() =>
           void onYamlSave(
-            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec: {}',
+            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec:\n  selector:\n    matchLabels:\n      app.kubernetes.io/instance: my-svc',
           )
         }
       >
@@ -68,6 +68,15 @@ jest.mock('../shared-components/ResourceFormEditor', () => ({
     </>
   ),
 }));
+
+const makeValidState = (): BrokerAppFormState => {
+  let state = createInitialBrokerAppState('test-ns');
+  state = brokerAppReducer(state, {
+    type: 'UPDATE_MATCH_LABEL',
+    payload: { id: state.matchLabels[0].id, key: 'app.kubernetes.io/instance', value: 'my-svc' },
+  });
+  return state;
+};
 
 const makeStateWithEmptyName = (): BrokerAppFormState => {
   let state = createInitialBrokerAppState('test-ns');
@@ -148,7 +157,7 @@ describe('BrokerAppFormPage', () => {
 
   describe('form validity', () => {
     it('enables submit when name and labels are valid in create mode', () => {
-      render(<Wrapper />);
+      render(<Wrapper initialState={makeValidState()} />);
       expect(screen.getByTestId('submit-btn')).not.toBeDisabled();
     });
 
@@ -157,8 +166,13 @@ describe('BrokerAppFormPage', () => {
       expect(screen.getByTestId('submit-btn')).toBeDisabled();
     });
 
-    it('enables submit in edit mode regardless of name', () => {
-      render(<Wrapper props={{ isEditMode: true }} />);
+    it('disables submit when matchLabels are empty', () => {
+      render(<Wrapper />);
+      expect(screen.getByTestId('submit-btn')).toBeDisabled();
+    });
+
+    it('enables submit in edit mode with valid matchLabels', () => {
+      render(<Wrapper initialState={makeValidState()} props={{ isEditMode: true }} />);
       expect(screen.getByTestId('submit-btn')).not.toBeDisabled();
     });
 

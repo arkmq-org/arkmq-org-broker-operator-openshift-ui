@@ -14,6 +14,23 @@ export const validateDNS1123 = (value: string): string | null => {
   return null;
 };
 
+/**
+ * Checks that at least one entry has a non-empty key.
+ * Per the latest operator changes, nil or empty selectors match no service.
+ */
+const validateRequiredEntries = (entries: { key: string }[], message: string): string | null => {
+  const hasNonEmpty = entries.some(({ key }) => key.trim());
+  return hasNonEmpty ? null : message;
+};
+
+/** Enforces mandatory labels on BrokerService creation. */
+export const validateRequiredLabels = (entries: { key: string }[]): string | null =>
+  validateRequiredEntries(entries, 'At least one label is required');
+
+/** Enforces mandatory match labels on BrokerApp creation. */
+export const validateRequiredMatchLabels = (entries: { key: string }[]): string | null =>
+  validateRequiredEntries(entries, 'At least one match label is required');
+
 // Rejects duplicate non-empty label keys in form label rows.
 export const validateLabelEntries = (entries: { key: string; value: string }[]): string | null => {
   const seen = new Set<string>();

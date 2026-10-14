@@ -99,17 +99,13 @@ describe('CreateBrokerAppPage', () => {
 describe('CreateBrokerAppPage — isFormValid integration', () => {
   beforeEach(() => render(<CreateBrokerAppPage />));
 
-  it('enables the create button with default valid state', () => {
-    expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
+  it('disables the create button when matchLabels are empty', () => {
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
   });
 
   it('disables the create button when the name is cleared', () => {
     fireEvent.change(screen.getByTestId('brokerapp-name'), { target: { value: '' } });
     expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
-  });
-
-  it('allows submission when no addresses exist', () => {
-    expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
   });
 
   it('rejects YAML with duplicate addresses on switch to form', () => {

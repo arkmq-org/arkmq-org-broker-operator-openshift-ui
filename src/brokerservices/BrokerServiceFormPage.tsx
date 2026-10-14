@@ -7,6 +7,7 @@ import {
   validateBrokerServiceCR,
   validateEnvVarEntries,
   validateLabelEntries,
+  validateRequiredLabels,
   validateYamlDuplicateBrokerServiceLabels,
 } from '../validation/k8s';
 import {
@@ -60,6 +61,7 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
   const isFormValid =
     validateBrokerServiceCR(cr) === null &&
     validateLabelEntries(labels) === null &&
+    validateRequiredLabels(labels) === null &&
     validateEnvVarEntries(envVars) === null;
 
   return (
@@ -111,6 +113,10 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
             const crError = validateBrokerServiceCR(parsed, yaml);
             if (crError) {
               throw new Error(crError);
+            }
+            const metadataLabels = parsed.metadata?.labels;
+            if (!metadataLabels || !Object.keys(metadataLabels).length) {
+              throw new Error('metadata.labels: At least one label is required');
             }
             return onSubmit(parsed);
           }}

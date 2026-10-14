@@ -26,7 +26,7 @@ import {
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
 } from '../../../reducers/brokerapp/reducer';
-import { validateLabelEntries } from '../../../validation/k8s';
+import { validateLabelEntries, validateRequiredMatchLabels } from '../../../validation/k8s';
 
 export interface SelectorSectionProps {
   namespace: string;
@@ -80,7 +80,10 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
     [state.matchLabels],
   );
 
-  const matchLabelsError = validateLabelEntries(state.matchLabels) ?? undefined;
+  const matchLabelsError =
+    validateRequiredMatchLabels(state.matchLabels) ??
+    validateLabelEntries(state.matchLabels) ??
+    undefined;
   const duplicateMatchLabelKeys = React.useMemo(() => {
     const counts = new Map<string, number>();
     state.matchLabels.forEach(({ key }) => {
@@ -139,7 +142,7 @@ export const SelectorSection: React.FC<SelectorSectionProps> = ({ namespace }) =
 
   return (
     <FormSection title={t('Service Selector')}>
-      <FormGroup fieldId="brokerapp-selector">
+      <FormGroup fieldId="brokerapp-selector" isRequired>
         <FormHelperText>
           <HelperText>
             <HelperTextItem>
