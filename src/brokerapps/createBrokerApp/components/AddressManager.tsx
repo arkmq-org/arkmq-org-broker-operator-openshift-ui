@@ -156,7 +156,7 @@ export const AddressManager: React.FC = () => {
               <CardBody>
                 <Stack hasGutter>
                   <StackItem>
-                    <LabelGroup>
+                    <LabelGroup numLabels={5}>
                       <Label color={OWNERSHIP_COLORS[entry.ownership]} isCompact>
                         {t(OWNERSHIP_LABELS[entry.ownership])}
                       </Label>

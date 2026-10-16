@@ -10,12 +10,14 @@ const brokerApp: BrokerAppCR = {
     name: 'my-payment-app',
     namespace: 'default',
     labels: { app: 'payment' },
+    resourceVersion: '42',
   },
   spec: {
+    addresses: [{ address: 'payment.transactions' }],
     capabilities: [
       {
         producerOf: [{ address: 'payment.transactions' }],
-        consumerOf: [{ address: 'payment.requests' }],
+        consumerOf: [{ address: 'payment.requests', appName: 'orders', appNamespace: 'prod' }],
       },
     ],
   },
@@ -46,30 +48,32 @@ describe('BrokerAppOverviewTab', () => {
     expect(screen.getByText('app=payment')).toBeInTheDocument();
     expect(screen.getByText('Metrics')).toBeInTheDocument();
     expect(screen.getByTestId('broker-app-connection-information')).toBeInTheDocument();
-    expect(screen.getByTestId('broker-app-messaging-capabilities')).toBeInTheDocument();
+    expect(screen.getByTestId('broker-app-addresses-section')).toBeInTheDocument();
     expect(screen.getByTestId('resource-conditions-table')).toBeInTheDocument();
     expect(screen.getByText('Provisioned')).toBeInTheDocument();
     expect(screen.getByText('Application provisioned to broker')).toBeInTheDocument();
   });
 
-  it('skips labels section when obj is not provided', () => {
+  it('skips labels and addresses sections when obj is not provided', () => {
     render(<BrokerAppOverviewTab />);
 
     expect(screen.getByTestId('broker-app-overview-tab')).toBeInTheDocument();
     expect(screen.queryByTestId('resource-labels-and-annotations')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('broker-app-addresses-section')).not.toBeInTheDocument();
     expect(screen.getByText('Metrics')).toBeInTheDocument();
     expect(screen.getByText('No conditions')).toBeInTheDocument();
   });
 
   it('shows connection information when the app is provisioned', () => {
     render(<BrokerAppOverviewTab obj={brokerApp} />);
-    // ClipboardCopy renders a TextInput — assert via display value.
     expect(screen.getByDisplayValue('ex-aao.default.svc.cluster.local')).toBeInTheDocument();
   });
 
-  it('shows messaging capabilities', () => {
+  it('displays hydrated addresses with ownership and direction', () => {
     render(<BrokerAppOverviewTab obj={brokerApp} />);
-    expect(screen.getByTestId('producer-address-payment.transactions')).toBeInTheDocument();
-    expect(screen.getByTestId('consumer-address-payment.requests')).toBeInTheDocument();
+    expect(screen.getByText('payment.transactions')).toBeInTheDocument();
+    expect(screen.getByText('payment.requests')).toBeInTheDocument();
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('External')).toBeInTheDocument();
   });
 });

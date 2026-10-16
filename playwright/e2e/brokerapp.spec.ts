@@ -555,11 +555,11 @@ spec:
       console.log(`✓ Provisioned service link navigated to ${SERVICE_NAME} detail`);
     });
 
-    // ── Test: messaging capabilities shows addresses in correct sections ───
+    // ── Test: addresses section shows hydrated address cards ────────────────
     // Depends on 'multiple producerOf addresses appear in spec' having run first and
     // created e2e-app-multi-produces with QUEUE.ORDERS/INVOICES/NOTIFICATIONS in producerOf.
 
-    test('messaging capabilities shows producer addresses and empty consumer section', async ({
+    test('addresses section shows producer address cards with direction labels', async ({
       page,
     }) => {
       const appName = 'e2e-app-multi-produces';
@@ -568,29 +568,24 @@ spec:
       const appDetailsUrl = `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerApp/${appName}`;
       await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
       await page.goto(appDetailsUrl, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('[data-test="broker-app-messaging-capabilities"]', {
+      await page.waitForSelector('[data-test="broker-app-addresses-section"]', {
         timeout: 30000,
       });
 
+      const addressList = page.locator('[data-test="address-list"]');
       for (const addr of producerAddresses) {
-        await expect(page.locator(`[data-test="producer-address-${addr}"]`)).toBeVisible({
-          timeout: 15000,
-        });
-        console.log(`✓ Producer address "${addr}" visible in Produces To`);
+        await expect(addressList.getByText(addr)).toBeVisible({ timeout: 15000 });
+        console.log(`✓ Address "${addr}" visible in addresses section`);
       }
 
-      await expect(
-        page
-          .locator('[data-test="broker-app-messaging-capabilities"]')
-          .getByText('No addresses configured'),
-      ).toBeVisible({ timeout: 15000 });
-      console.log(`✓ Consumes From shows empty state`);
+      // Each address card should show a "Produces" direction label.
+      const produceLabels = addressList.getByText('Produces');
+      await expect(produceLabels.first()).toBeVisible({ timeout: 15000 });
+      console.log(`✓ Produces direction labels visible on address cards`);
 
-      // Confirm no producer address leaks into the consumer section.
-      for (const addr of producerAddresses) {
-        await expect(page.locator(`[data-test="consumer-address-${addr}"]`)).not.toBeVisible();
-      }
-      console.log(`✓ No producer address appears in Consumes From`);
+      // No "Consumes" direction label should be present for producer-only addresses.
+      await expect(addressList.getByText('Consumes')).not.toBeVisible();
+      console.log(`✓ No Consumes label on producer-only addresses`);
     });
   });
 

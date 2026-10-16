@@ -5,7 +5,7 @@ import type { BrokerAppCR } from '../../../../k8s/types';
 import { ConditionsTable } from '../../../../shared-components/resourceDetails/ConditionsTable';
 import { ResourceLabelsAndAnnotations } from '../../../../shared-components/resourceDetails/ResourceLabelsAndAnnotations';
 import { ConnectionInformationSection } from './connectionInformation/ConnectionInformationSection';
-import { MessagingCapabilitiesSection } from './messagingCapabilities/MessagingCapabilitiesSection';
+import { AddressesSection } from './addresses/AddressesSection';
 import { BrokerAppMetrics } from './metrics/BrokerAppMetrics';
 
 export interface BrokerAppOverviewTabProps {
@@ -37,9 +37,11 @@ export const BrokerAppOverviewTab: FC<BrokerAppOverviewTabProps> = ({ obj }) => 
         <StackItem>
           <ConnectionInformationSection service={obj?.status?.service} />
         </StackItem>
-        <StackItem>
-          <MessagingCapabilitiesSection capabilities={obj?.spec.capabilities} />
-        </StackItem>
+        {obj ? (
+          <StackItem>
+            <AddressesSection brokerApp={obj} />
+          </StackItem>
+        ) : null}
         <StackItem>
           <ConditionsTable conditions={obj?.status?.conditions} />
         </StackItem>
