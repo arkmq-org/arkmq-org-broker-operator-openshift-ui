@@ -1,6 +1,9 @@
 import { Page } from '@playwright/test';
 
-export async function login(page: Page, username: string, password: string) {
+export async function login(page: Page, username?: string, password?: string) {
+  const user = process.env.KUBEADMIN_USERNAME || username || 'kubeadmin';
+  const pass = process.env.KUBEADMIN_PASSWORD || password || 'kubeadmin';
+
   // Set up console user settings before navigation
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -12,22 +15,54 @@ export async function login(page: Page, username: string, password: string) {
   // Navigate to the application
   await page.goto('/');
 
+  // If already logged in, no need to perform OAuth flow
+  try {
+    await page.waitForURL(
+      (url) => url.toString().includes('oauth-openshift') || url.pathname.includes('/k8s/'),
+      { timeout: 10000 },
+    );
+    if (!page.url().includes('oauth-openshift')) {
+      console.log('✓ Already authenticated on console');
+      return;
+    }
+  } catch {
+    // Continue with OAuth
+  }
+
   // Handle the OAuth redirect
-  await page.waitForURL('https://oauth-openshift.apps-crc.testing/**', {
+  await page.waitForURL(/oauth-openshift|oauth\/authorize/i, {
     timeout: 30000,
   });
 
+  // If on IDP selection page (multiple IDPs on OpenShift), pick kube:admin for kubeadmin, any other IDP otherwise
+  const isKubeAdmin = user === 'kubeadmin' || user === 'kube:admin';
+  const idpSelector = page
+    .locator(
+      isKubeAdmin
+        ? 'a[title="Log in with kube:admin"]'
+        : 'a[title^="Log in with"]:not([title="Log in with kube:admin"])',
+    )
+    .first();
+  if (await idpSelector.isVisible({ timeout: 5000 }).catch(() => false)) {
+    console.log(`Clicking IDP selection link: ${await idpSelector.textContent()}`);
+    await idpSelector.click();
+  }
+
   // Fill in login credentials
+  await page.locator('input#inputUsername').waitFor({ state: 'visible', timeout: 30000 });
   await page.locator('input#inputUsername').clear();
-  await page.locator('input#inputUsername').fill(username);
-  await page.locator('input#inputPassword').fill(password);
+  await page.locator('input#inputUsername').fill(user);
+  await page.locator('input#inputPassword').fill(pass);
 
   // Click login button
-  await page.locator('button[type=submit]:has-text("Log in")').click();
+  await page.locator('button[type=submit]:has-text("Log in"), button[type=submit]').click();
 
   // Wait for redirect back to localhost
-  await page.waitForURL('http://localhost:9000/**', { timeout: 30000 });
+  await page.waitForURL('http://localhost:9000/**', { timeout: 45000 });
 
   // Wait for the page to be fully loaded and interactive
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState('networkidle').catch(() => {
+    // networkidle may never be reached while the console keeps polling; domcontentloaded is enough
+  });
 }
