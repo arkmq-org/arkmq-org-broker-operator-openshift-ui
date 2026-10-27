@@ -30,6 +30,7 @@ const {
   createServiceCertificate,
   createAppCertificate,
   createPrometheusCertificate,
+  detectOperatorNamespace,
 } = require('./setup-pki');
 const { exec } = require('child_process');
 const { promisify } = require('util');
@@ -69,7 +70,7 @@ Options:
   --help                      Show this help message
 
 Examples:
-  # Setup the PKI infrastructure (creates operator cert in 'default' namespace)
+  # Setup the PKI infrastructure (creates operator cert in the operator's namespace)
   yarn chain-of-trust setup
 
   # Create certificate for a BrokerService
@@ -84,8 +85,9 @@ Examples:
   # Cleanup all PKI resources
   yarn chain-of-trust cleanup
 
-Note: The operator certificate is always created in the 'default' namespace where
-      the operator expects to find it (hardcoded DefaultOperatorCertSecretName).
+Note: The operator certificate is created in the namespace where the operator pod runs
+      (auto-detected), because the operator looks it up in its own namespace.
+      Falls back to the 'default' namespace if no operator pod is found.
 `);
   process.exit(0);
 }
@@ -297,7 +299,7 @@ async function createPrometheusCert() {
  * Cleanup function - removes PKI infrastructure
  */
 async function cleanup() {
-  const operatorCertNamespace = 'default';
+  const operatorCertNamespace = await detectOperatorNamespace();
 
   console.log('\n🧹 Cleaning up Chain of Trust Resources\n');
 
@@ -308,7 +310,7 @@ async function cleanup() {
       `kubectl delete bundle ${resourceNames.bundle} -n cert-manager --ignore-not-found=true`,
     );
 
-    // Delete operator certificate from default namespace
+    // Delete operator certificate from the operator namespace
     console.log(`  Deleting operator certificate from ${operatorCertNamespace}...`);
     await execAsync(
       `kubectl delete certificate ${resourceNames.operatorCert} -n ${operatorCertNamespace} --ignore-not-found=true`,

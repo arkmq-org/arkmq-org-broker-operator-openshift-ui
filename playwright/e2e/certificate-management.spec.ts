@@ -32,6 +32,13 @@ test.describe('Certificate Management E2E', () => {
   test('complete workflow: setup, deploy, and cleanup', async () => {
     test.setTimeout(3_600_000); // 60 minutes
 
+    // The operator cert lives in the namespace where the operator pod runs
+    const operatorNamespace =
+      kubectl(
+        `get pods -A -l app.kubernetes.io/name=arkmq-org-broker-operator -o jsonpath='{.items[0].metadata.namespace}'`,
+        { ignoreError: true },
+      ).replace(/^'|'$/g, '') || 'default';
+
     // Step 1: Setup PKI infrastructure
     console.log('\n📦 Step 1: Setting up PKI infrastructure...');
     const setupOutput = yarn('chain-of-trust setup', { timeout: 1_200_000 });
@@ -40,7 +47,7 @@ test.describe('Certificate Management E2E', () => {
     expect(setupOutput).toContain('ClusterIssuer: broker-ca-issuer');
     expect(setupOutput).toContain('Bundle: arkmq-org-broker-manager-ca');
     expect(setupOutput).toContain('Certificate: arkmq-org-broker-manager-cert');
-    expect(setupOutput).toContain('in default namespace');
+    expect(setupOutput).toContain(`in ${operatorNamespace} namespace`);
 
     // Verify ClusterIssuers are ready
     const rootIssuer = kubectl(
@@ -53,9 +60,8 @@ test.describe('Certificate Management E2E', () => {
     );
     expect(caIssuer).toBe('True');
 
-    // Verify operator certificate was created in default namespace
-    const operatorNamespace = 'default';
-    console.log(`  ✓ Operator certificate created in default namespace`);
+    // Verify operator certificate was created in the operator namespace
+    console.log(`  ✓ Operator certificate created in ${operatorNamespace} namespace`);
     expect(secretExists('arkmq-org-broker-manager-cert', operatorNamespace)).toBe(true);
 
     // Step 2: Create test namespace
@@ -183,8 +189,8 @@ spec:
     const secretNames = secretsJson.items.map((s) => s.metadata.name);
 
     expect(secretNames).toContain('arkmq-org-broker-manager-ca');
-    // Operator cert is in default namespace (hardcoded in operator)
-    expect(secretExists('arkmq-org-broker-manager-cert', 'default')).toBe(true);
+    // Operator cert is in the operator namespace
+    expect(secretExists('arkmq-org-broker-manager-cert', operatorNamespace)).toBe(true);
     expect(secretNames).toContain(`${SERVICE_NAME}-broker-cert`);
     expect(secretNames).toContain(`${APP_NAME}-app-cert`);
     expect(secretNames).toContain(`${APP_NAME}-binding-secret`);
@@ -341,7 +347,7 @@ ${bindingSecretEnv}
 
     console.log('\n📊 Summary:');
     console.log('  ✓ PKI infrastructure setup');
-    console.log('  ✓ Operator certificate created in default namespace');
+    console.log(`  ✓ Operator certificate created in ${operatorNamespace} namespace`);
     console.log('  ✓ BrokerService certificate created');
     console.log('  ✓ BrokerApp certificate created');
     console.log('  ✓ BrokerService deployed (Deployed=True)');

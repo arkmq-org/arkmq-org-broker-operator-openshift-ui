@@ -467,13 +467,13 @@ spec:
 
 /**
  * Creates the complete PKI infrastructure (cluster infra + trust bundle + operator cert)
- * Note: The operator cert is always created in the 'default' namespace where the operator
- * is hardcoded to look for it (see DefaultOperatorCertSecretName in operator code)
+ * Note: The operator looks up its cert in its own namespace (OPERATOR_NAMESPACE), so the cert
+ * is created in the namespace where the operator pod runs (falls back to 'default').
  *
  * @returns {Promise<object>} All created resource names
  */
 async function setupCompletePKI() {
-  const operatorCertNamespace = 'default';
+  const operatorCertNamespace = await detectOperatorNamespace();
   const clusterResources = await createClusterInfrastructure();
   const trustResources = await createTrustBundle(clusterResources.rootSecret);
   const operatorResources = await createOperatorCert(
