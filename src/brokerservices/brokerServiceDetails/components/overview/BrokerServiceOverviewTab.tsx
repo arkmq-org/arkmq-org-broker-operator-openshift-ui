@@ -7,6 +7,7 @@ import { ResourceLabelsAndAnnotations } from '../../../../shared-components/reso
 import { BrokerServiceMetrics } from './Metrics/BrokerServiceMetrics';
 import { LoadedAppsSection } from './loadedApps/LoadedAppsSection';
 import { boundAppNamespaces } from './loadedApps/useBoundBrokerApps';
+import { RejectedAppsSection } from './rejectedApps/RejectedAppsSection';
 
 export interface BrokerServiceOverviewTabProps {
   /** Watched BrokerService CR passed through HorizontalNav. */
@@ -35,6 +36,7 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
           />
         </StackItem>
         <StackItem>{obj ? <LoadedAppsSection brokerService={obj} /> : null}</StackItem>
+        <StackItem>{obj ? <RejectedAppsSection brokerService={obj} /> : null}</StackItem>
         <StackItem>
           <ConditionsTable conditions={obj?.status?.conditions} />
         </StackItem>

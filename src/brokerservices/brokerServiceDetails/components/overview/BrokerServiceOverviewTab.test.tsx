@@ -53,7 +53,38 @@ describe('BrokerServiceOverviewTab', () => {
     expect(screen.getByTestId('broker-service-overview-tab')).toBeInTheDocument();
     expect(screen.queryByTestId('resource-labels-and-annotations')).not.toBeInTheDocument();
     expect(screen.queryByTestId('broker-service-loaded-apps')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('broker-service-rejected-apps')).not.toBeInTheDocument();
     expect(screen.getByText('Metrics')).toBeInTheDocument();
     expect(screen.getByText('No conditions')).toBeInTheDocument();
+  });
+
+  it('hides rejected apps when status.rejectedApps is absent', () => {
+    render(<BrokerServiceOverviewTab obj={brokerService} />);
+    expect(screen.queryByTestId('broker-service-rejected-apps')).not.toBeInTheDocument();
+  });
+
+  it('shows rejected apps when status.rejectedApps has entries', () => {
+    render(
+      <BrokerServiceOverviewTab
+        obj={{
+          ...brokerService,
+          status: {
+            ...brokerService.status,
+            rejectedApps: [
+              {
+                name: 'app-b',
+                namespace: 'default',
+                reason: 'does not match service labels',
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('broker-service-rejected-apps')).toBeInTheDocument();
+    expect(screen.getByTestId('rejected-app-reason-default-app-b')).toHaveTextContent(
+      'does not match service labels',
+    );
   });
 });

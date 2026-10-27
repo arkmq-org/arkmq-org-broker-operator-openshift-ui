@@ -100,11 +100,29 @@ export interface BrokerServiceSpec {
   }[];
 }
 
+/**
+ * A BrokerApp the operator rejected during provisioning validation for a BrokerService.
+ * Populated on BrokerService status when label/CEL (and similar) checks fail for a candidate app.
+ */
+export interface RejectedApp {
+  /** Rejected BrokerApp name. */
+  name: string;
+  /** Rejected BrokerApp namespace. */
+  namespace: string;
+  /** Operator-supplied explanation of why provisioning was refused. */
+  reason: string;
+}
+
 export type BrokerService = K8sResourceCommon & {
   spec?: BrokerServiceSpec;
   status?: {
     conditions?: K8sResourceCondition[];
     /** BrokerApps applied to this service, each as `<namespace>/<name>@<generation>`. */
     provisionedApps?: string[];
+    /**
+     * BrokerApps rejected during provisioning validation on this service.
+     * Absent or empty when there are no rejections to show.
+     */
+    rejectedApps?: RejectedApp[];
   };
 };
