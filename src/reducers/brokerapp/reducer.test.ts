@@ -622,7 +622,7 @@ describe('address reducer actions', () => {
     expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([{ address: 'external.queue' }]);
   });
 
-  it('UPDATE_ADDRESS ownership to external clears pubSub and subscriptions', () => {
+  it('UPDATE_ADDRESS ownership to external keeps pubSub and subscriptions', () => {
     const state = applyActions(
       { type: 'ADD_ADDRESS' },
       {
@@ -631,8 +631,82 @@ describe('address reducer actions', () => {
       },
       { type: 'UPDATE_ADDRESS', payload: { index: 0, ownership: 'external' } },
     );
-    expect(state.addresses[0].pubSub).toBeUndefined();
+    expect(state.addresses[0].pubSub).toBe(true);
+    expect(state.addresses[0].subscriptions).toEqual(['sub-a']);
+  });
+
+  it('writes an external pub/sub consumer as a consumerOf entry with its subscriptions', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'IDENT.RESULTS',
+          ownership: 'external',
+          direction: 'consumes',
+          pubSub: true,
+          subscriptions: ['notifier'],
+          appName: 'matcher',
+          appNamespace: 'acme-ident',
+        },
+      },
+    );
+    expect(state.cr.spec.addresses).toBeUndefined();
+    expect(state.cr.spec.sharedAddresses).toBeUndefined();
+    expect(state.cr.spec.capabilities).toEqual([
+      {
+        consumerOf: [
+          {
+            address: 'IDENT.RESULTS',
+            appName: 'matcher',
+            appNamespace: 'acme-ident',
+            subscriptions: ['notifier'],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('writes an external pub/sub producer as a producerOf entry with pubSub', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'IDENT.RESULTS',
+          ownership: 'external',
+          direction: 'produces',
+          pubSub: true,
+          appName: 'matcher',
+          appNamespace: 'acme-ident',
+        },
+      },
+    );
+    expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([
+      { address: 'IDENT.RESULTS', appName: 'matcher', appNamespace: 'acme-ident', pubSub: true },
+    ]);
+  });
+
+  it('turning pubSub off on an external address drops its subscriptions', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'IDENT.RESULTS',
+          ownership: 'external',
+          direction: 'consumes',
+          pubSub: true,
+          subscriptions: ['notifier'],
+        },
+      },
+      { type: 'UPDATE_ADDRESS', payload: { index: 0, pubSub: false } },
+    );
     expect(state.addresses[0].subscriptions).toBeUndefined();
+    expect(state.cr.spec.capabilities?.[0]?.consumerOf).toEqual([{ address: 'IDENT.RESULTS' }]);
   });
 
   it('UPDATE_ADDRESS direction to consumes writes to consumerOf', () => {
@@ -957,6 +1031,99 @@ describe('SET_MODEL hydration', () => {
       direction: 'produces',
       appName: 'other-app',
       appNamespace: 'other-ns',
+    });
+  });
+
+  it('hydrates an external address consumed through subscriptions as pub/sub', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        capabilities: [
+          {
+            consumerOf: [
+              {
+                address: 'IDENT.RESULTS',
+                appName: 'matcher',
+                appNamespace: 'acme-ident',
+                subscriptions: ['registry'],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(state.addresses).toHaveLength(1);
+    expect(state.addresses[0]).toMatchObject({
+      address: 'IDENT.RESULTS',
+      ownership: 'external',
+      direction: 'consumes',
+      pubSub: true,
+      subscriptions: ['registry'],
+    });
+  });
+
+  it('hydrates an external address produced with pubSub as pub/sub', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        capabilities: [
+          {
+            producerOf: [
+              {
+                address: 'IDENT.RESULTS',
+                appName: 'matcher',
+                appNamespace: 'acme-ident',
+                pubSub: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(state.addresses[0]).toMatchObject({ ownership: 'external', pubSub: true });
+    expect(state.addresses[0].subscriptions).toBeUndefined();
+  });
+
+  it('round-trips external subscriptions through SET_MODEL hydration and CR sync', () => {
+    const capabilities = [
+      {
+        consumerOf: [
+          {
+            address: 'IDENT.RESULTS',
+            appName: 'matcher',
+            appNamespace: 'acme-ident',
+            subscriptions: ['registry', 'audit'],
+          },
+        ],
+      },
+    ];
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', { capabilities }),
+    });
+    expect(state.cr.spec.capabilities).toEqual(capabilities);
+  });
+
+  it('keeps the subscriptions of an external address consumed and produced', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        capabilities: [
+          {
+            producerOf: [{ address: 'T', appName: 'a', appNamespace: 'n', pubSub: true }],
+            consumerOf: [{ address: 'T', appName: 'a', appNamespace: 'n', subscriptions: ['s'] }],
+          },
+        ],
+      }),
+    });
+    expect(state.addresses[0]).toMatchObject({
+      direction: 'both',
+      pubSub: true,
+      subscriptions: ['s'],
+    });
+    expect(state.cr.spec.capabilities?.[0]).toEqual({
+      producerOf: [{ address: 'T', appName: 'a', appNamespace: 'n', pubSub: true }],
+      consumerOf: [{ address: 'T', appName: 'a', appNamespace: 'n', subscriptions: ['s'] }],
     });
   });
 
