@@ -244,6 +244,7 @@
   "So apps targeting it will also discover this one": "So apps targeting it will also discover this one",
   "Status": "Status",
   "Subscriptions": "Subscriptions",
+  "Subscriptions are only available when consuming an external address. Check Consumes to subscribe.": "Subscriptions are only available when consuming an external address. Check Consumes to subscribe.",
   "Test the connection to the broker service using this application's credentials.": "Test the connection to the broker service using this application's credentials.",
   "The name {{favoriteName}} already exists in your favorites. Choose a unique name to save to your favorites.": "The name {{favoriteName}} already exists in your favorites. Choose a unique name to save to your favorites.",
   "The name used to route messages on the broker. Private and shared addresses are provisioned with a lifecycle tied to this app.": "The name used to route messages on the broker. Private and shared addresses are provisioned with a lifecycle tied to this app.",

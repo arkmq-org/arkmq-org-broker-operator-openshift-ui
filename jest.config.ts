@@ -15,11 +15,15 @@ const config: Config = {
       },
     ],
   },
-  transformIgnorePatterns: ['/node_modules/(?!(@patternfly)/)'],
+  // cel-js and its parser, chevrotain, ship as ES modules only.
+  transformIgnorePatterns: ['/node_modules/(?!(@patternfly|cel-js|chevrotain|@chevrotain|lodash-es)/)'],
   moduleNameMapper: {
     '^.+\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.ts',
     '@openshift-console/(.*)': '<rootDir>/__mocks__/dynamic-plugin-sdk.ts',
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
+    // chevrotain only declares an "import" export, which Jest's require resolution ignores.
+    '^chevrotain$': '<rootDir>/node_modules/chevrotain/lib/src/api.js',
+    '^@chevrotain/(.*)$': '<rootDir>/node_modules/@chevrotain/$1/lib/src/api.js',
   },
   modulePaths: ['<rootDir>'],
   roots: ['<rootDir>/src'],
