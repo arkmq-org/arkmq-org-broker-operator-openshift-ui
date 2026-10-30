@@ -24,6 +24,11 @@ const SERVICE_NAME = 'e2e-broker-service';
 // ── Lifecycle tests (kubectl-only, no browser) ───────────────────────────────
 
 test.describe('BrokerApp lifecycle', () => {
+  // Tests share state (e2e-broker-service / e2e-app-matching created by the first test).
+  // Serial mode makes a failure retry the whole group from the start in a fresh worker,
+  // instead of re-running only the failed test against a namespace recreated by beforeAll.
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeAll(() => {
     test.setTimeout(3_600_000); // 60 minutes
 
