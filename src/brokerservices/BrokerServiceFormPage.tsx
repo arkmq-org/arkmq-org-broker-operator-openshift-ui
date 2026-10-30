@@ -132,13 +132,6 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
               if (crError) {
                 return { ok: false, error: crError };
               }
-              const metadataLabels = parsed.metadata?.labels;
-              if (!metadataLabels || !Object.keys(metadataLabels).length) {
-                return {
-                  ok: false,
-                  error: 'metadata.labels: At least one label is required',
-                };
-              }
               dispatch({
                 type: 'SET_MODEL',
                 payload: parsed,
