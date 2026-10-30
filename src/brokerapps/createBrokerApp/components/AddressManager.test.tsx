@@ -314,17 +314,17 @@ describe('AddressManager — direction validation', () => {
   });
 });
 
-describe('AddressManager — external ownership hides pubSub', () => {
+describe('AddressManager — external ownership offers pubSub', () => {
   beforeEach(() => {
     render(<Wrapper />);
     addEntry();
     saveModal();
   });
 
-  it('hides the pubSub switch when ownership is changed to external', () => {
+  it('shows the pubSub switch when ownership is changed to external', () => {
     openEditModal(0);
     fireEvent.click(screen.getByText('External'));
-    expect(screen.queryByTestId('address-pubsub-0')).not.toBeInTheDocument();
+    expect(screen.getByTestId('address-pubsub-0')).toBeInTheDocument();
   });
 });
 
@@ -532,7 +532,7 @@ const MOCK_BROKER_APPS = [
   },
   {
     metadata: { name: 'event-publisher', namespace: 'service-project' },
-    spec: { sharedAddresses: [{ address: 'EVENTS.TOPIC' }] },
+    spec: { sharedAddresses: [{ address: 'EVENTS.TOPIC', pubSub: true }] },
   },
   {
     metadata: { name: 'inventory-app', namespace: 'ns-alpha' },
@@ -656,6 +656,60 @@ describe('AddressManager — external address typeahead', () => {
   });
 });
 
+describe('AddressManager — subscribing to an external pub/sub address', () => {
+  beforeEach(() => {
+    setupExternalMocks();
+    render(<Wrapper />);
+    addEntry();
+  });
+
+  afterEach(async () => {
+    await waitForPopperUpdates();
+    mockWatchResource.mockReset();
+  });
+
+  const consumeOnly = () => {
+    fireEvent.click(screen.getByTestId('address-direction-produces-0'));
+    fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
+  };
+
+  it('turns Pub/Sub on when the owner declared the address pub/sub', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
+    expect(screen.getByText('Add subscription')).toBeInTheDocument();
+  });
+
+  it('leaves Pub/Sub off when the owner declared the address point-to-point', async () => {
+    await selectExternalApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
+    expect(screen.getByTestId('address-pubsub-0')).not.toBeChecked();
+  });
+
+  it('requires a subscription before a pub/sub external consumer can be saved', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
+    consumeOnly();
+    expect(
+      screen.getByText('At least one subscription is required for pub/sub consumers'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('modal-done-btn')).toBeDisabled();
+    addSub('notifier');
+    expect(screen.getByTestId('modal-done-btn')).not.toBeDisabled();
+  });
+
+  it('shows the subscription and Pub/Sub on the card after saving', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
+    consumeOnly();
+    addSub('notifier');
+    saveModal();
+    expect(screen.getByText('service-project/event-publisher')).toBeInTheDocument();
+    expect(screen.getByText('Pub/Sub')).toBeInTheDocument();
+    expect(screen.getByText('notifier')).toBeInTheDocument();
+  });
+});
+
 describe('AddressManager — switching ownership away from external', () => {
   beforeEach(() => {
     setupExternalMocks();
@@ -700,6 +754,65 @@ describe('AddressManager — switching ownership away from external', () => {
     expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
     expect(screen.getByText('Shared')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
+  });
+});
+
+describe('AddressManager — owner-locked Pub/Sub inference', () => {
+  beforeEach(() => {
+    setupExternalMocks();
+    render(<Wrapper />);
+    addEntry();
+  });
+
+  afterEach(async () => {
+    await waitForPopperUpdates();
+    mockWatchResource.mockReset();
+  });
+
+  it('infers Pub/Sub from the owner when the address is typed, not selected from the list', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
+    await waitForPopperUpdates();
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
+  });
+
+  it('infers point-to-point from the owner when the address is typed', async () => {
+    await selectExternalApp();
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.change(addressInput, { target: { value: 'ORDERS.NEW' } });
+    await waitForPopperUpdates();
+    expect(screen.getByTestId('address-pubsub-0')).not.toBeChecked();
+  });
+
+  it('prevents toggling the switch when the owner declares the address routing', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
+    await waitForPopperUpdates();
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
+    fireEvent.click(screen.getByTestId('address-pubsub-0'));
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
+  });
+
+  it('keeps the switch editable when the address does not match the owner', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.change(addressInput, { target: { value: 'CUSTOM.ADDR' } });
+    await waitForPopperUpdates();
+    expect(screen.getByTestId('address-pubsub-0')).not.toBeChecked();
+    fireEvent.click(screen.getByTestId('address-pubsub-0'));
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
+  });
+
+  it('preserves the owner-locked Pub/Sub after save and reopen', async () => {
+    await selectExternalApp('service-project', 'event-publisher');
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
+    await waitForPopperUpdates();
+    saveModal();
+    openEditModal(0);
+    expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
   });
 });
 

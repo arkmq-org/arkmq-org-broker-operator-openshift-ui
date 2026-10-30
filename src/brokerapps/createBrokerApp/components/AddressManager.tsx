@@ -156,6 +156,7 @@ export const AddressManager: React.FC = () => {
               <CardBody>
                 <Stack hasGutter>
                   <StackItem>
+                    {/* Ownership, two directions, Pub/Sub and the owner: never collapse them. */}
                     <LabelGroup numLabels={5}>
                       <Label color={OWNERSHIP_COLORS[entry.ownership]} isCompact>
                         {t(OWNERSHIP_LABELS[entry.ownership])}
@@ -170,7 +171,7 @@ export const AddressManager: React.FC = () => {
                           {t('Consumes')}
                         </Label>
                       )}
-                      {!!(entry.ownership !== 'external' && entry.pubSub) && (
+                      {!!entry.pubSub && (
                         <Label color="teal" isCompact>
                           {t('Pub/Sub')}
                         </Label>

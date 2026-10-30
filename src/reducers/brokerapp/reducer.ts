@@ -212,6 +212,8 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
       capabilityByAddress.set(entry.address, entry);
     }
   }
+  const producerByAddress = new Map(producerEntries.map((e) => [e.address, e]));
+  const consumerByAddress = new Map(consumerEntries.map((e) => [e.address, e]));
 
   const resolveDirection = (name: string): AddressDirection => {
     const isProducer = producerSet.has(name);
@@ -250,10 +252,16 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   for (const addr of [...producerNames, ...consumerNames]) {
     if (!seenCapability.has(addr) && !ownedAddressNames.has(addr)) {
       const capEntry = capabilityByAddress.get(addr);
+      // An external address is pub/sub when its producer says so, or when it is
+      // consumed through subscriptions, as the operator infers it.
+      const subscriptions = consumerByAddress.get(addr)?.subscriptions;
+      const pubSub = !!producerByAddress.get(addr)?.pubSub || !!subscriptions?.length;
       addresses.push({
         address: addr,
         ownership: 'external',
         direction: resolveDirection(addr),
+        ...(pubSub ? { pubSub } : {}),
+        ...(subscriptions?.length ? { subscriptions: [...subscriptions] } : {}),
         appName: capEntry?.appName,
         appNamespace: capEntry?.appNamespace,
       });
@@ -293,10 +301,6 @@ export const brokerAppReducer = (
         const updated = { ...e, ...changes };
         if (changes.subscriptions) {
           updated.subscriptions = [...changes.subscriptions];
-        }
-        if (changes.ownership === 'external') {
-          updated.pubSub = undefined;
-          updated.subscriptions = undefined;
         }
         if (changes.ownership && changes.ownership !== 'external') {
           updated.appName = undefined;

@@ -139,20 +139,31 @@ export const AddressEditModal: React.FC<{
       .sort();
   }, [allBrokerApps, appsLoaded, confirmedNamespace, localAppName]);
 
-  const filteredSharedAddresses = React.useMemo(() => {
+  // The BrokerApp owning the external address, once its namespace and name are confirmed.
+  const targetApp = React.useMemo(() => {
     if (!confirmedAppName || !confirmedNamespace || !appsLoaded || !Array.isArray(allBrokerApps))
-      return [];
-    const targetApp = allBrokerApps.find(
+      return undefined;
+    return allBrokerApps.find(
       (app) =>
         app.metadata?.namespace === confirmedNamespace && app.metadata.name === confirmedAppName,
     );
-    if (!targetApp) return [];
-    return (targetApp.spec.sharedAddresses ?? [])
-      .map((a) => a.address)
-      .filter(Boolean)
-      .filter((addr) => addr.toLowerCase().includes(localAddress.toLowerCase()))
-      .sort();
-  }, [allBrokerApps, appsLoaded, confirmedNamespace, confirmedAppName, localAddress]);
+  }, [allBrokerApps, appsLoaded, confirmedNamespace, confirmedAppName]);
+
+  const filteredSharedAddresses = React.useMemo(
+    () =>
+      (targetApp?.spec.sharedAddresses ?? [])
+        .map((a) => a.address)
+        .filter(Boolean)
+        .filter((addr) => addr.toLowerCase().includes(localAddress.toLowerCase()))
+        .sort(),
+    [targetApp, localAddress],
+  );
+
+  // The operator rejects mixed semantics; when the owner declares this address, lock to its routing.
+  const ownerDeclared = isExternal
+    ? targetApp?.spec.sharedAddresses?.find((a) => a.address === localAddress)
+    : undefined;
+  const effectivePubSub = ownerDeclared ? !!ownerDeclared.pubSub : localPubSub;
 
   const localAddresses = state.addresses.map((e, i) =>
     i === index ? { ...e, address: localAddress } : e,
@@ -173,7 +184,7 @@ export const AddressEditModal: React.FC<{
       ? 'Without a direction this private address will only reserve the name on the broker'
       : undefined;
   const subscriptionError =
-    !isExternal && localPubSub && localConsumes && !localSubscriptions.length
+    effectivePubSub && localConsumes && !localSubscriptions.length
       ? 'At least one subscription is required for pub/sub consumers'
       : undefined;
   const hasPartialRef =
@@ -209,7 +220,7 @@ export const AddressEditModal: React.FC<{
         address: localAddress,
         ownership: localOwnership,
         direction: resolvedDirection,
-        pubSub: isExternal ? false : localPubSub,
+        pubSub: effectivePubSub,
         subscriptions: localSubscriptions,
         appName: isExternal ? localAppName.trim() || undefined : undefined,
         appNamespace: isExternal ? localAppNamespace.trim() || undefined : undefined,
@@ -379,6 +390,12 @@ export const AddressEditModal: React.FC<{
                   onSelect={(addr) => {
                     setLocalAddress(addr);
                     setNameTouched(true);
+                    // The owner decides the routing: referencing its address with the other
+                    // semantics would get the app rejected by the operator.
+                    const declared = targetApp?.spec.sharedAddresses?.find(
+                      (a) => a.address === addr,
+                    );
+                    if (declared) setLocalPubSub(!!declared.pubSub);
                   }}
                   onClose={() => {
                     setNameTouched(true);
@@ -466,43 +483,42 @@ export const AddressEditModal: React.FC<{
             </FormGroup>
           </StackItem>
 
-          {!isExternal && (
-            <StackItem>
-              <Split hasGutter>
-                <SplitItem>
-                  <Switch
-                    id={`address-pubsub-${String(index)}`}
-                    label={localPubSub ? t('Publish / Subscribe') : t('Point-to-Point')}
-                    isChecked={localPubSub}
-                    onChange={(_e, checked) => {
-                      setLocalPubSub(checked);
+          <StackItem>
+            <Split hasGutter>
+              <SplitItem>
+                <Switch
+                  id={`address-pubsub-${String(index)}`}
+                  label={effectivePubSub ? t('Publish / Subscribe') : t('Point-to-Point')}
+                  isChecked={effectivePubSub}
+                  isDisabled={!!ownerDeclared}
+                  onChange={(_e, checked) => {
+                    setLocalPubSub(checked);
+                  }}
+                  data-test={`address-pubsub-${String(index)}`}
+                />
+              </SplitItem>
+              <SplitItem>
+                <Tooltip
+                  content={t(
+                    'Toggles between publish/subscribe (multicast) and point-to-point (anycast) message routing. Publish/subscribe delivers messages to all subscribers. Point-to-point delivers to one consumer.',
+                  )}
+                >
+                  <button
+                    type="button"
+                    aria-label={t('More info for Pub/Sub field')}
+                    onClick={(e) => {
+                      e.preventDefault();
                     }}
-                    data-test={`address-pubsub-${String(index)}`}
-                  />
-                </SplitItem>
-                <SplitItem>
-                  <Tooltip
-                    content={t(
-                      'Toggles between publish/subscribe (multicast) and point-to-point (anycast) message routing. Publish/subscribe delivers messages to all subscribers. Point-to-point delivers to one consumer.',
-                    )}
+                    className={`${PREFIX}-help-icon`}
                   >
-                    <button
-                      type="button"
-                      aria-label={t('More info for Pub/Sub field')}
-                      onClick={(e) => {
-                        e.preventDefault();
-                      }}
-                      className={`${PREFIX}-help-icon`}
-                    >
-                      <OutlinedQuestionCircleIcon />
-                    </button>
-                  </Tooltip>
-                </SplitItem>
-              </Split>
-            </StackItem>
-          )}
+                    <OutlinedQuestionCircleIcon />
+                  </button>
+                </Tooltip>
+              </SplitItem>
+            </Split>
+          </StackItem>
 
-          {!isExternal && localPubSub && (
+          {effectivePubSub && (
             <StackItem>
               <FormGroup
                 label={t('Subscriptions')}
