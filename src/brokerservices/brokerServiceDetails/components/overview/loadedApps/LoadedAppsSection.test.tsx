@@ -19,7 +19,7 @@ const makeApp = (name: string, namespace = 'default'): BrokerAppCR => ({
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name, namespace },
-  spec: {},
+  spec: { serviceSelector: {} },
   status: {
     service: { name: 'my-messaging-service', namespace: 'default', assignedPort: 0 },
     conditions: [{ type: 'Deployed', status: K8sResourceConditionStatus.True }],

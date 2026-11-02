@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 export interface ResourceLabelsAndAnnotationsProps {
   /** CR whose labels and annotations are shown and edited. */
   resource: K8sResourceCommon;
-  /** Optional read-only key=value map rendered above Labels (e.g. spec.selector.matchLabels). */
+  /** Optional read-only key=value map rendered above Labels (e.g. spec.serviceSelector.matchLabels). */
   selectorLabels?: Record<string, string>;
 }
 

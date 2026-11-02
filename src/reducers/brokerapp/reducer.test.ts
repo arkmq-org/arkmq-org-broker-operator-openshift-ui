@@ -6,6 +6,7 @@ import {
   useBrokerAppFormDispatch,
 } from './reducer';
 import type { AddressOwnership } from './reducer';
+import type { BrokerAppSpec } from '../../k8s/types';
 
 describe('brokerAppReducer', () => {
   const ns = 'test-ns';
@@ -18,7 +19,7 @@ describe('brokerAppReducer', () => {
     expect(state.cr.metadata?.namespace).toBe(ns);
   });
 
-  it('REMOVE_MATCH_LABEL removes the label from spec.selector.matchLabels', () => {
+  it('REMOVE_MATCH_LABEL removes the label from spec.serviceSelector.matchLabels', () => {
     let state = createInitialBrokerAppState(ns);
     const id1 = state.matchLabels[0].id;
     state = brokerAppReducer(state, {
@@ -33,7 +34,7 @@ describe('brokerAppReducer', () => {
     });
     state = brokerAppReducer(state, { type: 'REMOVE_MATCH_LABEL', payload: id1 });
 
-    const matchLabels = state.cr.spec.selector?.matchLabels ?? {};
+    const matchLabels = state.cr.spec.serviceSelector.matchLabels ?? {};
     expect(matchLabels).toEqual({ tier: 'web' });
   });
 
@@ -55,7 +56,7 @@ describe('brokerAppReducer', () => {
       { key: 'key1', value: 'test' },
       { key: 'key1', value: 'some-value' },
     ]);
-    expect(state.cr.spec.selector?.matchLabels).toEqual({ key1: 'test' });
+    expect(state.cr.spec.serviceSelector.matchLabels).toEqual({ key1: 'test' });
   });
 
   it('SET_MODEL with preserveLabels keeps form match label rows when duplicates exist', () => {
@@ -79,7 +80,7 @@ describe('brokerAppReducer', () => {
         kind: 'BrokerApp',
         metadata: { name: 'from-yaml', namespace: ns },
         spec: {
-          selector: { matchLabels: { key1: 'test' } },
+          serviceSelector: { matchLabels: { key1: 'test' } },
           capabilities: [{ producerOf: [{ address: 'QUEUE.OUT' }] }],
         },
       },
@@ -87,7 +88,7 @@ describe('brokerAppReducer', () => {
     });
 
     expect(next.matchLabels).toEqual(state.matchLabels);
-    expect(next.cr.spec.selector?.matchLabels).toEqual({ key1: 'test' });
+    expect(next.cr.spec.serviceSelector.matchLabels).toEqual({ key1: 'test' });
     expect(next.cr.metadata?.name).toBe('from-yaml');
   });
 
@@ -118,7 +119,7 @@ describe('brokerAppReducer', () => {
         kind: 'BrokerApp',
         metadata: { name: 'from-yaml', namespace: ns },
         spec: {
-          selector: { matchLabels: { key1: 'value1', key2: 'something', key3: 'test' } },
+          serviceSelector: { matchLabels: { key1: 'value1', key2: 'something', key3: 'test' } },
           capabilities: [{ producerOf: [{ address: 'QUEUE.OUT' }] }],
         },
       },
@@ -131,7 +132,7 @@ describe('brokerAppReducer', () => {
       { key: 'key2', value: 'something' },
     ]);
     expect(next.matchLabels[3]).toMatchObject({ key: 'key3', value: 'test' });
-    expect(next.cr.spec.selector?.matchLabels).toEqual({
+    expect(next.cr.spec.serviceSelector.matchLabels).toEqual({
       key1: 'value1',
       key2: 'something',
       key3: 'test',
@@ -241,14 +242,14 @@ describe('brokerAppReducer', () => {
         { key: 'tier', value: 'production' },
         { key: 'forWorkQueue', value: 'true' },
       ]);
-      expect(state.cr.spec.selector?.matchLabels).toEqual({
+      expect(state.cr.spec.serviceSelector.matchLabels).toEqual({
         tier: 'production',
         forWorkQueue: 'true',
       });
       expect(state.hasChanges).toBe(true);
     });
 
-    it('COPY_MATCH_LABELS_FROM_SERVICE skips keys that already exist in the selector', () => {
+    it('COPY_MATCH_LABELS_FROM_SERVICE skips keys that already exist in the serviceSelector', () => {
       let state = createInitialBrokerAppState(ns);
       const id = state.matchLabels[0].id;
       state = brokerAppReducer(state, {
@@ -264,7 +265,7 @@ describe('brokerAppReducer', () => {
         { key: 'tier', value: 'staging' },
         { key: 'env', value: 'prod' },
       ]);
-      expect(state.cr.spec.selector?.matchLabels).toEqual({
+      expect(state.cr.spec.serviceSelector.matchLabels).toEqual({
         tier: 'staging',
         env: 'prod',
       });
@@ -279,7 +280,7 @@ describe('brokerAppReducer', () => {
 
       expect(state.matchLabels).toHaveLength(1);
       expect(state.matchLabels[0]).toMatchObject({ key: '', value: '' });
-      expect(state.cr.spec.selector).toBeUndefined();
+      expect(state.cr.spec.serviceSelector).toEqual({});
     });
 
     it('SET_MODEL with resetChanges resets hasChanges to false', () => {
@@ -302,7 +303,7 @@ describe('brokerAppReducer', () => {
           apiVersion: 'broker.arkmq.org/v1beta2',
           kind: 'BrokerApp',
           metadata: { name: 'from-yaml', namespace: ns },
-          spec: {},
+          spec: { serviceSelector: {} },
         },
       });
       expect(state.hasChanges).toBe(true);
@@ -316,7 +317,7 @@ describe('brokerAppReducer', () => {
         apiVersion: 'broker.arkmq.org/v1beta2',
         kind: 'BrokerApp',
         metadata: { name: 'empty', namespace: ns },
-        spec: {},
+        spec: { serviceSelector: {} },
       },
     });
 
@@ -421,6 +422,7 @@ describe('brokerAppReducer resource fields', () => {
         kind: 'BrokerApp',
         metadata: { name: 'imported', namespace: ns },
         spec: {
+          serviceSelector: {},
           resources: {
             requests: { cpu: '100m', memory: '128Mi' },
             limits: { cpu: '200m', memory: '256Mi' },
@@ -442,7 +444,7 @@ describe('brokerAppReducer resource fields', () => {
         apiVersion: 'broker.arkmq.org/v1beta2',
         kind: 'BrokerApp',
         metadata: { name: 'no-resources', namespace: ns },
-        spec: {},
+        spec: { serviceSelector: {} },
       },
     });
 
@@ -461,7 +463,7 @@ describe('SET_MODEL validation', () => {
         apiVersion: 'broker.arkmq.org/v1beta2',
         kind: 'BrokerApp',
         metadata: { name: 'INVALID', namespace: 'test-ns' },
-        spec: {},
+        spec: { serviceSelector: {} },
       },
       yaml,
     });
@@ -492,7 +494,7 @@ describe('SET_MODEL validation', () => {
         apiVersion: 'broker.arkmq.org/v1beta2',
         kind: 'BrokerApp',
         metadata: { name: 'valid', namespace: 'test-ns' },
-        spec: {},
+        spec: { serviceSelector: {} },
       },
       yaml,
     });
@@ -508,7 +510,7 @@ describe('SET_MODEL validation', () => {
           apiVersion: 'broker.arkmq.org/v1beta2',
           kind: 'BrokerApp',
           metadata: { name: 'INVALID', namespace: 'test-ns' },
-          spec: {},
+          spec: { serviceSelector: {} },
         },
       }),
     ).not.toThrow();
@@ -538,11 +540,11 @@ const applyActions = (
 ): ReturnType<typeof brokerAppReducer> =>
   actions.reduce((s, a) => brokerAppReducer(s, a), createInitialBrokerAppState('test-ns'));
 
-const makeCR = (name: string, spec = {}) => ({
-  apiVersion: 'broker.arkmq.org/v1beta2',
-  kind: 'BrokerApp',
+const makeCR = (name: string, spec: Partial<BrokerAppSpec> = {}) => ({
+  apiVersion: 'broker.arkmq.org/v1beta2' as const,
+  kind: 'BrokerApp' as const,
   metadata: { name, namespace: 'test-ns' },
-  spec,
+  spec: { serviceSelector: {} as { matchLabels?: Record<string, string> }, ...spec },
 });
 
 describe('address reducer actions', () => {
@@ -1042,7 +1044,7 @@ describe('SET_MODEL hydration', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
-        selector: { matchLabels: { env: 'prod', tier: 'web' } },
+        serviceSelector: { matchLabels: { env: 'prod', tier: 'web' } },
       }),
     });
     expect(state.matchLabels.map(({ key, value }) => ({ key, value }))).toEqual(

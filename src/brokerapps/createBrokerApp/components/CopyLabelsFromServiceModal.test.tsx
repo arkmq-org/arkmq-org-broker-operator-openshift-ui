@@ -124,7 +124,7 @@ describe('BrokerApp CopyLabelsFromServiceModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('skips keys that already exist in the selector when confirming', async () => {
+  it('skips keys that already exist in the service selector when confirming', async () => {
     const user = userEvent.setup();
     mockUseK8sWatchResource.mockReturnValue([
       [makeService('my-messaging-service', { tier: 'production', env: 'prod' })],

@@ -17,7 +17,7 @@ export const validateDNS1123 = (value: string): string | null => {
 
 /**
  * Checks that at least one entry has a non-empty key.
- * Per the latest operator changes, nil or empty selectors match no service.
+ * Per the latest operator changes, nil or empty service selectors match no service.
  */
 const validateRequiredEntries = (entries: { key: string }[], message: string): string | null => {
   const hasNonEmpty = entries.some(({ key }) => key.trim());
@@ -210,8 +210,8 @@ export const validateYamlDuplicateBrokerServiceLabels = (yamlContent: string): s
 export const validateYamlDuplicateBrokerAppMatchLabels = (yamlContent: string): string | null =>
   validateYamlDuplicateKeysInMapping(
     yamlContent,
-    ['spec', 'selector', 'matchLabels'],
-    'spec.selector.matchLabels',
+    ['spec', 'serviceSelector', 'matchLabels'],
+    'spec.serviceSelector.matchLabels',
   );
 
 /**

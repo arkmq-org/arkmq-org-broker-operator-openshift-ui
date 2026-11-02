@@ -34,7 +34,7 @@ const brokerApp: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name: 'my-payment-app', namespace: 'default' },
-  spec: {},
+  spec: { serviceSelector: {} },
   status: {
     service: {
       name: 'ex-aao',

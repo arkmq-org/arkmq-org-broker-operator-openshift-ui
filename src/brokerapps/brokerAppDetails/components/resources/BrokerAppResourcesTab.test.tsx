@@ -9,7 +9,7 @@ const brokerApp: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name: 'my-payment-app', namespace: 'default', uid: 'app-uid-123' },
-  spec: {},
+  spec: { serviceSelector: {} },
 };
 
 const bindingSecret = {

@@ -27,7 +27,7 @@ export interface CopyLabelsFromServiceModalProps {
   onClose: () => void;
 }
 
-/** Copies a chosen subset of a BrokerService's labels into the BrokerApp selector. */
+/** Copies a chosen subset of a BrokerService's labels into the BrokerApp service selector. */
 export const CopyLabelsFromServiceModal: FC<CopyLabelsFromServiceModalProps> = ({
   namespace,
   onClose,
@@ -84,7 +84,7 @@ export const CopyLabelsFromServiceModal: FC<CopyLabelsFromServiceModalProps> = (
       <ModalHeader
         title={t('Copy labels from existing service')}
         description={t(
-          'Select a BrokerService, then choose which of its labels to add to your selector.',
+          'Select a BrokerService, then choose which of its labels to add to your service selector.',
         )}
       />
       <ModalBody>
@@ -107,7 +107,7 @@ export const CopyLabelsFromServiceModal: FC<CopyLabelsFromServiceModalProps> = (
                     <HelperText>
                       <HelperTextItem>
                         {t(
-                          'Keys that already exist in your selector will be skipped when you confirm.',
+                          'Keys that already exist in your service selector will be skipped when you confirm.',
                         )}
                       </HelperTextItem>
                     </HelperText>

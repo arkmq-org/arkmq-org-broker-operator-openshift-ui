@@ -230,14 +230,14 @@ spec:
 });
 
 describe('validateYamlDuplicateBrokerAppMatchLabels', () => {
-  it('returns null when spec.selector.matchLabels has unique keys', () => {
+  it('returns null when spec.serviceSelector.matchLabels has unique keys', () => {
     const yaml = `
 apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerApp
 metadata:
   name: my-app
 spec:
-  selector:
+  serviceSelector:
     matchLabels:
       env: dev
       tier: web
@@ -246,21 +246,21 @@ spec:
     expect(validateYamlDuplicateBrokerAppMatchLabels(yaml)).toBeNull();
   });
 
-  it('returns error when spec.selector.matchLabels has duplicate keys', () => {
+  it('returns error when spec.serviceSelector.matchLabels has duplicate keys', () => {
     const yaml = `
 apiVersion: broker.arkmq.org/v1beta2
 kind: BrokerApp
 metadata:
   name: my-app
 spec:
-  selector:
+  serviceSelector:
     matchLabels:
       env: dev
       env: prod
 `;
 
     expect(validateYamlDuplicateBrokerAppMatchLabels(yaml)).toBe(
-      'Duplicate label key "env" in spec.selector.matchLabels',
+      'Duplicate label key "env" in spec.serviceSelector.matchLabels',
     );
   });
 });
@@ -504,7 +504,7 @@ const validBrokerAppCR: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name: 'my-app', namespace: 'test-ns' },
-  spec: {},
+  spec: { serviceSelector: {} },
 };
 
 const dumpYaml = (cr: object): string => jsYaml.dump(cr);
@@ -532,6 +532,7 @@ describe('validateBrokerAppCR', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
       spec: {
+        serviceSelector: {},
         resources: {
           requests: { cpu: '250m', memory: '256Mi' },
           limits: { cpu: '1', memory: '1Gi' },
@@ -564,7 +565,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects a memory suffix in a CPU request field', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { resources: { requests: { cpu: '2Gi' } } },
+      spec: { serviceSelector: {}, resources: { requests: { cpu: '2Gi' } } },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.resources.requests.cpu:');
@@ -573,7 +574,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects a non-numeric CPU limit', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { resources: { limits: { cpu: 'abc' } } },
+      spec: { serviceSelector: {}, resources: { limits: { cpu: 'abc' } } },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.resources.limits.cpu:');
@@ -582,7 +583,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects a non-numeric memory request', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { resources: { requests: { memory: 'bad' } } },
+      spec: { serviceSelector: {}, resources: { requests: { memory: 'bad' } } },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.resources.requests.memory:');
@@ -591,7 +592,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects a CPU suffix in a memory limit field', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { resources: { limits: { memory: '500m' } } },
+      spec: { serviceSelector: {}, resources: { limits: { memory: '500m' } } },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.resources.limits.memory:');
@@ -600,7 +601,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects an empty address name in spec.addresses', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { addresses: [{ address: '' }] },
+      spec: { serviceSelector: {}, addresses: [{ address: '' }] },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.addresses[0].address: Address is required');
@@ -609,7 +610,7 @@ describe('validateBrokerAppCR', () => {
   it('rejects duplicate addresses in spec.addresses', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { addresses: [{ address: 'orders' }, { address: 'orders' }] },
+      spec: { serviceSelector: {}, addresses: [{ address: 'orders' }, { address: 'orders' }] },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.addresses: Duplicate address "orders"');
@@ -618,7 +619,10 @@ describe('validateBrokerAppCR', () => {
   it('rejects duplicate addresses in spec.sharedAddresses', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
-      spec: { sharedAddresses: [{ address: 'events' }, { address: 'events' }] },
+      spec: {
+        serviceSelector: {},
+        sharedAddresses: [{ address: 'events' }, { address: 'events' }],
+      },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain('spec.sharedAddresses: Duplicate address "events"');
@@ -628,6 +632,7 @@ describe('validateBrokerAppCR', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
       spec: {
+        serviceSelector: {},
         addresses: [{ address: 'overlap' }],
         sharedAddresses: [{ address: 'overlap' }],
       },
@@ -643,6 +648,7 @@ describe('validateBrokerAppCR', () => {
       ...validBrokerAppCR,
       metadata: { name: '', namespace: 'test-ns' },
       spec: {
+        serviceSelector: {},
         resources: { requests: { cpu: 'bad' } },
         addresses: [{ address: 'dup' }, { address: 'dup' }],
       },

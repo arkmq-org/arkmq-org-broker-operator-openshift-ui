@@ -13,6 +13,7 @@ const brokerApp: BrokerAppCR = {
     resourceVersion: '42',
   },
   spec: {
+    serviceSelector: {},
     addresses: [{ address: 'payment.transactions' }],
     capabilities: [
       {

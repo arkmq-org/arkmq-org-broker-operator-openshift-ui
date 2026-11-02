@@ -27,7 +27,7 @@ export const BrokerAppOverviewTab: FC<BrokerAppOverviewTabProps> = ({ obj }) => 
           {obj ? (
             <ResourceLabelsAndAnnotations
               resource={obj}
-              selectorLabels={obj.spec.selector?.matchLabels}
+              selectorLabels={obj.spec.serviceSelector.matchLabels}
             />
           ) : null}
         </StackItem>

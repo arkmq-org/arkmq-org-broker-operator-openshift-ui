@@ -54,7 +54,7 @@ export type BrokerAppFormAction =
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
   /**
-   * Merges selected BrokerService labels into the selector matchLabels.
+   * Merges selected BrokerService labels into the serviceSelector matchLabels.
    * Keys that already exist in the form are skipped so existing choices are preserved.
    */
   | { type: 'COPY_MATCH_LABELS_FROM_SERVICE'; payload: Record<string, string> }
@@ -73,18 +73,14 @@ export type BrokerAppFormAction =
 // --- CR sync ---
 
 // First occurrence wins so duplicate form rows do not overwrite YAML preview values.
-const syncSelectorFromLabels = (cr: BrokerAppCR, labels: MatchLabel[]): void => {
+const syncServiceSelectorFromLabels = (cr: BrokerAppCR, labels: MatchLabel[]): void => {
   const result: Record<string, string> = {};
   labels.forEach(({ key, value }) => {
     if (key && !(key in result)) {
       result[key] = value;
     }
   });
-  if (Object.keys(result).length) {
-    cr.spec.selector = { matchLabels: result };
-  } else {
-    delete cr.spec.selector;
-  }
+  cr.spec.serviceSelector = Object.keys(result).length ? { matchLabels: result } : {};
 };
 
 const cleanupResources = (spec: BrokerAppSpec): void => {
@@ -360,12 +356,14 @@ export const brokerAppReducer = (
         const error = validateBrokerAppCR(action.payload, action.yaml);
         if (error) return state;
       }
-      cr = { ...action.payload, spec: { ...action.payload.spec } };
+      // YAML-parsed CRs may lack serviceSelector at runtime despite the required type
+      const rawSpec = action.payload.spec as Partial<BrokerAppSpec>;
+      cr = { ...action.payload, spec: { serviceSelector: {}, ...rawSpec } };
       matchLabels = action.preserveLabels
-        ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.selector?.matchLabels)
-        : matchLabelsFromRecord(cr.spec.selector?.matchLabels);
+        ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.serviceSelector.matchLabels)
+        : matchLabelsFromRecord(cr.spec.serviceSelector.matchLabels);
       addresses = hydrateAddresses(cr);
-      syncSelectorFromLabels(cr, matchLabels);
+      syncServiceSelectorFromLabels(cr, matchLabels);
       syncAddressesToCR(cr, addresses);
       return {
         ...state,
@@ -428,7 +426,7 @@ export const brokerAppReducer = (
       return state;
   }
 
-  syncSelectorFromLabels(cr, matchLabels);
+  syncServiceSelectorFromLabels(cr, matchLabels);
   syncAddressesToCR(cr, addresses);
   return { ...state, cr, matchLabels, addresses, hasChanges: true };
 };
@@ -438,7 +436,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
     apiVersion: 'broker.arkmq.org/v1beta2',
     kind: 'BrokerApp',
     metadata: { name: 'my-messaging-app', namespace },
-    spec: {},
+    spec: { serviceSelector: {} },
   },
   matchLabels: [{ id: nextMatchLabelId(), key: '', value: '' }],
   addresses: [],

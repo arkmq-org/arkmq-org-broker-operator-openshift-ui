@@ -37,7 +37,7 @@ export interface PrivateAddress {
 }
 
 export interface BrokerAppSpec {
-  selector?: { matchLabels?: Record<string, string> };
+  serviceSelector: { matchLabels?: Record<string, string> };
   capabilities?: BrokerAppCapability[];
   resources?: ResourceRequirements;
   /** Private addresses whose lifecycle is tied to this app. */

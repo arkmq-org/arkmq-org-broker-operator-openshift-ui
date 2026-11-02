@@ -59,7 +59,7 @@ jest.mock('../shared-components/ResourceFormEditor', () => ({
         data-test="yaml-save-btn"
         onClick={() =>
           void onYamlSave(
-            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec:\n  selector:\n    matchLabels:\n      app.kubernetes.io/instance: my-svc',
+            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec:\n  serviceSelector:\n    matchLabels:\n      app.kubernetes.io/instance: my-svc',
           )
         }
       >

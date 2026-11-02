@@ -7,6 +7,7 @@ const brokerAppWithAddresses: BrokerAppCR = {
   kind: 'BrokerApp',
   metadata: { name: 'test-app', namespace: 'default', resourceVersion: '100' },
   spec: {
+    serviceSelector: {},
     addresses: [{ address: 'orders.internal' }],
     sharedAddresses: [{ address: 'events.shared', pubSub: true }],
     capabilities: [
@@ -36,7 +37,7 @@ const emptyBrokerApp: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name: 'empty-app', namespace: 'default', resourceVersion: '1' },
-  spec: {},
+  spec: { serviceSelector: {} },
 };
 
 describe('AddressesSection', () => {

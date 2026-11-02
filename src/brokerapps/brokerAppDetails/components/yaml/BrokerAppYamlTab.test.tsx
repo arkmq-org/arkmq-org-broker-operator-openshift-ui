@@ -6,7 +6,7 @@ const brokerApp: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name: 'my-app', namespace: 'default' },
-  spec: {},
+  spec: { serviceSelector: {} },
 };
 
 describe('BrokerAppYamlTab', () => {

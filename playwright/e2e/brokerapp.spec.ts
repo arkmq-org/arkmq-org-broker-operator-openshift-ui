@@ -139,7 +139,7 @@ spec:
 
     await page.locator('[data-test="brokerapp-create-btn"]').click();
     await page.waitForURL('**/broker.arkmq.org~v1beta2~BrokerApp**', { timeout: 30000 });
-    console.log(`✓ BrokerApp ${appName} submitted via form with selector tier=e2e`);
+    console.log(`✓ BrokerApp ${appName} submitted via form with serviceSelector tier=e2e`);
 
     // 3. Wait for the BrokerApp to bind and be provisioned on the broker
     console.log('\nWaiting for BrokerApp to be Deployed (binding + provisioning)...');
@@ -168,9 +168,9 @@ spec:
     console.log('✓ Binding secret has expected keys: uri, host, port');
   });
 
-  // ── Test: Copy selector labels from an existing BrokerService → verify CR ──
+  // ── Test: Copy service selector labels from an existing BrokerService → verify CR ──
 
-  test('copy labels from existing service into BrokerApp selector', async ({ page }) => {
+  test('copy labels from existing service into BrokerApp serviceSelector', async ({ page }) => {
     const labeledServiceName = 'labeled-for-app-copy';
     const appName = 'e2e-app-copied-labels';
     const expectedLabels = { tier: 'production', forWorkQueue: 'true' };
@@ -237,16 +237,16 @@ spec:
     await page.locator('[data-test="brokerapp-create-btn"]').click();
     await page.waitForURL('**/broker.arkmq.org~v1beta2~BrokerApp**', { timeout: 30000 });
 
-    console.log('  Verifying spec.selector.matchLabels on the created BrokerApp...');
+    console.log('  Verifying spec.serviceSelector.matchLabels on the created BrokerApp...');
     await expect
       .poll(
         () => {
           try {
             const resource = getResource('brokerapp', appName, TEST_NAMESPACE);
             const spec = resource.spec as {
-              selector?: { matchLabels?: Record<string, string> };
+              serviceSelector: { matchLabels?: Record<string, string> };
             };
-            return spec.selector?.matchLabels;
+            return spec.serviceSelector?.matchLabels;
           } catch {
             return undefined;
           }
@@ -254,7 +254,9 @@ spec:
         { timeout: 30000 },
       )
       .toEqual(expectedLabels);
-    console.log(`✓ BrokerApp ${appName} selector matchLabels match the copied service labels`);
+    console.log(
+      `✓ BrokerApp ${appName} serviceSelector matchLabels match the copied service labels`,
+    );
   });
 
   // ── Test: Add multiple addresses to "Produces To" → verify they all appear in spec ──
@@ -426,7 +428,7 @@ metadata:
   name: ${appName}
   namespace: ${TEST_NAMESPACE}
 spec:
-  selector:
+  serviceSelector:
     matchLabels:
       tier: does-not-exist
   capabilities:
@@ -434,7 +436,7 @@ spec:
     - address: "QUEUE.TEST"
 `;
     applyYaml(brokerAppYaml);
-    console.log(`✓ Applied BrokerApp ${appName} with non-matching selector`);
+    console.log(`✓ Applied BrokerApp ${appName} with non-matching serviceSelector`);
 
     // Give the operator enough time to reconcile
     console.log('Waiting 30s for operator to reconcile...');
@@ -557,7 +559,7 @@ metadata:
   name: ${appToDelete}
   namespace: ${TEST_NAMESPACE}
 spec:
-  selector:
+  serviceSelector:
     matchLabels:
       tier: delete-test
 `);

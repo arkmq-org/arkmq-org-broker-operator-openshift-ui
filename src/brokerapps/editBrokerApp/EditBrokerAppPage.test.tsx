@@ -68,7 +68,7 @@ const sampleBrokerApp: BrokerAppCR = {
     resourceVersion: '12345',
   },
   spec: {
-    selector: { matchLabels: { tier: 'production' } },
+    serviceSelector: { matchLabels: { tier: 'production' } },
     capabilities: [
       {
         producerOf: [{ address: 'orders.created' }],

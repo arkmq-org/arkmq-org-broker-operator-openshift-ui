@@ -44,7 +44,7 @@ const makeApp = (overrides: Partial<BrokerAppCR> = {}): BrokerAppCR => ({
     namespace: 'test-namespace',
     creationTimestamp: '2026-07-07T00:00:00Z',
   },
-  spec: { selector: { matchLabels: { tier: 'production' } } },
+  spec: { serviceSelector: { matchLabels: { tier: 'production' } } },
   ...overrides,
 });
 
