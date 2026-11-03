@@ -89,10 +89,13 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
 
   const model = useMemo(() => toPipelineModel(graph, labels), [graph, labels]);
 
+  // Merge, do not replace: a replaced model detaches every element while the pills
+  // that read `element.getGraph()` are still mounted, and they throw "has no parent".
+  // Merging updates the elements in place and drops only the stale ones.
   useEffect(() => {
     controller.fromModel(
       { ...model, graph: { id: 'g1', type: 'graph', layout: PIPELINE_LAYOUT } },
-      false,
+      true,
     );
   }, [controller, model]);
 
