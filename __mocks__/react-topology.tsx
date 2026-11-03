@@ -44,7 +44,13 @@ export class Visualization {
     });
   }
   getGraph() {
-    return { scaleBy: jest.fn(), fit: jest.fn(), reset: jest.fn(), layout: jest.fn() };
+    return {
+      scaleBy: jest.fn(),
+      fit: jest.fn(),
+      reset: jest.fn(),
+      layout: jest.fn(),
+      setDetailsLevelThresholds: jest.fn(),
+    };
   }
 }
 
@@ -235,6 +241,12 @@ export const TaskEdge = Null;
 export const DefaultTaskGroup = Null;
 export const SpacerNode = Null;
 export const GRAPH_LAYOUT_END_EVENT = 'graph-layout-end';
+export const useHover = (): [boolean, () => void] => [false, () => undefined];
+export enum ScaleDetailsLevel {
+  high = 'high',
+  medium = 'medium',
+  low = 'low',
+}
 export const action = <T,>(fn: T): T => fn;
 
 export enum ModelKind {

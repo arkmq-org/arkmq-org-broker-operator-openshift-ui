@@ -97,6 +97,10 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
       { ...model, graph: { id: 'g1', type: 'graph', layout: PIPELINE_LAYOUT } },
       true,
     );
+    // Below the "medium" zoom the pills and groups hide their labels, which fitting a
+    // whole service to the screen would otherwise trigger; keep the detailed picture
+    // down to a far smaller zoom than the library's default.
+    controller.getGraph().setDetailsLevelThresholds({ low: 0.1, medium: 0.2 });
   }, [controller, model]);
 
   useEffect(() => {

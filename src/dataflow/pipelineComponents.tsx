@@ -8,6 +8,7 @@ import {
   EdgeTerminalType,
   GraphComponent,
   isGraph,
+  LabelPosition,
   ModelKind,
   NodeStatus,
   observer,
@@ -15,6 +16,8 @@ import {
   SpacerNode,
   TaskEdge,
   TaskNode,
+  ScaleDetailsLevel,
+  useHover,
   withContextMenu,
   withCreateConnector,
   withDndDrop,
@@ -143,8 +146,11 @@ const DataflowTask: React.FC<TaskProps> = observer(
     })();
     const Icon = look.icon;
     const edits = Boolean(editing) && look.editable;
+    const [hover, hoverRef] = useHover<SVGGElement>();
+    const detailsLevel = element.getGraph().getDetailsLevel();
     return (
       <g
+        ref={hoverRef}
         data-test={`dataflow-node-${element.getId()}`}
         data-kind={data?.kind}
         onMouseEnter={edits ? onShowCreateConnector : undefined}
@@ -153,6 +159,8 @@ const DataflowTask: React.FC<TaskProps> = observer(
         <TaskNode
           element={element}
           {...rest}
+          hideDetailsAtMedium
+          scaleNode={hover && detailsLevel !== ScaleDetailsLevel.high}
           taskIcon={<Icon />}
           taskIconTooltip={look.tooltip}
           badge={look.badge}
@@ -168,17 +176,27 @@ const DataflowTask: React.FC<TaskProps> = observer(
   },
 );
 
-/** A namespace or app box: PatternFly's task group, following its children. */
+/**
+ * A namespace or app box: PatternFly's task group, following its children, set up
+ * as the pipeline groups example sets it: the label sits under the box, hides when
+ * zoomed out (where the library misplaces it) and comes back on hover.
+ */
 const DataflowGroup: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
   ({ element, selected, onSelect }) => {
     const data = nodeData(element);
+    const [hover, hoverRef] = useHover<SVGGElement>();
+    const detailsLevel = element.getGraph().getDetailsLevel();
     return (
-      <g data-test={`dataflow-node-${element.getId()}`} data-kind={data?.kind}>
+      <g ref={hoverRef} data-test={`dataflow-node-${element.getId()}`} data-kind={data?.kind}>
         <DefaultTaskGroup
           element={element as Node}
           selected={selected}
           onSelect={onSelect}
           collapsible={false}
+          labelPosition={LabelPosition.bottom}
+          hideDetailsAtMedium
+          showLabelOnHover
+          scaleNode={hover && detailsLevel !== ScaleDetailsLevel.high}
         />
       </g>
     );
