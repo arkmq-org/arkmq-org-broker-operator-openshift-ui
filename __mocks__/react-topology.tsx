@@ -50,6 +50,8 @@ export class Visualization {
       reset: jest.fn(),
       layout: jest.fn(),
       setDetailsLevelThresholds: jest.fn(),
+      getScale: () => 1,
+      setScale: jest.fn(),
     };
   }
 }

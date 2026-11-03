@@ -81,8 +81,12 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     visualization.registerElementFactory(pipelineElementFactory);
     visualization.registerLayoutFactory(layoutFactory);
     visualization.registerComponentFactory(dataflowComponentFactory);
+    // Fit the picture after each layout, but never zoom in past 1:1, which the
+    // library's fit would do for a small graph.
     visualization.addEventListener(GRAPH_LAYOUT_END_EVENT, () => {
-      visualization.getGraph().fit(80);
+      const graph = visualization.getGraph();
+      graph.fit(40);
+      if (graph.getScale() > 1) graph.setScale(1);
     });
     return visualization;
   }, []);
@@ -132,7 +136,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
                 controller.getGraph().scaleBy(0.75);
               }),
               fitToScreenCallback: action(() => {
-                controller.getGraph().fit(80);
+                controller.getGraph().fit(40);
               }),
               resetViewCallback: action(() => {
                 controller.getGraph().reset();

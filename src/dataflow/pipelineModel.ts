@@ -24,11 +24,12 @@ export const PIPELINE_TYPES = {
 } as const;
 
 export const TASK_HEIGHT = 32;
-const CHAR_WIDTH = 7.5;
-const TASK_PADDING = 76;
+const CHAR_WIDTH = 7;
+/** Room for the icon, the badge and the pill's own padding beside the name. */
+const TASK_PADDING = 60;
 
 const taskWidth = (label: string): number =>
-  Math.max(150, Math.round(Math.min(label.length, 40) * CHAR_WIDTH + TASK_PADDING));
+  Math.max(120, Math.round(Math.min(label.length, 32) * CHAR_WIDTH + TASK_PADDING));
 
 const labelOf = (node: DataflowNode, labels: DataflowLabels): string => {
   switch (node.kind) {
@@ -74,7 +75,8 @@ export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): M
         label,
         group: true,
         children: graph.nodes.filter((n) => 'parent' in n && n.parent === node.id).map((n) => n.id),
-        style: { padding: [40, 25] },
+        // groups nest twice (namespace, then app): keep each ring thin
+        style: { padding: [22, 14] },
         runAfterTasks: [],
         data: node,
       };
