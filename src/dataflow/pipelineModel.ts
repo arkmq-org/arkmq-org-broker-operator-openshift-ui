@@ -13,6 +13,8 @@ export const PIPELINE_TYPES = {
   task: 'dataflow-pipeline-task',
   group: 'dataflow-pipeline-group',
   edge: 'dataflow-pipeline-edge',
+  /** An invisible edge between two sibling boxes, so the pipeline layout orders them. */
+  hiddenEdge: 'dataflow-pipeline-hidden-edge',
 } as const;
 
 export const TASK_HEIGHT = 32;
@@ -44,6 +46,47 @@ const labelOf = (node: DataflowNode, labels: TopologyLabels): string => {
 const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
   node.kind === 'app' ||
   (node.kind === 'namespace' && graph.nodes.some((n) => 'parent' in n && n.parent === node.id));
+
+/**
+ * The pipeline layout lays each group out on its own and orders siblings only by the
+ * edges between those siblings. Our arrows join a credential to an address in another
+ * box, so without help the boxes would stack. For every arrow this yields the pair of
+ * sibling boxes under the lowest common ancestor, to join with an invisible edge.
+ */
+const siblingPairs = (graph: DataflowGraph): [string, string][] => {
+  const parentOf = new Map<string, string>();
+  for (const node of graph.nodes) {
+    if ('parent' in node && node.parent) parentOf.set(node.id, node.parent);
+  }
+  const chain = (id: string): string[] => {
+    const out = [id];
+    let current = parentOf.get(id);
+    while (current) {
+      out.push(current);
+      current = parentOf.get(current);
+    }
+    return out;
+  };
+  const pairs = new Map<string, [string, string]>();
+  for (const edge of graph.edges) {
+    const from = chain(edge.source);
+    const to = chain(edge.target);
+    let a = from[from.length - 1];
+    let b = to[to.length - 1];
+    // walk down from the roots while the ancestors coincide
+    let i = from.length - 1;
+    let j = to.length - 1;
+    while (i > 0 && j > 0 && from[i] === to[j]) {
+      i -= 1;
+      j -= 1;
+      a = from[i];
+      b = to[j];
+    }
+    if (a === b || (a === edge.source && b === edge.target)) continue;
+    pairs.set(`${a}->${b}`, [a, b]);
+  }
+  return Array.from(pairs.values());
+};
 
 /**
  * The same graph as a pipeline: every box becomes a task pill laid out left to right
@@ -94,5 +137,11 @@ export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): M
       data: edge,
     };
   });
-  return { graph: { id: 'dataflow', type: 'graph' }, nodes, edges };
+  const hidden: EdgeModel[] = siblingPairs(graph).map(([source, target]) => ({
+    id: `hidden:${source}->${target}`,
+    type: PIPELINE_TYPES.hiddenEdge,
+    source,
+    target,
+  }));
+  return { graph: { id: 'dataflow', type: 'graph' }, nodes, edges: [...edges, ...hidden] };
 };

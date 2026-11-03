@@ -1,3 +1,4 @@
+import type { PipelineNodeModel } from '@patternfly/react-topology';
 import type { DataflowGraph } from './graph';
 import { PIPELINE_TYPES, TASK_HEIGHT, toPipelineModel } from './pipelineModel';
 
@@ -54,7 +55,8 @@ const graph: DataflowGraph = {
 
 describe('toPipelineModel', () => {
   const model = toPipelineModel(graph, labels);
-  const node = (id: string) => model.nodes?.find((n) => n.id === id);
+  const nodes: PipelineNodeModel[] = model.nodes ?? [];
+  const node = (id: string) => nodes.find((n) => n.id === id);
 
   it('turns boxes into task pills sized from their label and groups into task groups', () => {
     expect(node('addr:Q')).toMatchObject({
@@ -82,8 +84,18 @@ describe('toPipelineModel', () => {
     expect(node('cred:a/x')?.runAfterTasks).toEqual([]);
   });
 
+  it('joins sibling boxes with invisible edges so the layout orders them left to right', () => {
+    // cred:a/x -> addr:Q crosses into app:a/x inside ns:a; addr:Q -> ns:b leaves ns:a
+    expect(model.edges?.filter((e) => e.type === PIPELINE_TYPES.hiddenEdge)).toEqual([
+      expect.objectContaining({ source: 'cred:a/x', target: 'app:a/x' }),
+      expect.objectContaining({ source: 'ns:a', target: 'ns:b' }),
+    ]);
+  });
+
   it('keeps the dataflow edges, dashed when they are gates', () => {
-    expect(model.edges?.map((e) => e.id)).toEqual(['e1', 'e2']);
+    expect(
+      model.edges?.filter((e) => e.type !== PIPELINE_TYPES.hiddenEdge).map((e) => e.id),
+    ).toEqual(['e1', 'e2']);
     expect(model.edges?.[1]).toMatchObject({
       type: PIPELINE_TYPES.edge,
       source: 'addr:Q',
