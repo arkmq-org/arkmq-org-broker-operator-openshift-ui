@@ -381,6 +381,42 @@ describe('buildDataflowGraph on a complete service', () => {
     ]);
   });
 
+  it('leaves no any-app box behind when a whole-namespace gate on a grouped namespace is realised', () => {
+    // matcher opens IDENT.RESULTS to all of acme-ident; registry-sync, in acme-ident,
+    // consumes it, so the gate is realised and no "any app" party may remain.
+    const owner = app('acme-ident', 'matcher', {
+      addresses: [
+        {
+          address: 'IDENT.RESULTS',
+          pubSub: true,
+          consumerOfAppSelector: "app.metadata.namespace == 'acme-ident'",
+        },
+      ],
+      capabilities: [{ producerOf: [{ address: 'IDENT.RESULTS', pubSub: true }] }],
+    });
+    const reader = app('acme-ident', 'registry-sync', {
+      capabilities: [
+        {
+          consumerOf: [
+            {
+              address: 'IDENT.RESULTS',
+              appNamespace: 'acme-ident',
+              appName: 'matcher',
+              subscriptions: ['registry'],
+            },
+          ],
+        },
+      ],
+    });
+    const { nodes, edges } = buildDataflowGraph({
+      apps: [owner, reader],
+      universe,
+      complete: true,
+    });
+    expect(byId(nodes, appNodeId({ namespace: 'acme-ident', name: '*' }))).toBeUndefined();
+    expect(edgesOfKind(edges, 'unused')).toEqual([]);
+  });
+
   it('pairs a whole-namespace gate with a flow declared by any app of that namespace', () => {
     // matcher consumes IDENT.REQUEST from its own box? No: acme-ident is not grouped
     // here, so the flow ends on the namespace box and the gate is realised by it.

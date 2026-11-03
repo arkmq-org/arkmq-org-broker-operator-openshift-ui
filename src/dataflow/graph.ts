@@ -252,6 +252,8 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     address: string;
     owner: AppRef;
     principal?: GatePrincipal;
+    /** Creates the party node; only called when the gate arrow is actually drawn. */
+    ensureParty: () => void;
   }
   const gateEdges: GateEdge[] = [];
   // An address box sits inside its owner's namespace, which therefore is a group;
@@ -292,10 +294,25 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
             role: gateRole,
             address: entry.address,
           });
+          const noParty = () => undefined;
           gateEdges.push(
             role === 'produce'
-              ? { source: id, target: addressId, role, address: entry.address, owner }
-              : { source: addressId, target: id, role, address: entry.address, owner },
+              ? {
+                  source: id,
+                  target: addressId,
+                  role,
+                  address: entry.address,
+                  owner,
+                  ensureParty: noParty,
+                }
+              : {
+                  source: addressId,
+                  target: id,
+                  role,
+                  address: entry.address,
+                  owner,
+                  ensureParty: noParty,
+                },
           );
           continue;
         }
@@ -307,6 +324,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
             address: entry.address,
             owner,
             principal,
+            ensureParty: () => undefined,
           });
           if (principal.appName) {
             ensureAppBox({ namespace: principal.namespace, name: principal.appName });
@@ -315,17 +333,26 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       }
     }
   }
-  // Whole-namespace principals resolve once every grouped namespace is known.
+  // Whole-namespace principals resolve once every grouped namespace is known. Their
+  // node is only created if the gate arrow survives pass 3: a realised gate leaves no
+  // arrow, and must leave no orphan box either.
   for (const gate of gateEdges) {
     if (!gate.principal) continue;
     const { principal } = gate;
-    const partyId = principal.appName
-      ? appNodeId({ namespace: principal.namespace, name: principal.appName })
-      : principal.namespace === ANY_NAMESPACE
-        ? ensureAny()
-        : groupedNamespaces.has(principal.namespace)
-          ? ensureApp({ namespace: principal.namespace, name: ANY_APP })
-          : ensureNamespace(principal.namespace);
+    let partyId: string;
+    if (principal.appName) {
+      partyId = appNodeId({ namespace: principal.namespace, name: principal.appName });
+    } else if (principal.namespace === ANY_NAMESPACE) {
+      partyId = ANY_NAMESPACE_NODE_ID;
+      gate.ensureParty = () => ensureAny();
+    } else if (groupedNamespaces.has(principal.namespace)) {
+      const anyApp = { namespace: principal.namespace, name: ANY_APP };
+      partyId = appNodeId(anyApp);
+      gate.ensureParty = () => ensureApp(anyApp);
+    } else {
+      partyId = namespaceNodeId(principal.namespace);
+      gate.ensureParty = () => ensureNamespace(principal.namespace);
+    }
     const addressId = addressNodeId(gate.address);
     if (gate.role === 'produce') {
       gate.source = partyId;
@@ -425,6 +452,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
           covers(principal, flow.app),
       );
     if (realised) continue;
+    gate.ensureParty();
     edges.set(id, {
       id,
       source: gate.source,
