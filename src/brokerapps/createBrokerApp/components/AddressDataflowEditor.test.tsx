@@ -99,7 +99,9 @@ describe('AddressDataflowEditor — diagram and panel', () => {
     addNamed(0, 'orders.created');
     expect(nodeOf('orders.created')).toHaveTextContent('orders.created');
     expect(
-      screen.getByTestId('dataflow-edge-produce:app:default/my-messaging-app->addr:orders.created'),
+      screen.getByTestId(
+        'dataflow-edge-produce:cred:default/my-messaging-app->addr:orders.created',
+      ),
     ).toHaveAttribute('data-kind', 'declared');
     expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
   });
@@ -249,7 +251,7 @@ describe('AddressDataflowEditor — pubSub and subscriptions', () => {
     addSub('registry');
     savePanel();
     expect(
-      screen.getByTestId('dataflow-edge-consume:addr:events.topic->app:default/my-messaging-app'),
+      screen.getByTestId('dataflow-edge-consume:addr:events.topic->cred:default/my-messaging-app'),
     ).toBeInTheDocument();
     openEntry('events.topic');
     expect(screen.getByText('registry')).toBeInTheDocument();
@@ -275,7 +277,7 @@ describe('AddressDataflowEditor — direction', () => {
     expect(nodeOf('orders.created')).toBeInTheDocument();
     expect(
       screen.queryByTestId(
-        'dataflow-edge-produce:app:default/my-messaging-app->addr:orders.created',
+        'dataflow-edge-produce:cred:default/my-messaging-app->addr:orders.created',
       ),
     ).not.toBeInTheDocument();
   });
@@ -294,7 +296,9 @@ describe('AddressDataflowEditor — direction', () => {
     fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
     savePanel();
     expect(
-      screen.getByTestId('dataflow-edge-consume:addr:orders.created->app:default/my-messaging-app'),
+      screen.getByTestId(
+        'dataflow-edge-consume:addr:orders.created->cred:default/my-messaging-app',
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -428,10 +432,9 @@ describe('AddressDataflowEditor — referenced addresses', () => {
     fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
     savePanel();
     expect(nodeOf('ORDERS.NEW')).toBeInTheDocument();
-    expect(screen.getByTestId('dataflow-edge-consume:addr:ORDERS.NEW->ns:default')).toHaveAttribute(
-      'data-kind',
-      'declared',
-    );
+    expect(
+      screen.getByTestId('dataflow-edge-consume:addr:ORDERS.NEW->cred:default/my-messaging-app'),
+    ).toHaveAttribute('data-kind', 'declared');
     openEntry('ORDERS.NEW');
     expect(screen.getByLabelText('App name')).toHaveValue('order-generator');
   });
@@ -444,10 +447,9 @@ describe('AddressDataflowEditor — referenced addresses', () => {
       'does not admit this app as a producer',
     );
     savePanel();
-    expect(screen.getByTestId('dataflow-edge-produce:ns:default->addr:ORDERS.NEW')).toHaveAttribute(
-      'data-kind',
-      'broken',
-    );
+    expect(
+      screen.getByTestId('dataflow-edge-produce:cred:default/my-messaging-app->addr:ORDERS.NEW'),
+    ).toHaveAttribute('data-kind', 'broken');
     expect(screen.getByTestId('dataflow-issue-refused')).toBeInTheDocument();
   });
 
@@ -537,7 +539,7 @@ describe('AddressDataflowEditor — gates on an owned address', () => {
     );
     expect(
       screen.getByTestId(
-        'dataflow-edge-produce:app:service-project/order-generator->addr:ORDERS.OUT',
+        'dataflow-edge-produce:cred:service-project/order-generator->addr:ORDERS.OUT',
       ),
     ).toHaveAttribute('data-kind', 'allowed');
   });

@@ -66,7 +66,10 @@ export const AddressDataflowEditor: React.FC = () => {
     () => buildDataflowGraph({ apps: [state.cr], ownerApps: allApps, universe }),
     [state.cr, allApps, universe],
   );
-  const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
+  const labels = useMemo(
+    () => ({ anyNamespace: t('Any namespace'), anyApp: t('any app'), unbound: t('not bound yet') }),
+    [t],
+  );
   const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
 
   const editingEntry = editing ? state.addresses[editing.index] : undefined;

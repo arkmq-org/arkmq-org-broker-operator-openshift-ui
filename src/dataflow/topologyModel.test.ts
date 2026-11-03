@@ -2,10 +2,13 @@ import { EdgeAnimationSpeed, EdgeStyle, NodeShape, NodeStatus } from '@patternfl
 import type { DataflowGraph } from './graph';
 import { EDGE_TYPE, NODE_SIZE, NODE_TYPES, toTopologyModel } from './topologyModel';
 
+const labels = { anyNamespace: 'Any namespace', anyApp: 'any app', unbound: 'not bound yet' };
+
 const graph: DataflowGraph = {
   nodes: [
     { id: 'ns:acme-enroll', kind: 'namespace', namespace: 'acme-enroll' },
     { id: 'ns:acme-ident', kind: 'namespace', namespace: 'acme-ident' },
+    { id: 'ns:lonely', kind: 'namespace', namespace: 'lonely' },
     {
       id: 'app:acme-enroll/scorer',
       kind: 'app',
@@ -13,13 +16,36 @@ const graph: DataflowGraph = {
       name: 'scorer',
       parent: 'ns:acme-enroll',
     },
+    {
+      id: 'app:acme-ident/matcher',
+      kind: 'app',
+      namespace: 'acme-ident',
+      name: 'matcher',
+      parent: 'ns:acme-ident',
+    },
+    {
+      id: 'cred:acme-enroll/scorer',
+      kind: 'credential',
+      namespace: 'acme-enroll',
+      name: 'scorer',
+      secret: 'scorer-binding-secret',
+      parent: 'app:acme-enroll/scorer',
+    },
+    {
+      id: 'cred:acme-ident/matcher',
+      kind: 'credential',
+      namespace: 'acme-ident',
+      name: 'matcher',
+      parent: 'app:acme-ident/matcher',
+    },
+    { id: 'any-app:acme-ident', kind: 'anyApp', namespace: 'acme-ident', parent: 'ns:acme-ident' },
     { id: 'any-namespace', kind: 'anyNamespace' },
     {
       id: 'addr:ENROLL.IN',
       kind: 'address',
       address: 'ENROLL.IN',
-      owner: { namespace: 'acme-enroll', name: 'capture' },
-      parent: 'ns:acme-enroll',
+      owner: { namespace: 'acme-enroll', name: 'scorer' },
+      parent: 'app:acme-enroll/scorer',
       foreign: false,
       gated: true,
       pubSub: false,
@@ -46,7 +72,7 @@ const graph: DataflowGraph = {
   edges: [
     {
       id: 'e1',
-      source: 'ns:acme-enroll',
+      source: 'cred:acme-enroll/scorer',
       target: 'addr:ENROLL.IN',
       role: 'produce',
       kind: 'declared',
@@ -57,7 +83,7 @@ const graph: DataflowGraph = {
     {
       id: 'e2',
       source: 'addr:ENROLL.IN',
-      target: 'app:acme-enroll/scorer',
+      target: 'cred:acme-ident/matcher',
       role: 'consume',
       kind: 'allowed',
       apps: [],
@@ -67,7 +93,7 @@ const graph: DataflowGraph = {
     {
       id: 'e3',
       source: 'addr:ENROLL.IN',
-      target: 'ns:acme-ident',
+      target: 'any-app:acme-ident',
       role: 'consume',
       kind: 'unused',
       apps: [],
@@ -77,7 +103,7 @@ const graph: DataflowGraph = {
     {
       id: 'e4',
       source: 'addr:LOST',
-      target: 'ns:acme-ident',
+      target: 'cred:acme-ident/matcher',
       role: 'consume',
       kind: 'broken',
       apps: [],
@@ -88,7 +114,7 @@ const graph: DataflowGraph = {
 };
 
 describe('toTopologyModel', () => {
-  const model = toTopologyModel(graph, { anyNamespace: 'Any namespace', anyApp: 'any app' });
+  const model = toTopologyModel(graph, labels);
   const node = (id: string) => model.nodes?.find((n) => n.id === id);
   const edge = (id: string) => model.edges?.find((e) => e.id === id);
 
@@ -97,36 +123,41 @@ describe('toTopologyModel', () => {
     expect(model.graph?.layout).toBeUndefined();
   });
 
-  it('turns a namespace with app or address boxes into a group holding them', () => {
+  it('nests groups: a namespace holds app boxes, an app box holds its credential and addresses', () => {
     expect(node('ns:acme-enroll')).toMatchObject({
       type: NODE_TYPES.namespaceGroup,
       group: true,
-      children: ['app:acme-enroll/scorer', 'addr:ENROLL.IN'],
+      children: ['app:acme-enroll/scorer'],
       label: 'acme-enroll',
     });
-  });
-
-  it('labels the any-app box with the translated text', () => {
-    const withAny = toTopologyModel(
-      {
-        nodes: [
-          { id: 'ns:x', kind: 'namespace', namespace: 'x' },
-          { id: 'app:x/*', kind: 'app', namespace: 'x', name: '*', parent: 'ns:x' },
-        ],
-        edges: [],
-      },
-      { anyNamespace: 'Any namespace', anyApp: 'any app' },
-    );
-    expect(withAny.nodes?.find((n) => n.id === 'app:x/*')?.label).toBe('any app');
+    expect(node('app:acme-enroll/scorer')).toMatchObject({
+      type: NODE_TYPES.app,
+      group: true,
+      children: ['cred:acme-enroll/scorer', 'addr:ENROLL.IN'],
+      label: 'scorer',
+    });
+    expect(node('ns:acme-ident')?.children).toEqual([
+      'app:acme-ident/matcher',
+      'any-app:acme-ident',
+    ]);
   });
 
   it('draws a namespace without boxes as a plain hexagon', () => {
-    expect(node('ns:acme-ident')).toMatchObject({
+    expect(node('ns:lonely')).toMatchObject({
       type: NODE_TYPES.namespace,
       shape: NodeShape.hexagon,
-      label: 'acme-ident',
+      label: 'lonely',
     });
-    expect(node('ns:acme-ident')?.group).toBeUndefined();
+    expect(node('ns:lonely')?.group).toBeUndefined();
+  });
+
+  it('labels a credential with its secret name, or says the app is not bound yet', () => {
+    expect(node('cred:acme-enroll/scorer')).toMatchObject({
+      type: NODE_TYPES.credential,
+      shape: NodeShape.ellipse,
+      label: 'scorer-binding-secret',
+    });
+    expect(node('cred:acme-ident/matcher')?.label).toBe('not bound yet');
   });
 
   it('gives every box the same square and a shape that says what it is', () => {
@@ -135,20 +166,21 @@ describe('toTopologyModel', () => {
       width: NODE_SIZE,
       height: NODE_SIZE,
     });
-    expect(node('app:acme-enroll/scorer')).toMatchObject({
+    expect(node('cred:acme-enroll/scorer')).toMatchObject({
       shape: NodeShape.ellipse,
       width: NODE_SIZE,
+    });
+    expect(node('any-app:acme-ident')).toMatchObject({
+      shape: NodeShape.ellipse,
+      label: 'any app',
+    });
+    expect(node('any-namespace')).toMatchObject({
+      shape: NodeShape.hexagon,
+      label: 'Any namespace',
     });
     expect(node('gate:producer:ENROLL.IN')).toMatchObject({
       shape: NodeShape.rhombus,
       width: NODE_SIZE,
-    });
-  });
-
-  it('labels the any-namespace box with the translated text', () => {
-    expect(node('any-namespace')).toMatchObject({
-      type: NODE_TYPES.anyNamespace,
-      label: 'Any namespace',
     });
   });
 
@@ -172,15 +204,11 @@ describe('toTopologyModel', () => {
     expect(edge('e2')?.animationSpeed).toBe(EdgeAnimationSpeed.medium);
     expect(edge('e3')?.edgeStyle).toBe(EdgeStyle.dashedMd);
     expect(edge('e4')?.edgeStyle).toBe(EdgeStyle.default);
-    expect(edge('e4')).toMatchObject({
-      type: EDGE_TYPE,
-      source: 'addr:LOST',
-      target: 'ns:acme-ident',
-    });
+    expect(edge('e4')).toMatchObject({ type: EDGE_TYPE, source: 'addr:LOST' });
   });
 
   it('keeps the dataflow node and edge on the model data for the renderer', () => {
-    expect(node('addr:LOST')?.data).toBe(graph.nodes[5]);
+    expect(node('addr:LOST')?.data).toBe(graph.nodes.find((n) => n.id === 'addr:LOST'));
     expect(edge('e4')?.data).toBe(graph.edges[3]);
   });
 });

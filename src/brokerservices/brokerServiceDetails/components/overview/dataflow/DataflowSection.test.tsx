@@ -114,19 +114,19 @@ describe('DataflowSection', () => {
       'data-kind',
       'app',
     );
-    expect(edge('produce:app:acme-enroll/capture->addr:ENROLL.IN')).toHaveAttribute(
+    expect(edge('produce:cred:acme-enroll/capture->addr:ENROLL.IN')).toHaveAttribute(
       'data-kind',
       'declared',
     );
-    expect(edge('consume:addr:ENROLL.IN->app:acme-enroll/scorer')).toHaveAttribute(
+    expect(edge('consume:addr:ENROLL.IN->cred:acme-enroll/scorer')).toHaveAttribute(
       'data-kind',
       'declared',
     );
-    expect(edge('produce:app:acme-enroll/scorer->addr:IDENT.REQUEST')).toHaveAttribute(
+    expect(edge('produce:cred:acme-enroll/scorer->addr:IDENT.REQUEST')).toHaveAttribute(
       'data-kind',
       'declared',
     );
-    expect(edge('consume:addr:IDENT.REQUEST->ns:acme-ident')).toHaveAttribute(
+    expect(edge('consume:addr:IDENT.REQUEST->cred:acme-ident/matcher')).toHaveAttribute(
       'data-kind',
       'declared',
     );
@@ -137,6 +137,7 @@ describe('DataflowSection', () => {
     const apps = [capture, scorer];
     mockUseK8sWatchResources.mockReturnValue(watched(apps));
     render(<DataflowSection brokerService={service(...refsOf(apps))} />);
+    // matcher is not bound here, so acme-ident holds no box and the door is the namespace itself
     expect(edge('consume:addr:IDENT.REQUEST->ns:acme-ident')).toHaveAttribute(
       'data-kind',
       'unused',
@@ -147,7 +148,10 @@ describe('DataflowSection', () => {
     const apps = [capture, scorer, matcher, intruder];
     mockUseK8sWatchResources.mockReturnValue(watched(apps));
     render(<DataflowSection brokerService={service(...refsOf(apps))} />);
-    expect(edge('consume:addr:ENROLL.IN->ns:acme-ident')).toHaveAttribute('data-kind', 'broken');
+    expect(edge('consume:addr:ENROLL.IN->cred:acme-ident/intruder')).toHaveAttribute(
+      'data-kind',
+      'broken',
+    );
     expect(screen.getByTestId('dataflow-issue-refused')).toBeInTheDocument();
     expect(screen.getByTestId('dataflow-issue-notDeployed')).toHaveTextContent(
       'does not share address',

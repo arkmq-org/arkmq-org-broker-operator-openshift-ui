@@ -38,15 +38,15 @@ import {
   AsteriskIcon,
   BroadcastTowerIcon,
   CodeIcon,
-  CubeIcon,
   EnvelopeIcon,
   ExternalLinkAltIcon,
   FolderIcon,
   GlobeIcon,
+  KeyIcon,
   LockOpenIcon,
 } from '@patternfly/react-icons';
 import type { SVGIconProps } from '@patternfly/react-icons/dist/esm/createIcon';
-import { ANY_APP, type DataflowEdge, type DataflowNode } from './graph';
+import type { DataflowEdge, DataflowNode } from './graph';
 import { EDGE_TYPE, NODE_TYPES } from './topologyModel';
 
 export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__dataflow';
@@ -220,20 +220,35 @@ const AddressNode: React.FC<NodeProps> = observer((props) => {
   );
 });
 
-/** A party at the end of an arrow: an app, the any-app box, a namespace, or everyone. */
+/**
+ * A party at the end of an arrow: an app's credential (the binding secret its process
+ * mounts), the any-app box of a namespace, a namespace that holds no app box, or
+ * everyone.
+ */
 const PartyNode: React.FC<NodeProps> = observer((props) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const data = nodeData(props.element);
-  if (data?.kind === 'app') {
-    const any = data.name === ANY_APP;
+  if (data?.kind === 'credential') {
     return (
       <ShapeNode
         {...props}
-        kind="app"
-        className={`${DATAFLOW_CLASS}-app`}
-        icon={any ? AsteriskIcon : CubeIcon}
+        kind="credential"
+        className={`${DATAFLOW_CLASS}-credential`}
+        icon={KeyIcon}
+        badge={t('secret')}
+        secondaryLabel={data.name}
+      />
+    );
+  }
+  if (data?.kind === 'anyApp') {
+    return (
+      <ShapeNode
+        {...props}
+        kind="anyApp"
+        className={`${DATAFLOW_CLASS}-any-app`}
+        icon={AsteriskIcon}
         badge={t('app')}
-        editable={!any}
+        editable={false}
       />
     );
   }
@@ -260,33 +275,45 @@ const PartyNode: React.FC<NodeProps> = observer((props) => {
   );
 });
 
+type GroupProps = { element: GraphElement } & WithSelectionProps & WithDragNodeProps;
+
 /**
- * A namespace holding app and address boxes: PatternFly's group, which follows its
- * children as they are dragged. It is deliberately not a drop target, because a
- * group told it is `droppable` freezes its outline for the length of the drag.
+ * A box around other boxes: PatternFly's group, which follows its children as they
+ * are dragged. It is deliberately not a drop target, because a group told it is
+ * `droppable` freezes its outline for the length of the drag.
  */
-const NamespaceGroup: React.FC<{ element: GraphElement } & WithSelectionProps & WithDragNodeProps> =
-  observer(({ element, selected, onSelect, dragNodeRef }) => {
-    const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-    return (
-      <g
-        data-test={`dataflow-node-${element.getId()}`}
-        data-kind="namespace"
-        className={`${DATAFLOW_CLASS}-namespace-group`}
-      >
-        <DefaultGroup
-          element={element as Node}
-          selected={selected}
-          onSelect={onSelect}
-          dragNodeRef={dragNodeRef}
-          collapsible={false}
-          hulledOutline={false}
-          badge={t('namespace')}
-          truncateLength={28}
-        />
-      </g>
-    );
-  });
+const BoxGroup: React.FC<GroupProps & { kind: 'namespace' | 'app'; badge: string }> = observer(
+  ({ element, selected, onSelect, dragNodeRef, kind, badge }) => (
+    <g
+      data-test={`dataflow-node-${element.getId()}`}
+      data-kind={kind}
+      className={`${DATAFLOW_CLASS}-${kind}-group`}
+    >
+      <DefaultGroup
+        element={element as Node}
+        selected={selected}
+        onSelect={onSelect}
+        dragNodeRef={dragNodeRef}
+        collapsible={false}
+        hulledOutline={false}
+        badge={badge}
+        truncateLength={28}
+      />
+    </g>
+  ),
+);
+
+/** A namespace holding app boxes. */
+const NamespaceGroup: React.FC<GroupProps> = observer((props) => {
+  const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  return <BoxGroup {...props} kind="namespace" badge={t('namespace')} />;
+});
+
+/** An app holding its credential and the addresses it owns. */
+const AppGroup: React.FC<GroupProps> = observer((props) => {
+  const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  return <BoxGroup {...props} kind="app" badge={t('app')} />;
+});
 
 /** A gate the UI cannot read: the raw CEL, shown as it is. */
 const CustomGateNode: React.FC<NodeProps> = observer((props) => {
@@ -417,7 +444,8 @@ const editable = (component: React.ComponentType<NodeProps>) => {
 
 const SelectableAddress = editable(AddressNode);
 const SelectableParty = editable(PartyNode);
-const SelectableGroup = withSelection()(withDragNode()(NamespaceGroup));
+const SelectableNamespaceGroup = withSelection()(withDragNode()(NamespaceGroup));
+const SelectableAppGroup = withSelection()(withDragNode()(AppGroup));
 const SelectableCustomGate = withSelection()(withDragNode()(CustomGateNode));
 const SelectableEdge = withSelection()(FlowEdge);
 const DropGraph = withDndDrop({ accept: CREATE_CONNECTOR_DROP_TYPE, dropHint: 'create' })(
@@ -432,9 +460,12 @@ export const dataflowComponentFactory: ComponentFactory = (kind, type) => {
     case NODE_TYPES.address:
       return SelectableAddress;
     case NODE_TYPES.namespaceGroup:
-      return SelectableGroup;
-    case NODE_TYPES.namespace:
+      return SelectableNamespaceGroup;
     case NODE_TYPES.app:
+      return SelectableAppGroup;
+    case NODE_TYPES.namespace:
+    case NODE_TYPES.credential:
+    case NODE_TYPES.anyApp:
     case NODE_TYPES.anyNamespace:
       return SelectableParty;
     case NODE_TYPES.customGate:

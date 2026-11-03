@@ -63,6 +63,8 @@ export interface BrokerAppServiceBinding {
   name: string;
   namespace: string;
   assignedPort: number;
+  /** Binding secret in the app's namespace; the process that produces or consumes mounts it. */
+  secret?: string;
 }
 
 export interface BrokerAppStatus {

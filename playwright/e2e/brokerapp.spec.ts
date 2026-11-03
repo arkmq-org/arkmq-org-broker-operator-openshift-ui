@@ -682,11 +682,11 @@ spec:
         await expect(diagram.locator(`[data-test="dataflow-node-addr:${addr}"]`)).toBeVisible({
           timeout: 15000,
         });
-        // The app produces: the arrow leaves the app box inside its namespace group and
-        // enters the address box, which sits in the same group.
+        // The app produces: the arrow leaves the app's credential and enters the
+        // address box, both inside the app box in its namespace.
         await expect(
           diagram.locator(
-            `[data-test="dataflow-edge-produce:app:${TEST_NAMESPACE}/${appName}->addr:${addr}"]`,
+            `[data-test="dataflow-edge-produce:cred:${TEST_NAMESPACE}/${appName}->addr:${addr}"]`,
           ),
         ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
         console.log(`✓ Address "${addr}" drawn with a produce arrow from ${appName}`);
@@ -765,22 +765,24 @@ spec:
       await expect(diagram.locator('[data-test="dataflow-node-addr:GATED.Q"]')).toBeVisible({
         timeout: 30000,
       });
-      // The gate names the reader, so the reader gets its own box inside the namespace.
+      // Every app is a box in its namespace; its credential is where arrows end.
       await expect(
         diagram.locator(`[data-test="dataflow-node-app:${TEST_NAMESPACE}/${reader}"]`),
       ).toBeVisible({ timeout: 15000 });
       await expect(
+        diagram.locator(`[data-test="dataflow-node-cred:${TEST_NAMESPACE}/${reader}"]`),
+      ).toBeVisible({ timeout: 15000 });
+      await expect(
         diagram.locator(
-          `[data-test="dataflow-edge-consume:addr:GATED.Q->app:${TEST_NAMESPACE}/${reader}"]`,
+          `[data-test="dataflow-edge-consume:addr:GATED.Q->cred:${TEST_NAMESPACE}/${reader}"]`,
         ),
       ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
       console.log('✓ Reader flow attached to its own box, realised');
 
-      // The namespace is a group (the reader has a box), so the intruder gets a box
-      // too and its refused flow ends there, broken.
+      // The intruder's refused flow ends at its own credential, broken.
       await expect(
         diagram.locator(
-          `[data-test="dataflow-edge-consume:addr:GATED.Q->app:${TEST_NAMESPACE}/${intruder}"]`,
+          `[data-test="dataflow-edge-consume:addr:GATED.Q->cred:${TEST_NAMESPACE}/${intruder}"]`,
         ),
       ).toHaveAttribute('data-kind', 'broken', { timeout: 15000 });
       await expect(page.locator('[data-test="dataflow-issue-refused"]')).toBeVisible({

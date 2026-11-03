@@ -31,7 +31,10 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
     () => buildDataflowGraph({ apps: [brokerApp], ownerApps, universe }),
     [brokerApp, ownerApps, universe],
   );
-  const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
+  const labels = useMemo(
+    () => ({ anyNamespace: t('Any namespace'), anyApp: t('any app'), unbound: t('not bound yet') }),
+    [t],
+  );
   const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
   const hasAddresses = graph.nodes.some((node) => node.kind === 'address');
 

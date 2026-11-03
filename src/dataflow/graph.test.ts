@@ -4,10 +4,13 @@ import type { GateUniverse } from './gates';
 import {
   ANY_NAMESPACE_NODE_ID,
   addressNodeId,
+  anyAppNodeId,
   appNodeId,
   buildDataflowGraph,
+  credentialNodeId,
   gateNodeId,
   namespaceNodeId,
+  referencedOwnerRefs,
   type DataflowEdge,
   type DataflowNode,
 } from './graph';
@@ -25,39 +28,57 @@ const app = (
   namespace: string,
   name: string,
   spec: Partial<BrokerAppCR['spec']>,
-  deployedMessage?: string,
+  options: { deployedMessage?: string; secret?: string } = {},
 ): BrokerAppCR => ({
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
   metadata: { name, namespace },
   spec: { serviceSelector: {}, ...spec },
-  ...(deployedMessage
-    ? {
-        status: {
-          conditions: [
-            {
-              type: 'Deployed',
-              status: K8sResourceConditionStatus.False,
-              reason: 'ValidationFailed',
-              message: deployedMessage,
-            },
-          ],
-        },
-      }
-    : {}),
+  status: {
+    ...(options.secret
+      ? {
+          service: {
+            name: 'core-prd',
+            namespace: 'acme-platform',
+            assignedPort: 1,
+            secret: options.secret,
+          },
+        }
+      : {}),
+    conditions: [
+      options.deployedMessage
+        ? {
+            type: 'Deployed',
+            status: K8sResourceConditionStatus.False,
+            reason: 'ValidationFailed',
+            message: options.deployedMessage,
+          }
+        : { type: 'Deployed', status: K8sResourceConditionStatus.True },
+    ],
+  },
 });
 
+const ref = (namespace: string, name: string) => ({ namespace, name });
+const CAPTURE = ref('acme-enroll', 'capture');
+const SCORER = ref('acme-enroll', 'scorer');
+const MATCHER = ref('acme-ident', 'matcher');
+
 // The acme tutorial: capture -> ENROLL.IN -> scorer -> IDENT.REQUEST -> matcher
-const capture = app('acme-enroll', 'capture', {
-  addresses: [
-    {
-      address: 'ENROLL.IN',
-      consumerOfAppSelector:
-        "app.metadata.namespace == 'acme-enroll' && app.metadata.name == 'scorer'",
-    },
-  ],
-  capabilities: [{ producerOf: [{ address: 'ENROLL.IN' }] }],
-});
+const capture = app(
+  'acme-enroll',
+  'capture',
+  {
+    addresses: [
+      {
+        address: 'ENROLL.IN',
+        consumerOfAppSelector:
+          "app.metadata.namespace == 'acme-enroll' && app.metadata.name == 'scorer'",
+      },
+    ],
+    capabilities: [{ producerOf: [{ address: 'ENROLL.IN' }] }],
+  },
+  { secret: 'capture-binding-secret' },
+);
 const scorer = app('acme-enroll', 'scorer', {
   addresses: [
     { address: 'IDENT.REQUEST', consumerOfAppSelector: "app.metadata.namespace == 'acme-ident'" },
@@ -81,139 +102,82 @@ const edgesOfKind = (edges: DataflowEdge[], kind: DataflowEdge['kind']): Dataflo
   edges.filter((e) => e.kind === kind);
 const kinds = (nodes: DataflowNode[]): string[] => nodes.map((n) => n.kind);
 
+describe('referencedOwnerRefs', () => {
+  it('lists each owner of a referenced address once', () => {
+    expect(referencedOwnerRefs(matcher)).toEqual([SCORER]);
+    expect(referencedOwnerRefs(capture)).toEqual([]);
+  });
+});
+
 describe('buildDataflowGraph on a single app (form and app page)', () => {
-  it('puts an owned address inside its namespace group, produced from the app box', () => {
-    const plain = app('acme-enroll', 'capture', {
-      addresses: [{ address: 'ENROLL.IN' }],
-      capabilities: [{ producerOf: [{ address: 'ENROLL.IN' }] }],
+  it('nests the boxes: namespace, app, then credential and owned address', () => {
+    const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
+    expect(byId(nodes, appNodeId(CAPTURE))).toMatchObject({
+      kind: 'app',
+      parent: namespaceNodeId('acme-enroll'),
     });
-    const { nodes, edges } = buildDataflowGraph({ apps: [plain], universe });
+    expect(byId(nodes, credentialNodeId(CAPTURE))).toMatchObject({
+      kind: 'credential',
+      secret: 'capture-binding-secret',
+      parent: appNodeId(CAPTURE),
+    });
     expect(byId(nodes, addressNodeId('ENROLL.IN'))).toMatchObject({
       kind: 'address',
-      owner: { namespace: 'acme-enroll', name: 'capture' },
-      parent: namespaceNodeId('acme-enroll'),
+      owner: CAPTURE,
+      parent: appNodeId(CAPTURE),
       foreign: false,
-      gated: false,
+      gated: true,
     });
-    expect(edges).toEqual([
+    expect(edges).toContainEqual(
       expect.objectContaining({
-        source: appNodeId({ namespace: 'acme-enroll', name: 'capture' }),
+        source: credentialNodeId(CAPTURE),
         target: addressNodeId('ENROLL.IN'),
         role: 'produce',
         kind: 'declared',
-        apps: [{ namespace: 'acme-enroll', name: 'capture' }],
-      }),
-    ]);
-  });
-
-  it('leaves a namespace that owns nothing as a plain box at the arrow end', () => {
-    const { nodes, edges } = buildDataflowGraph({ apps: [matcher], ownerApps: [scorer], universe });
-    expect(byId(nodes, namespaceNodeId('acme-ident'))).toMatchObject({ kind: 'namespace' });
-    expect(nodes.some((n) => n.kind === 'app' && n.namespace === 'acme-ident')).toBe(false);
-    expect(byId(nodes, addressNodeId('IDENT.REQUEST'))).toMatchObject({
-      parent: namespaceNodeId('acme-enroll'),
-      foreign: true,
-    });
-    expect(edges[0]).toMatchObject({ target: namespaceNodeId('acme-ident') });
-  });
-
-  it('gives every app of a grouped namespace its own box, so no arrow touches the group', () => {
-    // capture's gate names scorer: acme-enroll becomes a group and capture's own
-    // flow must leave from a capture box, not from the group.
-    const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
-    expect(byId(nodes, addressNodeId('ENROLL.IN'))).toMatchObject({ gated: true });
-    const captureId = appNodeId({ namespace: 'acme-enroll', name: 'capture' });
-    expect(byId(nodes, captureId)).toMatchObject({
-      kind: 'app',
-      parent: namespaceNodeId('acme-enroll'),
-    });
-    expect(edges).toContainEqual(
-      expect.objectContaining({
-        source: captureId,
-        target: addressNodeId('ENROLL.IN'),
-        kind: 'declared',
-      }),
-    );
-    expect(edges.some((e) => e.source === namespaceNodeId('acme-enroll'))).toBe(false);
-  });
-
-  it('lands a whole-namespace gate on an any-app box when that namespace is grouped', () => {
-    // scorer's gate opens IDENT.REQUEST to all of acme-ident; the owner also names
-    // matcher on another address, so acme-ident is a group.
-    const owner = app('acme-enroll', 'scorer', {
-      addresses: [
-        {
-          address: 'IDENT.REQUEST',
-          consumerOfAppSelector: "app.metadata.namespace == 'acme-ident'",
-        },
-        {
-          address: 'IDENT.AUDIT',
-          consumerOfAppSelector:
-            "app.metadata.namespace == 'acme-ident' && app.metadata.name == 'matcher'",
-        },
-      ],
-    });
-    const { nodes, edges } = buildDataflowGraph({ apps: [owner], universe });
-    const anyApp = appNodeId({ namespace: 'acme-ident', name: '*' });
-    expect(byId(nodes, anyApp)).toMatchObject({
-      kind: 'app',
-      parent: namespaceNodeId('acme-ident'),
-    });
-    expect(edges).toContainEqual(
-      expect.objectContaining({
-        source: addressNodeId('IDENT.REQUEST'),
-        target: anyApp,
-        kind: 'allowed',
+        apps: [CAPTURE],
       }),
     );
   });
 
-  it('draws an app-level gate as an app box inside its namespace, dashed', () => {
+  it('leaves the secret undefined until the operator has bound the app', () => {
+    const { nodes } = buildDataflowGraph({ apps: [scorer], universe });
+    expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({ kind: 'credential' });
+    expect((byId(nodes, credentialNodeId(SCORER)) as { secret?: string }).secret).toBeUndefined();
+  });
+
+  it("draws an app-level gate as a dashed arrow to that app's credential, inside its own box", () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
-    const scorerNode = byId(nodes, appNodeId({ namespace: 'acme-enroll', name: 'scorer' }));
-    expect(scorerNode).toMatchObject({ kind: 'app', parent: namespaceNodeId('acme-enroll') });
+    expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({
+      kind: 'credential',
+      parent: appNodeId(SCORER),
+    });
+    expect(byId(nodes, appNodeId(SCORER))).toMatchObject({
+      parent: namespaceNodeId('acme-enroll'),
+    });
     expect(edgesOfKind(edges, 'allowed')).toEqual([
       expect.objectContaining({
         source: addressNodeId('ENROLL.IN'),
-        target: appNodeId({ namespace: 'acme-enroll', name: 'scorer' }),
+        target: credentialNodeId(SCORER),
         role: 'consume',
       }),
     ]);
   });
 
-  it('attaches the declared flow of a gated app to its own box, not its namespace', () => {
-    // scorer gates IDENT.REQUEST to acme-ident, and capture gates ENROLL.IN to scorer:
-    // when both are drawn, scorer has a box and its flows start there.
-    const { edges } = buildDataflowGraph({ apps: [capture, scorer], universe });
-    const scorerId = appNodeId({ namespace: 'acme-enroll', name: 'scorer' });
-    expect(edges).toContainEqual(
-      expect.objectContaining({ source: scorerId, target: addressNodeId('IDENT.REQUEST') }),
-    );
-    expect(edges).not.toContainEqual(
-      expect.objectContaining({
-        source: namespaceNodeId('acme-enroll'),
-        target: addressNodeId('IDENT.REQUEST'),
-      }),
-    );
-  });
-
-  it('draws a referenced address as foreign with its owner when the owner is supplied', () => {
-    const { nodes, edges } = buildDataflowGraph({
-      apps: [matcher],
-      ownerApps: [scorer],
-      universe,
-    });
+  it("draws a referenced address inside its owner's box, foreign, when the owner is supplied", () => {
+    const { nodes, edges } = buildDataflowGraph({ apps: [matcher], ownerApps: [scorer], universe });
     expect(byId(nodes, addressNodeId('IDENT.REQUEST'))).toMatchObject({
-      kind: 'address',
-      owner: { namespace: 'acme-enroll', name: 'scorer' },
+      owner: SCORER,
+      parent: appNodeId(SCORER),
       foreign: true,
       gated: true,
       issues: [],
     });
+    // the owner is only a box here: it is not drawn, so it has no credential
+    expect(byId(nodes, credentialNodeId(SCORER))).toBeUndefined();
     expect(edges).toEqual([
       expect.objectContaining({
         source: addressNodeId('IDENT.REQUEST'),
-        target: namespaceNodeId('acme-ident'),
+        target: credentialNodeId(MATCHER),
         role: 'consume',
         kind: 'declared',
         issues: [],
@@ -224,13 +188,8 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
   it('flags a referenced address whose owner cannot be seen', () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [matcher], universe });
     expect(byId(nodes, addressNodeId('IDENT.REQUEST'))).toMatchObject({
-      issues: [
-        {
-          kind: 'ownerMissing',
-          owner: { namespace: 'acme-enroll', name: 'scorer' },
-          address: 'IDENT.REQUEST',
-        },
-      ],
+      parent: appNodeId(SCORER),
+      issues: [{ kind: 'ownerMissing', owner: SCORER, address: 'IDENT.REQUEST' }],
     });
     expect(edges[0].kind).toBe('declared');
     expect(edges[0].issues).toEqual([expect.objectContaining({ kind: 'ownerMissing' })]);
@@ -282,13 +241,25 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     ]);
   });
 
+  it('draws a gate to a namespace that holds no box as a plain namespace', () => {
+    const owner = app('acme-enroll', 'capture', {
+      addresses: [
+        { address: 'ENROLL.IN', consumerOfAppSelector: "app.metadata.namespace == 'acme-notify'" },
+      ],
+    });
+    const { nodes, edges } = buildDataflowGraph({ apps: [owner], universe });
+    expect(byId(nodes, namespaceNodeId('acme-notify'))).toMatchObject({ kind: 'namespace' });
+    expect(edges[0]).toMatchObject({ target: namespaceNodeId('acme-notify'), kind: 'allowed' });
+  });
+
   it('treats a capability without appName as an owned address', () => {
     const implicit = app('acme-enroll', 'loop', {
       capabilities: [{ producerOf: [{ address: 'LOOP' }], consumerOf: [{ address: 'LOOP' }] }],
     });
     const { nodes, edges } = buildDataflowGraph({ apps: [implicit], universe });
     expect(byId(nodes, addressNodeId('LOOP'))).toMatchObject({
-      owner: { namespace: 'acme-enroll', name: 'loop' },
+      owner: ref('acme-enroll', 'loop'),
+      parent: appNodeId(ref('acme-enroll', 'loop')),
       foreign: false,
       gated: false,
     });
@@ -324,19 +295,17 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
 describe('buildDataflowGraph on a complete service', () => {
   const service = { apps: [capture, scorer, matcher], universe, complete: true };
 
-  it('draws the tutorial chain with every gate realised', () => {
+  it('draws the tutorial chain between credentials with every gate realised', () => {
     const { edges } = buildDataflowGraph(service);
     expect(edgesOfKind(edges, 'allowed')).toEqual([]);
     expect(edgesOfKind(edges, 'unused')).toEqual([]);
     expect(edgesOfKind(edges, 'broken')).toEqual([]);
-    const scorerId = appNodeId({ namespace: 'acme-enroll', name: 'scorer' });
-    const captureId = appNodeId({ namespace: 'acme-enroll', name: 'capture' });
     expect(edges.map((e) => `${e.source}>${e.target}`).sort()).toEqual(
       [
-        `${captureId}>${addressNodeId('ENROLL.IN')}`,
-        `${addressNodeId('ENROLL.IN')}>${scorerId}`,
-        `${scorerId}>${addressNodeId('IDENT.REQUEST')}`,
-        `${addressNodeId('IDENT.REQUEST')}>${namespaceNodeId('acme-ident')}`,
+        `${credentialNodeId(CAPTURE)}>${addressNodeId('ENROLL.IN')}`,
+        `${addressNodeId('ENROLL.IN')}>${credentialNodeId(SCORER)}`,
+        `${credentialNodeId(SCORER)}>${addressNodeId('IDENT.REQUEST')}`,
+        `${addressNodeId('IDENT.REQUEST')}>${credentialNodeId(MATCHER)}`,
       ].sort(),
     );
   });
@@ -352,15 +321,18 @@ describe('buildDataflowGraph on a complete service', () => {
           },
         ],
       },
-      "referenced app acme-enroll/capture does not share address 'ENROLL.IN' for role 'consumer'",
+      {
+        deployedMessage:
+          "referenced app acme-enroll/capture does not share address 'ENROLL.IN' for role 'consumer'",
+      },
     );
     const { edges } = buildDataflowGraph({ ...service, apps: [...service.apps, intruder] });
     const broken = edgesOfKind(edges, 'broken');
     expect(broken).toHaveLength(1);
     expect(broken[0]).toMatchObject({
       source: addressNodeId('ENROLL.IN'),
-      target: namespaceNodeId('acme-ident'),
-      apps: [{ namespace: 'acme-ident', name: 'intruder' }],
+      target: credentialNodeId(ref('acme-ident', 'intruder')),
+      apps: [ref('acme-ident', 'intruder')],
     });
     expect(broken[0].issues.map((issue) => issue.kind)).toEqual(['refused', 'notDeployed']);
     const notDeployed = broken[0].issues[1];
@@ -369,21 +341,33 @@ describe('buildDataflowGraph on a complete service', () => {
     );
   });
 
-  it('marks an admitted party that declares nothing as an open door', () => {
-    const { edges } = buildDataflowGraph({ ...service, apps: [capture, scorer] });
-    const unused = edgesOfKind(edges, 'unused');
-    expect(unused).toEqual([
+  it('marks an admitted party that declares nothing as an open door, on an any-app box', () => {
+    // acme-ident holds matcher's box only when matcher is drawn; without it, the
+    // namespace holds nothing and the gate lands on the namespace itself.
+    const { edges, nodes } = buildDataflowGraph({ ...service, apps: [capture, scorer] });
+    expect(edgesOfKind(edges, 'unused')).toEqual([
       expect.objectContaining({
         source: addressNodeId('IDENT.REQUEST'),
         target: namespaceNodeId('acme-ident'),
         role: 'consume',
       }),
     ]);
+    expect(byId(nodes, namespaceNodeId('acme-ident'))).toMatchObject({ kind: 'namespace' });
   });
 
-  it('leaves no any-app box behind when a whole-namespace gate on a grouped namespace is realised', () => {
-    // matcher opens IDENT.RESULTS to all of acme-ident; registry-sync, in acme-ident,
-    // consumes it, so the gate is realised and no "any app" party may remain.
+  it('lands an open door on an any-app box when the namespace holds app boxes', () => {
+    const idle = app('acme-ident', 'idle', {});
+    const { edges, nodes } = buildDataflowGraph({ ...service, apps: [capture, scorer, idle] });
+    expect(byId(nodes, anyAppNodeId('acme-ident'))).toMatchObject({
+      kind: 'anyApp',
+      parent: namespaceNodeId('acme-ident'),
+    });
+    expect(edgesOfKind(edges, 'unused')).toEqual([
+      expect.objectContaining({ target: anyAppNodeId('acme-ident') }),
+    ]);
+  });
+
+  it('leaves no any-app box behind when a whole-namespace gate is realised', () => {
     const owner = app('acme-ident', 'matcher', {
       addresses: [
         {
@@ -413,16 +397,8 @@ describe('buildDataflowGraph on a complete service', () => {
       universe,
       complete: true,
     });
-    expect(byId(nodes, appNodeId({ namespace: 'acme-ident', name: '*' }))).toBeUndefined();
+    expect(byId(nodes, anyAppNodeId('acme-ident'))).toBeUndefined();
     expect(edgesOfKind(edges, 'unused')).toEqual([]);
-  });
-
-  it('pairs a whole-namespace gate with a flow declared by any app of that namespace', () => {
-    // matcher consumes IDENT.REQUEST from its own box? No: acme-ident is not grouped
-    // here, so the flow ends on the namespace box and the gate is realised by it.
-    const { edges } = buildDataflowGraph({ ...service, apps: [scorer, matcher] });
-    expect(edgesOfKind(edges, 'unused')).toEqual([]);
-    expect(edgesOfKind(edges, 'allowed')).toEqual([]);
   });
 
   it('pairs an app-level gate only with that app, not with its namespace siblings', () => {
@@ -432,12 +408,12 @@ describe('buildDataflowGraph on a complete service', () => {
       ],
     });
     const { edges } = buildDataflowGraph({ apps: [capture, sibling], universe, complete: true });
-    // the gate to scorer stays an open door; the sibling's flow is refused
     expect(edgesOfKind(edges, 'unused')).toHaveLength(1);
     expect(edgesOfKind(edges, 'broken')).toHaveLength(1);
   });
 
-  it('merges several credentials of one namespace onto one arrow', () => {
+  it('merges several credentials onto one arrow only when they are the same party', () => {
+    // two apps of one namespace are two credentials, hence two arrows
     const second = app('acme-ident', 'auditor', {
       capabilities: [
         {
@@ -448,12 +424,10 @@ describe('buildDataflowGraph on a complete service', () => {
       ],
     });
     const { edges } = buildDataflowGraph({ ...service, apps: [...service.apps, second] });
-    const toIdent = edges.filter((e) => e.target === namespaceNodeId('acme-ident'));
-    expect(toIdent).toHaveLength(1);
-    expect(toIdent[0].apps).toEqual([
-      { namespace: 'acme-ident', name: 'matcher' },
-      { namespace: 'acme-ident', name: 'auditor' },
-    ]);
+    const fromIdentRequest = edges.filter((e) => e.source === addressNodeId('IDENT.REQUEST'));
+    expect(fromIdentRequest.map((e) => e.target).sort()).toEqual(
+      [credentialNodeId(MATCHER), credentialNodeId(ref('acme-ident', 'auditor'))].sort(),
+    );
   });
 
   it('reports a gate the browser cannot evaluate without breaking the edge', () => {

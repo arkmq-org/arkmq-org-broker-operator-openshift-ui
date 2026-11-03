@@ -3,7 +3,13 @@ import type {
   AddressDirection,
   BrokerAppFormAction,
 } from '../../../reducers/brokerapp/reducer';
-import { addressNodeId, appNodeId, namespaceNodeId, type AppRef } from '../../../dataflow/graph';
+import {
+  addressNodeId,
+  appNodeId,
+  credentialNodeId,
+  namespaceNodeId,
+  type AppRef,
+} from '../../../dataflow/graph';
 import type { ConnectorTarget } from '../../../dataflow/topologyComponents';
 
 const withRole = (direction: AddressDirection, role: 'produces' | 'consumes'): AddressDirection => {
@@ -14,9 +20,10 @@ const withRole = (direction: AddressDirection, role: 'produces' | 'consumes'): A
 
 /**
  * Turns a connector the user dragged on the diagram into a form action. An arrow
- * from this app's box into an address declares that the app produces to it; an
- * arrow from an address into this app's box declares that it consumes from it; an
- * arrow from this app's box onto empty canvas asks for a new address. Anything else
+ * from this app's credential (or its box) into an address declares that the app
+ * produces to it; an arrow from an address into the credential declares that it
+ * consumes from it; an arrow from the credential onto empty canvas asks for a new
+ * address. Anything else
  * (two addresses, a foreign party) means nothing and yields no action.
  *
  * @param addresses - The form's address list
@@ -30,7 +37,7 @@ export const connectionAction = (
   sourceId: string,
   target: ConnectorTarget,
 ): BrokerAppFormAction | null => {
-  const mine = new Set([appNodeId(self), namespaceNodeId(self.namespace)]);
+  const mine = new Set([credentialNodeId(self), appNodeId(self), namespaceNodeId(self.namespace)]);
   const addressPrefix = addressNodeId('');
   const indexOf = (nodeId: string): number => {
     if (!nodeId.startsWith(addressPrefix)) return -1;

@@ -76,11 +76,13 @@ describe('BrokerAppOverviewTab', () => {
     expect(screen.getByTestId('dataflow-node-addr:payment.requests')).toBeInTheDocument();
     expect(
       screen.getByTestId(
-        'dataflow-edge-produce:app:default/my-payment-app->addr:payment.transactions',
+        'dataflow-edge-produce:cred:default/my-payment-app->addr:payment.transactions',
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId('dataflow-edge-consume:addr:payment.requests->app:default/my-payment-app'),
+      screen.getByTestId(
+        'dataflow-edge-consume:addr:payment.requests->cred:default/my-payment-app',
+      ),
     ).toBeInTheDocument();
   });
 });

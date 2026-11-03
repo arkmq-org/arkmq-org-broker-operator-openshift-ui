@@ -9,7 +9,7 @@ import {
   type GateUniverse,
 } from './gates';
 
-/** Namespace and name of a BrokerApp, the credential that declares a flow. */
+/** Namespace and name of a BrokerApp. */
 export interface AppRef {
   namespace: string;
   name: string;
@@ -47,16 +47,31 @@ export type DataflowIssue =
   | { kind: 'unknownGate'; owner: AppRef; address: string; role: DataflowRole }
   | { kind: 'notDeployed'; app: AppRef; message: string };
 
+/**
+ * The boxes. A namespace holds app boxes; an app box holds the addresses it owns and
+ * its credential, the binding secret the producing or consuming process mounts,
+ * which is where every arrow of that app starts or ends.
+ */
 export type DataflowNode =
   | { id: string; kind: 'namespace'; namespace: string }
   | { id: string; kind: 'app'; namespace: string; name: string; parent: string }
+  | {
+      id: string;
+      kind: 'credential';
+      namespace: string;
+      name: string;
+      /** Name of the binding secret, once the operator has bound the app. */
+      secret?: string;
+      parent: string;
+    }
+  | { id: string; kind: 'anyApp'; namespace: string; parent: string }
   | { id: string; kind: 'anyNamespace' }
   | {
       id: string;
       kind: 'address';
       address: string;
       owner?: AppRef;
-      /** Namespace group the box sits in: the owner's namespace, when known. */
+      /** The owner's app box, when the owner is known. */
       parent?: string;
       /** Owned by an app this graph does not draw. */
       foreign: boolean;
@@ -85,10 +100,10 @@ export interface DataflowGraph {
 }
 
 export const ANY_NAMESPACE_NODE_ID = 'any-namespace';
-/** App name of the box standing for "any app of this namespace" inside a namespace group. */
-export const ANY_APP = '*';
 export const namespaceNodeId = (namespace: string): string => `ns:${namespace}`;
 export const appNodeId = (ref: AppRef): string => `app:${ref.namespace}/${ref.name}`;
+export const credentialNodeId = (ref: AppRef): string => `cred:${ref.namespace}/${ref.name}`;
+export const anyAppNodeId = (namespace: string): string => `any-app:${namespace}`;
 export const addressNodeId = (address: string): string => `addr:${address}`;
 export const gateNodeId = (address: string, role: GateRole): string => `gate:${role}:${address}`;
 
@@ -124,17 +139,20 @@ const edgeId = (source: string, target: string, role: DataflowRole): string =>
 const NODE_ORDER: Record<DataflowNode['kind'], number> = {
   namespace: 0,
   app: 1,
-  anyNamespace: 2,
-  address: 3,
-  customGate: 4,
+  credential: 2,
+  anyApp: 3,
+  anyNamespace: 4,
+  address: 5,
+  customGate: 6,
 };
 
 /**
  * Builds the boxes-and-arrows model of the messaging flows a set of BrokerApps
- * declare. Addresses are the boxes, namespaces the arrow ends (the binding secret is
- * namespace-scoped), apps a label on the arrows; an app only becomes a box when a
- * gate names it. Gate edges pair with declared edges by sharing their endpoints: a
- * realised gate disappears behind the declared flow, an unrealised one stays dashed.
+ * declare. An address box sits in its owner's app box, inside the owner's namespace
+ * box; arrows start and end at an app's credential, the binding secret its process
+ * mounts, because that secret is what grants the messaging rights. A gate pairs with
+ * a declared flow by meaning: a realised gate disappears behind the declared arrow,
+ * an unrealised one stays dashed, and its party is only drawn then.
  *
  * Pure: the same input always yields the same, sorted output, which dagre needs to
  * lay out the same picture twice.
@@ -178,7 +196,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     if (!nodes.has(id)) nodes.set(id, { id, kind: 'namespace', namespace });
     return id;
   };
-  const ensureApp = (ref: AppRef): string => {
+  const ensureAppBox = (ref: AppRef): string => {
     const id = appNodeId(ref);
     if (!nodes.has(id)) {
       nodes.set(id, {
@@ -188,6 +206,30 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
         name: ref.name,
         parent: ensureNamespace(ref.namespace),
       });
+    }
+    return id;
+  };
+  const ensureCredential = (ref: AppRef, secret?: string): string => {
+    const id = credentialNodeId(ref);
+    const existing = nodes.get(id);
+    if (existing?.kind === 'credential') {
+      if (secret && !existing.secret) existing.secret = secret;
+      return id;
+    }
+    nodes.set(id, {
+      id,
+      kind: 'credential',
+      namespace: ref.namespace,
+      name: ref.name,
+      secret,
+      parent: ensureAppBox(ref),
+    });
+    return id;
+  };
+  const ensureAnyApp = (namespace: string): string => {
+    const id = anyAppNodeId(namespace);
+    if (!nodes.has(id)) {
+      nodes.set(id, { id, kind: 'anyApp', namespace, parent: ensureNamespace(namespace) });
     }
     return id;
   };
@@ -203,7 +245,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     if (existing?.kind === 'address') {
       if (!existing.owner && owner) {
         existing.owner = owner;
-        existing.parent = ensureNamespace(owner.namespace);
+        existing.parent = ensureAppBox(owner);
       }
       existing.pubSub = existing.pubSub || pubSub;
       return id;
@@ -213,7 +255,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       kind: 'address',
       address,
       owner,
-      parent: owner ? ensureNamespace(owner.namespace) : undefined,
+      parent: owner ? ensureAppBox(owner) : undefined,
       foreign: false,
       gated: false,
       pubSub,
@@ -242,9 +284,21 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     existing.issues.push(...edge.issues);
   };
 
-  // Pass 1: gates of the drawn apps' owned addresses create the parties they admit.
-  // A namespace that gets an app box becomes a group, and react-topology cannot
-  // anchor an edge on a group: every later flow in that namespace lands on a box.
+  // Namespaces that will hold app boxes: a whole-namespace gate lands on an any-app
+  // box inside those, and on the namespace itself elsewhere.
+  const groupedNamespaces = new Set<string>(drawnRefs.map((ref) => ref.namespace));
+  for (const app of input.apps) {
+    const self = appRefOf(app);
+    for (const entry of hydrated(app)) {
+      if (entry.kind === 'referenced' && entry.appName) {
+        groupedNamespaces.add(entry.appNamespace ?? self.namespace);
+      }
+    }
+  }
+
+  // Pass 1: gates of the drawn apps' owned addresses. The party a gate admits is only
+  // drawn in pass 3, if the gate arrow survives: a realised gate leaves no arrow, and
+  // must leave no orphan box either.
   interface GateEdge {
     source: string;
     target: string;
@@ -252,24 +306,9 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     address: string;
     owner: AppRef;
     principal?: GatePrincipal;
-    /** Creates the party node; only called when the gate arrow is actually drawn. */
     ensureParty: () => void;
   }
   const gateEdges: GateEdge[] = [];
-  // An address box sits inside its owner's namespace, which therefore is a group;
-  // every app of a group needs a box of its own for its arrows to start from.
-  const groupedNamespaces = new Set<string>();
-  for (const app of input.apps) {
-    const self = appRefOf(app);
-    for (const entry of hydrated(app)) {
-      if (entry.kind === 'owned') groupedNamespaces.add(self.namespace);
-      else if (entry.appName) groupedNamespaces.add(entry.appNamespace ?? self.namespace);
-    }
-  }
-  const ensureAppBox = (ref: AppRef): string => {
-    groupedNamespaces.add(ref.namespace);
-    return ensureApp(ref);
-  };
   for (const app of input.apps) {
     const owner = appRefOf(app);
     for (const entry of hydrated(app)) {
@@ -285,88 +324,61 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
         const node = nodes.get(addressId);
         if (node?.kind === 'address') node.gated = true;
         const role = roleOfGate(gateRole);
-        if (view.kind === 'custom') {
-          const id = gateNodeId(entry.address, gateRole);
-          nodes.set(id, {
-            id,
-            kind: 'customGate',
-            expression: view.expression,
-            role: gateRole,
-            address: entry.address,
-          });
-          const noParty = () => undefined;
-          gateEdges.push(
-            role === 'produce'
-              ? {
-                  source: id,
-                  target: addressId,
-                  role,
-                  address: entry.address,
-                  owner,
-                  ensureParty: noParty,
-                }
-              : {
-                  source: addressId,
-                  target: id,
-                  role,
-                  address: entry.address,
-                  owner,
-                  ensureParty: noParty,
-                },
-          );
-          continue;
-        }
-        for (const principal of view.principals) {
+        const link = (partyId: string, ensureParty: () => void, principal?: GatePrincipal) => {
           gateEdges.push({
-            source: '',
-            target: '',
+            source: role === 'produce' ? partyId : addressId,
+            target: role === 'produce' ? addressId : partyId,
             role,
             address: entry.address,
             owner,
             principal,
-            ensureParty: () => undefined,
+            ensureParty,
           });
+        };
+        if (view.kind === 'custom') {
+          const id = gateNodeId(entry.address, gateRole);
+          link(id, () => {
+            nodes.set(id, {
+              id,
+              kind: 'customGate',
+              expression: view.expression,
+              role: gateRole,
+              address: entry.address,
+            });
+          });
+          continue;
+        }
+        for (const principal of view.principals) {
           if (principal.appName) {
-            ensureAppBox({ namespace: principal.namespace, name: principal.appName });
+            const ref = { namespace: principal.namespace, name: principal.appName };
+            groupedNamespaces.add(ref.namespace);
+            link(credentialNodeId(ref), () => ensureCredential(ref), principal);
+          } else if (principal.namespace === ANY_NAMESPACE) {
+            link(ANY_NAMESPACE_NODE_ID, ensureAny, principal);
+          } else if (groupedNamespaces.has(principal.namespace)) {
+            link(
+              anyAppNodeId(principal.namespace),
+              () => ensureAnyApp(principal.namespace),
+              principal,
+            );
+          } else {
+            link(
+              namespaceNodeId(principal.namespace),
+              () => ensureNamespace(principal.namespace),
+              principal,
+            );
           }
         }
       }
     }
   }
-  // Whole-namespace principals resolve once every grouped namespace is known. Their
-  // node is only created if the gate arrow survives pass 3: a realised gate leaves no
-  // arrow, and must leave no orphan box either.
-  for (const gate of gateEdges) {
-    if (!gate.principal) continue;
-    const { principal } = gate;
-    let partyId: string;
-    if (principal.appName) {
-      partyId = appNodeId({ namespace: principal.namespace, name: principal.appName });
-    } else if (principal.namespace === ANY_NAMESPACE) {
-      partyId = ANY_NAMESPACE_NODE_ID;
-      gate.ensureParty = () => ensureAny();
-    } else if (groupedNamespaces.has(principal.namespace)) {
-      const anyApp = { namespace: principal.namespace, name: ANY_APP };
-      partyId = appNodeId(anyApp);
-      gate.ensureParty = () => ensureApp(anyApp);
-    } else {
-      partyId = namespaceNodeId(principal.namespace);
-      gate.ensureParty = () => ensureNamespace(principal.namespace);
-    }
-    const addressId = addressNodeId(gate.address);
-    if (gate.role === 'produce') {
-      gate.source = partyId;
-      gate.target = addressId;
-    } else {
-      gate.source = addressId;
-      gate.target = partyId;
-    }
-  }
 
-  // Pass 2: declared flows, checked against the owner's gate when the address is referenced.
+  // Pass 2: declared flows, from the app's credential, checked against the owner's
+  // gate when the address is referenced.
   const declared: { address: string; role: DataflowRole; app: AppRef }[] = [];
   for (const app of input.apps) {
     const ref = appRefOf(app);
+    const credentialId = (): string => ensureCredential(ref, app.status?.service?.secret);
     const failure = app.status?.conditions?.find(
       (c) => c.type === 'Deployed' && c.status === K8sResourceConditionStatus.False,
     )?.message;
@@ -380,10 +392,6 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
             : undefined;
       const spec = owner ? ownedSpec(owner, entry.address) : undefined;
       const addressId = ensureAddress(entry.address, owner, !!entry.pubSub || !!spec?.pubSub);
-      const partyId =
-        nodes.has(appNodeId(ref)) || groupedNamespaces.has(ref.namespace)
-          ? ensureApp(ref)
-          : ensureNamespace(ref.namespace);
 
       const roles: DataflowRole[] = [];
       if (entry.direction === 'produces' || entry.direction === 'both') roles.push('produce');
@@ -399,7 +407,8 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
 
       for (const role of roles) {
         declared.push({ address: entry.address, role, app: ref });
-        const [source, target] = role === 'produce' ? [partyId, addressId] : [addressId, partyId];
+        const [source, target] =
+          role === 'produce' ? [credentialId(), addressId] : [addressId, credentialId()];
         const issues: DataflowIssue[] = [];
         let kind: DataflowEdgeKind = 'declared';
         if (owner && !sameRef(owner, ref)) {
@@ -466,8 +475,9 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
   }
 
   for (const node of Array.from(nodes.values())) {
-    if (node.kind === 'address' && node.owner) node.foreign = !isDrawn(node.owner);
-    if (node.kind === 'address' && node.owner && !node.gated) {
+    if (node.kind !== 'address' || !node.owner) continue;
+    node.foreign = !isDrawn(node.owner);
+    if (!node.gated) {
       const spec = ownedSpec(node.owner, node.address);
       node.gated = Boolean(spec?.producerOfAppSelector) || Boolean(spec?.consumerOfAppSelector);
     }
