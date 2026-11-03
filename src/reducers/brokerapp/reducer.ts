@@ -1,6 +1,7 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
-import type { BrokerAppCR, BrokerAppSpec, MatchAddress, PrivateAddress } from '../../k8s/types';
+import type { AddressRef, AddressSpec, BrokerAppCR, BrokerAppSpec } from '../../k8s/types';
+import { compileGate, type GatePrincipal } from '../../dataflow/gates';
 import { validateBrokerAppCR } from '../../validation/k8s';
 
 export interface MatchLabel {
@@ -9,18 +10,29 @@ export interface MatchLabel {
   value: string;
 }
 
-export type AddressOwnership = 'private' | 'shared' | 'external';
+/**
+ * `owned`: the address lives in `spec.addresses`, its lifecycle follows this app and
+ * the app decides, per role, who else may use it through a gate.
+ * `referenced`: another app owns the address; this app only declares a capability on
+ * it and must be admitted by the owner's gate.
+ */
+export type AddressKind = 'owned' | 'referenced';
 export type AddressDirection = 'produces' | 'consumes' | 'both' | 'none';
+export type GateRole = 'producer' | 'consumer';
 
 export interface Address {
   address: string;
-  ownership: AddressOwnership;
+  kind: AddressKind;
   direction: AddressDirection;
   pubSub?: boolean;
   subscriptions?: string[];
-  /** Name of the remote BrokerApp that owns this address (external only). */
+  /** Owned only: raw CEL of `producerOfAppSelector`, exactly as stored in the CR. */
+  producerGate?: string;
+  /** Owned only: raw CEL of `consumerOfAppSelector`, exactly as stored in the CR. */
+  consumerGate?: string;
+  /** Referenced only: name of the BrokerApp that owns this address. */
   appName?: string;
-  /** Namespace of the remote BrokerApp that owns this address (external only). */
+  /** Referenced only: namespace of the BrokerApp that owns this address. */
   appNamespace?: string;
 }
 
@@ -41,14 +53,25 @@ export type BrokerAppFormAction =
         Pick<
           Address,
           | 'address'
-          | 'ownership'
+          | 'kind'
           | 'direction'
           | 'pubSub'
           | 'subscriptions'
+          | 'producerGate'
+          | 'consumerGate'
           | 'appName'
           | 'appNamespace'
         >
       >;
+    }
+  /**
+   * Opens one gate of an owned address to the given parties. The reducer writes the
+   * canonical CEL so the form never has to know the expression syntax; an empty
+   * list closes the gate.
+   */
+  | {
+      type: 'SET_ADDRESS_GATE';
+      payload: { index: number; role: GateRole; principals: GatePrincipal[] };
     }
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
@@ -96,27 +119,30 @@ const cleanupResources = (spec: BrokerAppSpec): void => {
 };
 
 /**
- * Maps the address list to the three CRD spec fields:
- * spec.addresses, spec.sharedAddresses, and spec.capabilities.
+ * Maps the address list to the two CRD spec fields: owned addresses become
+ * `spec.addresses` entries carrying their gates, and every address with a direction
+ * becomes a `spec.capabilities` entry, with the owner tuple when referenced.
  */
 const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
-  const cleanAddress = (e: Address): PrivateAddress => {
-    const cleaned: PrivateAddress = { address: e.address.trim() };
-    if (e.pubSub) cleaned.pubSub = e.pubSub;
-    if (e.subscriptions?.length) cleaned.subscriptions = [...e.subscriptions];
-    return cleaned;
+  const toAddressSpec = (e: Address): AddressSpec => {
+    const spec: AddressSpec = { address: e.address.trim() };
+    if (e.pubSub) spec.pubSub = e.pubSub;
+    if (e.subscriptions?.length) spec.subscriptions = [...e.subscriptions];
+    if (e.producerGate?.trim()) spec.producerOfAppSelector = e.producerGate.trim();
+    if (e.consumerGate?.trim()) spec.consumerOfAppSelector = e.consumerGate.trim();
+    return spec;
   };
 
   const validAddresses = addresses.filter((e) => e.address.trim());
 
-  const privateEntries = validAddresses.filter((e) => e.ownership === 'private').map(cleanAddress);
+  const ownedEntries = validAddresses.filter((e) => e.kind === 'owned').map(toAddressSpec);
 
-  const sharedEntries = validAddresses.filter((e) => e.ownership === 'shared').map(cleanAddress);
-
-  const toCapabilityEntry = (e: Address, isConsumer: boolean): MatchAddress => {
-    const entry: MatchAddress = { address: e.address.trim() };
-    if (e.appName) entry.appName = e.appName;
-    if (e.appNamespace) entry.appNamespace = e.appNamespace;
+  const toCapabilityEntry = (e: Address, isConsumer: boolean): AddressRef => {
+    const entry: AddressRef = { address: e.address.trim() };
+    if (e.kind === 'referenced') {
+      if (e.appName) entry.appName = e.appName;
+      if (e.appNamespace) entry.appNamespace = e.appNamespace;
+    }
     if (!isConsumer && e.pubSub) entry.pubSub = e.pubSub;
     if (isConsumer && e.subscriptions?.length) entry.subscriptions = [...e.subscriptions];
     return entry;
@@ -130,16 +156,10 @@ const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
     .filter((e) => e.direction === 'consumes' || e.direction === 'both')
     .map((e) => toCapabilityEntry(e, true));
 
-  if (privateEntries.length) {
-    cr.spec.addresses = privateEntries;
+  if (ownedEntries.length) {
+    cr.spec.addresses = ownedEntries;
   } else {
     delete cr.spec.addresses;
-  }
-
-  if (sharedEntries.length) {
-    cr.spec.sharedAddresses = sharedEntries;
-  } else {
-    delete cr.spec.sharedAddresses;
   }
 
   if (producerEntries.length || consumerEntries.length) {
@@ -188,8 +208,12 @@ const mergeMatchLabelsWithYaml = (
 };
 
 /**
- * Reconstructs the address list from the three CRD spec fields
- * when loading a CR from YAML or an existing resource.
+ * Reconstructs the address list from `spec.addresses` and `spec.capabilities` when
+ * loading a CR from YAML or an existing resource.
+ *
+ * A capability entry without `appName` is the app's own address, whether or not it
+ * is listed under `spec.addresses` (the operator provisions it either way), so it
+ * hydrates as owned and the next sync writes it to `spec.addresses` explicitly.
  */
 export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   const addresses: Address[] = [];
@@ -197,17 +221,8 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   const cap = cr.spec.capabilities?.[0];
   const producerEntries = cap?.producerOf ?? [];
   const consumerEntries = cap?.consumerOf ?? [];
-  const producerNames: string[] = producerEntries.map((a) => a.address);
-  const consumerNames: string[] = consumerEntries.map((a) => a.address);
-  const producerSet = new Set(producerNames);
-  const consumerSet = new Set(consumerNames);
-
-  const capabilityByAddress = new Map<string, MatchAddress>();
-  for (const entry of [...producerEntries, ...consumerEntries]) {
-    if (!capabilityByAddress.has(entry.address)) {
-      capabilityByAddress.set(entry.address, entry);
-    }
-  }
+  const producerSet = new Set(producerEntries.map((a) => a.address));
+  const consumerSet = new Set(consumerEntries.map((a) => a.address));
   const producerByAddress = new Map(producerEntries.map((e) => [e.address, e]));
   const consumerByAddress = new Map(consumerEntries.map((e) => [e.address, e]));
 
@@ -220,49 +235,41 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
     return 'none';
   };
 
-  const ownedAddressNames = new Set<string>();
+  const seen = new Set<string>();
 
   for (const entry of cr.spec.addresses ?? []) {
-    ownedAddressNames.add(entry.address);
+    seen.add(entry.address);
     addresses.push({
       address: entry.address,
-      ownership: 'private',
+      kind: 'owned',
       direction: resolveDirection(entry.address),
       pubSub: entry.pubSub,
       subscriptions: entry.subscriptions,
+      producerGate: entry.producerOfAppSelector,
+      consumerGate: entry.consumerOfAppSelector,
     });
   }
 
-  for (const entry of cr.spec.sharedAddresses ?? []) {
-    ownedAddressNames.add(entry.address);
-    addresses.push({
-      address: entry.address,
-      ownership: 'shared',
-      direction: resolveDirection(entry.address),
-      pubSub: entry.pubSub,
-      subscriptions: entry.subscriptions,
-    });
-  }
-
-  const seenCapability = new Set<string>();
-  for (const addr of [...producerNames, ...consumerNames]) {
-    if (!seenCapability.has(addr) && !ownedAddressNames.has(addr)) {
-      const capEntry = capabilityByAddress.get(addr);
-      // An external address is pub/sub when its producer says so, or when it is
-      // consumed through subscriptions, as the operator infers it.
-      const subscriptions = consumerByAddress.get(addr)?.subscriptions;
-      const pubSub = !!producerByAddress.get(addr)?.pubSub || !!subscriptions?.length;
-      addresses.push({
-        address: addr,
-        ownership: 'external',
-        direction: resolveDirection(addr),
-        ...(pubSub ? { pubSub } : {}),
-        ...(subscriptions?.length ? { subscriptions: [...subscriptions] } : {}),
-        appName: capEntry?.appName,
-        appNamespace: capEntry?.appNamespace,
-      });
+  for (const capEntry of [...producerEntries, ...consumerEntries]) {
+    const addr = capEntry.address;
+    if (seen.has(addr)) continue;
+    seen.add(addr);
+    // Routing semantics live on the producer side (pubSub) or follow from the
+    // consumer's subscriptions, as the operator infers them.
+    const subscriptions = consumerByAddress.get(addr)?.subscriptions;
+    const pubSub = !!producerByAddress.get(addr)?.pubSub || !!subscriptions?.length;
+    const hydrated: Address = {
+      address: addr,
+      kind: capEntry.appName ? 'referenced' : 'owned',
+      direction: resolveDirection(addr),
+      ...(pubSub ? { pubSub } : {}),
+      ...(subscriptions?.length ? { subscriptions: [...subscriptions] } : {}),
+    };
+    if (capEntry.appName) {
+      hydrated.appName = capEntry.appName;
+      hydrated.appNamespace = capEntry.appNamespace;
     }
-    seenCapability.add(addr);
+    addresses.push(hydrated);
   }
 
   return addresses;
@@ -283,7 +290,7 @@ export const brokerAppReducer = (
       break;
 
     case 'ADD_ADDRESS':
-      addresses = [...addresses, { address: '', ownership: 'private', direction: 'produces' }];
+      addresses = [...addresses, { address: '', kind: 'owned', direction: 'produces' }];
       break;
 
     case 'REMOVE_ADDRESS':
@@ -298,23 +305,39 @@ export const brokerAppReducer = (
         if (changes.subscriptions) {
           updated.subscriptions = [...changes.subscriptions];
         }
-        if (changes.ownership && changes.ownership !== 'external') {
+        // Gates belong to the owner, the owner tuple to a reference: never both.
+        if (updated.kind === 'owned') {
           updated.appName = undefined;
           updated.appNamespace = undefined;
+        } else {
+          updated.producerGate = undefined;
+          updated.consumerGate = undefined;
         }
         if (changes.pubSub === false) {
           updated.subscriptions = undefined;
         }
-        // An external address only subscribes through consumerOf; producerOf has no
+        // A referenced address only subscribes through consumerOf; producerOf has no
         // subscriptions field, so keeping them would show queues the CR never carries.
         if (
-          updated.ownership === 'external' &&
+          updated.kind === 'referenced' &&
           updated.direction !== 'consumes' &&
           updated.direction !== 'both'
         ) {
           updated.subscriptions = undefined;
         }
         return updated;
+      });
+      break;
+    }
+
+    case 'SET_ADDRESS_GATE': {
+      const { index, role, principals } = action.payload;
+      const expression = compileGate(principals) || undefined;
+      addresses = addresses.map((e, i) => {
+        if (i !== index || e.kind !== 'owned') return e;
+        return role === 'producer'
+          ? { ...e, producerGate: expression }
+          : { ...e, consumerGate: expression };
       });
       break;
     }

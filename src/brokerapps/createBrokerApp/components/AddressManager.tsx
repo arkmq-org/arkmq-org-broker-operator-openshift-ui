@@ -15,6 +15,7 @@ import {
   LabelGroup,
   Stack,
   StackItem,
+  Tooltip,
 } from '@patternfly/react-core';
 import { PencilAltIcon, PlusCircleIcon, TimesIcon } from '@patternfly/react-icons';
 import {
@@ -27,16 +28,14 @@ import './AddressManager.css';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
-const OWNERSHIP_COLORS = {
-  private: 'blue',
-  shared: 'yellow',
-  external: 'grey',
+const KIND_COLORS = {
+  owned: 'blue',
+  referenced: 'grey',
 } as const;
 
-const OWNERSHIP_LABELS = {
-  private: 'Private',
-  shared: 'Shared',
-  external: 'External',
+const KIND_LABELS = {
+  owned: 'Owned',
+  referenced: 'Referenced',
 } as const;
 
 /** Card-grid form section for managing BrokerApp addresses. */
@@ -102,7 +101,7 @@ export const AddressManager: React.FC = () => {
       <HelperText>
         <HelperTextItem>
           {t(
-            'Manage the addresses for this app. Private and shared addresses are provisioned on the broker. External addresses reference addresses owned by other apps.',
+            'Manage the addresses for this app. Owned addresses are provisioned on the broker and opened to other apps through gates. Referenced addresses belong to another app that must admit this one.',
           )}
         </HelperTextItem>
       </HelperText>
@@ -156,10 +155,10 @@ export const AddressManager: React.FC = () => {
               <CardBody>
                 <Stack hasGutter>
                   <StackItem>
-                    {/* Ownership, two directions, Pub/Sub and the owner: never collapse them. */}
-                    <LabelGroup numLabels={5}>
-                      <Label color={OWNERSHIP_COLORS[entry.ownership]} isCompact>
-                        {t(OWNERSHIP_LABELS[entry.ownership])}
+                    {/* Kind, two directions, Pub/Sub, two gates and the owner: never collapse them. */}
+                    <LabelGroup numLabels={7}>
+                      <Label color={KIND_COLORS[entry.kind]} isCompact>
+                        {t(KIND_LABELS[entry.kind])}
                       </Label>
                       {(entry.direction === 'produces' || entry.direction === 'both') && (
                         <Label color="green" isCompact>
@@ -175,6 +174,28 @@ export const AddressManager: React.FC = () => {
                         <Label color="teal" isCompact>
                           {t('Pub/Sub')}
                         </Label>
+                      )}
+                      {!!entry.producerGate && (
+                        <Tooltip content={entry.producerGate}>
+                          <Label
+                            color="yellow"
+                            isCompact
+                            data-test={`address-producer-gate-${String(index)}`}
+                          >
+                            {t('Producers gated')}
+                          </Label>
+                        </Tooltip>
+                      )}
+                      {!!entry.consumerGate && (
+                        <Tooltip content={entry.consumerGate}>
+                          <Label
+                            color="yellow"
+                            isCompact
+                            data-test={`address-consumer-gate-${String(index)}`}
+                          >
+                            {t('Consumers gated')}
+                          </Label>
+                        </Tooltip>
                       )}
                       {!!(entry.appName && entry.appNamespace) && (
                         <Label color="purple" isCompact>

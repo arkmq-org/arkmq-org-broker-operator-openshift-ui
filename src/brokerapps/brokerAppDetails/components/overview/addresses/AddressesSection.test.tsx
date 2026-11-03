@@ -8,8 +8,14 @@ const brokerAppWithAddresses: BrokerAppCR = {
   metadata: { name: 'test-app', namespace: 'default', resourceVersion: '100' },
   spec: {
     serviceSelector: {},
-    addresses: [{ address: 'orders.internal' }],
-    sharedAddresses: [{ address: 'events.shared', pubSub: true }],
+    addresses: [
+      { address: 'orders.internal' },
+      {
+        address: 'events.shared',
+        pubSub: true,
+        consumerOfAppSelector: "app.metadata.namespace == 'other-ns'",
+      },
+    ],
     capabilities: [
       {
         producerOf: [
@@ -53,18 +59,23 @@ describe('AddressesSection', () => {
     expect(screen.queryByTestId('address-list')).not.toBeInTheDocument();
   });
 
-  it('hydrates all three address types from the CR', () => {
+  it('hydrates owned, gated and referenced addresses from the CR', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByText('orders.internal')).toBeInTheDocument();
     expect(screen.getByText('events.shared')).toBeInTheDocument();
     expect(screen.getByText('external.queue')).toBeInTheDocument();
   });
 
-  it('shows ownership labels for each address type', () => {
+  it('shows kind labels for each address', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
-    expect(screen.getByText('Private')).toBeInTheDocument();
-    expect(screen.getByText('Shared')).toBeInTheDocument();
-    expect(screen.getByText('External')).toBeInTheDocument();
+    expect(screen.getAllByText('Owned')).toHaveLength(2);
+    expect(screen.getByText('Referenced')).toBeInTheDocument();
+  });
+
+  it('flags the gated role of an owned address', () => {
+    render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
+    expect(screen.getByText('Consumers gated')).toBeInTheDocument();
+    expect(screen.queryByText('Producers gated')).not.toBeInTheDocument();
   });
 
   it('shows direction labels on hydrated addresses', () => {
@@ -73,12 +84,12 @@ describe('AddressesSection', () => {
     expect(screen.getAllByText('Consumes').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows the external app reference label', () => {
+  it('shows the owner app reference label', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByText('other-ns/other-app')).toBeInTheDocument();
   });
 
-  it('shows Pub/Sub label for shared address with pubSub enabled', () => {
+  it('shows Pub/Sub label for an address with pubSub enabled', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByText('Pub/Sub')).toBeInTheDocument();
   });

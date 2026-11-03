@@ -63,10 +63,10 @@ describe('AddressManager — card layout', () => {
     expect(screen.getByTestId('add-address-btn')).toBeInTheDocument();
   });
 
-  it('shows ownership and direction labels on the card after adding', () => {
+  it('shows kind and direction labels on the card after adding', () => {
     addEntry();
     saveModal();
-    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
     expect(screen.getByText('Produces')).toBeInTheDocument();
   });
 
@@ -90,7 +90,7 @@ describe('AddressManager — edit modal', () => {
   });
 
   it('shows form controls inside the modal', () => {
-    expect(screen.getByTestId('address-ownership-0')).toBeInTheDocument();
+    expect(screen.getByTestId('address-kind-0')).toBeInTheDocument();
     expect(screen.getByTestId('address-direction-produces-0')).toBeInTheDocument();
     expect(screen.getByTestId('address-direction-consumes-0')).toBeInTheDocument();
     expect(screen.getByTestId('address-pubsub-0')).toBeInTheDocument();
@@ -297,47 +297,47 @@ describe('AddressManager — direction validation', () => {
     fireEvent.click(screen.getByTestId('address-direction-produces-0'));
     expect(
       screen.getByText(
-        'Without a direction this private address will only reserve the name on the broker',
+        'Without a direction this address only reserves the name on the broker for the apps its gates admit',
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId('modal-done-btn')).not.toBeDisabled();
   });
 
-  it('shows an error and disables Done when both directions are unchecked for an external address', () => {
+  it('shows an error and disables Done when both directions are unchecked for a referenced address', () => {
     openEditModal(0);
-    fireEvent.click(screen.getByText('External'));
+    fireEvent.click(screen.getByText('Referenced'));
     fireEvent.click(screen.getByTestId('address-direction-produces-0'));
     expect(
-      screen.getByText('At least one direction is required for external addresses'),
+      screen.getByText('At least one direction is required for referenced addresses'),
     ).toBeInTheDocument();
     expect(screen.getByTestId('modal-done-btn')).toBeDisabled();
   });
 });
 
-describe('AddressManager — external ownership offers pubSub', () => {
+describe('AddressManager — referenced kind offers pubSub', () => {
   beforeEach(() => {
     render(<Wrapper />);
     addEntry();
     saveModal();
   });
 
-  it('shows the pubSub switch when ownership is changed to external', () => {
+  it('shows the pubSub switch when kind is changed to referenced', () => {
     openEditModal(0);
-    fireEvent.click(screen.getByText('External'));
+    fireEvent.click(screen.getByText('Referenced'));
     expect(screen.getByTestId('address-pubsub-0')).toBeInTheDocument();
   });
 
-  it('replaces the subscription input with a hint on a producer-only external pub/sub address', () => {
+  it('replaces the subscription input with a hint on a producer-only referenced pub/sub address', () => {
     openEditModal(0);
-    fireEvent.click(screen.getByText('External'));
+    fireEvent.click(screen.getByText('Referenced'));
     fireEvent.click(screen.getByTestId('address-pubsub-0'));
     expect(screen.getByTestId('address-no-subscriptions-0')).toBeInTheDocument();
     expect(screen.queryByText('Add subscription')).not.toBeInTheDocument();
   });
 
-  it('offers subscriptions once Consumes is checked on an external pub/sub address', () => {
+  it('offers subscriptions once Consumes is checked on an referenced pub/sub address', () => {
     openEditModal(0);
-    fireEvent.click(screen.getByText('External'));
+    fireEvent.click(screen.getByText('Referenced'));
     fireEvent.click(screen.getByTestId('address-pubsub-0'));
     fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
     expect(screen.queryByTestId('address-no-subscriptions-0')).not.toBeInTheDocument();
@@ -346,7 +346,7 @@ describe('AddressManager — external ownership offers pubSub', () => {
 
   it('drops subscriptions from the card when Consumes is unchecked on an external address', () => {
     openEditModal(0);
-    fireEvent.click(screen.getByText('External'));
+    fireEvent.click(screen.getByText('Referenced'));
     fireEvent.click(screen.getByTestId('address-pubsub-0'));
     fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
     addSub('notifier');
@@ -556,18 +556,37 @@ describe('AddressManager — address required validation', () => {
 
 const mockWatchResource = useK8sWatchResource as jest.Mock;
 
+// The form under test lives in namespace `default` as `my-messaging-app`.
 const MOCK_BROKER_APPS = [
   {
     metadata: { name: 'order-generator', namespace: 'service-project' },
-    spec: { sharedAddresses: [{ address: 'ORDERS.NEW' }, { address: 'ORDERS.PROCESSED' }] },
+    spec: {
+      addresses: [
+        { address: 'ORDERS.NEW', consumerOfAppSelector: "app.metadata.namespace == 'default'" },
+        {
+          address: 'ORDERS.PROCESSED',
+          producerOfAppSelector: "app.metadata.namespace == 'default'",
+        },
+        { address: 'ORDERS.PRIVATE' },
+      ],
+    },
   },
   {
     metadata: { name: 'event-publisher', namespace: 'service-project' },
-    spec: { sharedAddresses: [{ address: 'EVENTS.TOPIC', pubSub: true }] },
+    spec: {
+      addresses: [
+        {
+          address: 'EVENTS.TOPIC',
+          pubSub: true,
+          producerOfAppSelector: "app.metadata.labels['tier'] == 'prd'",
+          consumerOfAppSelector: 'true',
+        },
+      ],
+    },
   },
   {
     metadata: { name: 'inventory-app', namespace: 'ns-alpha' },
-    spec: { sharedAddresses: [{ address: 'INVENTORY.UPDATES' }] },
+    spec: { addresses: [{ address: 'INVENTORY.UPDATES', consumerOfAppSelector: 'true' }] },
   },
 ];
 
@@ -575,7 +594,7 @@ const MOCK_BROKER_APPS = [
  * Configures the mock so the cluster-wide BrokerApp watch returns the full app list.
  * Namespaces are derived from the BrokerApp metadata, not a separate Namespace watch.
  */
-const setupExternalMocks = () => {
+const setupReferencedMocks = () => {
   mockWatchResource.mockImplementation(
     (resource: { groupVersionKind?: { kind?: string } } | null) => {
       if (!resource) return [[], false, undefined];
@@ -587,8 +606,8 @@ const setupExternalMocks = () => {
   );
 };
 
-const selectExternal = async (): Promise<void> => {
-  fireEvent.click(screen.getByText('External'));
+const selectReferenced = async (): Promise<void> => {
+  fireEvent.click(screen.getByText('Referenced'));
   await waitForPopperUpdates();
 };
 
@@ -600,11 +619,11 @@ const selectTypeaheadOption = async (ariaLabel: string, optionText: string): Pro
   await waitForPopperUpdates();
 };
 
-const selectExternalApp = async (
+const selectReferencedApp = async (
   ns = 'service-project',
   app = 'order-generator',
 ): Promise<void> => {
-  await selectExternal();
+  await selectReferenced();
   await selectTypeaheadOption('App namespace', ns);
   await selectTypeaheadOption('App name', app);
 };
@@ -614,9 +633,9 @@ const openTypeahead = async (ariaLabel: string): Promise<void> => {
   await waitForPopperUpdates();
 };
 
-describe('AddressManager — external address typeahead', () => {
+describe('AddressManager — referenced address typeahead', () => {
   beforeEach(() => {
-    setupExternalMocks();
+    setupReferencedMocks();
     render(<Wrapper />);
     addEntry();
   });
@@ -626,44 +645,73 @@ describe('AddressManager — external address typeahead', () => {
     mockWatchResource.mockReset();
   });
 
-  it('shows namespace and app name dropdowns when external is selected', async () => {
-    await selectExternal();
+  it('shows namespace and app name dropdowns when referenced is selected', async () => {
+    await selectReferenced();
     expect(screen.getByLabelText('App namespace')).toBeInTheDocument();
     expect(screen.getByLabelText('App name')).toBeInTheDocument();
   });
 
-  it('hides namespace and app name dropdowns for private ownership', () => {
+  it('hides namespace and app name dropdowns for the owned kind', () => {
     expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
   });
 
   it('shows placeholder text when no namespace is selected', async () => {
-    await selectExternal();
+    await selectReferenced();
     expect(screen.getByPlaceholderText('Select a namespace first')).toBeInTheDocument();
   });
 
   it('shows app name placeholder after selecting a namespace', async () => {
-    await selectExternal();
+    await selectReferenced();
     await selectTypeaheadOption('App namespace', 'service-project');
     expect(screen.getByPlaceholderText('Select a BrokerApp')).toBeInTheDocument();
   });
 
   it('shows the cross-app reference label on the card after saving', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
   });
 
-  it('shows shared addresses from the selected BrokerApp in the address typeahead', async () => {
-    await selectExternalApp();
+  it('shows only the gated addresses of the selected BrokerApp in the address typeahead', async () => {
+    await selectReferencedApp();
     await openTypeahead('Address');
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.PROCESSED')).toBeInTheDocument();
+    expect(screen.queryByText('ORDERS.PRIVATE')).not.toBeInTheDocument();
+  });
+
+  it('tells the user when the owner refuses this app in the requested role', async () => {
+    await selectReferencedApp();
+    // ORDERS.NEW is open to consumers of `default`, not to producers; Produces is the default.
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
+    expect(screen.getByTestId('address-gate-verdict-producer-0')).toHaveTextContent(
+      'does not admit this app as a producer',
+    );
+  });
+
+  it('tells the user when the owner admits this app in the requested role', async () => {
+    await selectReferencedApp();
+    await selectTypeaheadOption('Address', 'ORDERS.NEW');
+    fireEvent.click(screen.getByTestId('address-direction-produces-0'));
+    fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
+    expect(screen.getByTestId('address-gate-verdict-consumer-0')).toHaveTextContent(
+      'admits this app as a consumer',
+    );
+    expect(screen.queryByTestId('address-gate-verdict-producer-0')).not.toBeInTheDocument();
+  });
+
+  it('says so when the owner gate cannot be evaluated in the browser', async () => {
+    await selectReferencedApp('service-project', 'event-publisher');
+    await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
+    expect(screen.getByTestId('address-gate-verdict-producer-0')).toHaveTextContent(
+      'cannot evaluate',
+    );
   });
 
   it('shows a create option for a custom address value', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     const addressInput = screen.getByLabelText('Address');
     fireEvent.click(addressInput);
     fireEvent.change(addressInput, { target: { value: 'CUSTOM.ADDR' } });
@@ -672,24 +720,24 @@ describe('AddressManager — external address typeahead', () => {
   });
 
   it('clears app name when namespace changes', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     await selectTypeaheadOption('App namespace', 'ns-alpha');
     expect(screen.getByLabelText('App name')).toHaveValue('');
   });
 
   it('dispatches appName and appNamespace to the reducer on save', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
-    expect(screen.getByText('External')).toBeInTheDocument();
+    expect(screen.getByText('Referenced')).toBeInTheDocument();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
   });
 });
 
-describe('AddressManager — subscribing to an external pub/sub address', () => {
+describe('AddressManager — subscribing to an referenced pub/sub address', () => {
   beforeEach(() => {
-    setupExternalMocks();
+    setupReferencedMocks();
     render(<Wrapper />);
     addEntry();
   });
@@ -705,7 +753,7 @@ describe('AddressManager — subscribing to an external pub/sub address', () => 
   };
 
   it('turns Pub/Sub on when the owner declared the address pub/sub', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
     expect(screen.getByTestId('address-pubsub-0')).toBeChecked();
     // Produces is the default direction: subscriptions wait until the app consumes.
@@ -713,13 +761,13 @@ describe('AddressManager — subscribing to an external pub/sub address', () => 
   });
 
   it('leaves Pub/Sub off when the owner declared the address point-to-point', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     await selectTypeaheadOption('Address', 'ORDERS.NEW');
     expect(screen.getByTestId('address-pubsub-0')).not.toBeChecked();
   });
 
   it('requires a subscription before a pub/sub external consumer can be saved', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
     consumeOnly();
     expect(
@@ -731,7 +779,7 @@ describe('AddressManager — subscribing to an external pub/sub address', () => 
   });
 
   it('shows the subscription and Pub/Sub on the card after saving', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     await selectTypeaheadOption('Address', 'EVENTS.TOPIC');
     consumeOnly();
     addSub('notifier');
@@ -742,9 +790,9 @@ describe('AddressManager — subscribing to an external pub/sub address', () => 
   });
 });
 
-describe('AddressManager — switching ownership away from external', () => {
+describe('AddressManager — switching kind away from referenced', () => {
   beforeEach(() => {
-    setupExternalMocks();
+    setupReferencedMocks();
     render(<Wrapper />);
     addEntry();
   });
@@ -754,44 +802,27 @@ describe('AddressManager — switching ownership away from external', () => {
     mockWatchResource.mockReset();
   });
 
-  it('hides namespace/app fields and clears cross-app label when switching to private', async () => {
-    await selectExternalApp();
+  it('hides namespace/app fields and clears cross-app label when switching to owned', async () => {
+    await selectReferencedApp();
     await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Edit address'));
-    fireEvent.click(screen.getByText('Private'));
+    fireEvent.click(screen.getByText('Owned'));
     expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
     saveModal();
 
     expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
-    expect(screen.getByText('Private')).toBeInTheDocument();
-    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
-  });
-
-  it('hides namespace/app fields and clears cross-app label when switching to shared', async () => {
-    await selectExternalApp();
-    await selectTypeaheadOption('Address', 'ORDERS.NEW');
-    saveModal();
-    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Edit address'));
-    fireEvent.click(screen.getByText('Shared'));
-    expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
-    saveModal();
-
-    expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
-    expect(screen.getByText('Shared')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
   });
 });
 
 describe('AddressManager — owner-locked Pub/Sub inference', () => {
   beforeEach(() => {
-    setupExternalMocks();
+    setupReferencedMocks();
     render(<Wrapper />);
     addEntry();
   });
@@ -802,7 +833,7 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 
   it('infers Pub/Sub from the owner when the address is typed, not selected from the list', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     const addressInput = screen.getByLabelText('Address');
     fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
     await waitForPopperUpdates();
@@ -810,7 +841,7 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 
   it('infers point-to-point from the owner when the address is typed', async () => {
-    await selectExternalApp();
+    await selectReferencedApp();
     const addressInput = screen.getByLabelText('Address');
     fireEvent.change(addressInput, { target: { value: 'ORDERS.NEW' } });
     await waitForPopperUpdates();
@@ -818,7 +849,7 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 
   it('prevents toggling the switch when the owner declares the address routing', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     const addressInput = screen.getByLabelText('Address');
     fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
     await waitForPopperUpdates();
@@ -828,7 +859,7 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 
   it('keeps the switch editable when the address does not match the owner', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     const addressInput = screen.getByLabelText('Address');
     fireEvent.change(addressInput, { target: { value: 'CUSTOM.ADDR' } });
     await waitForPopperUpdates();
@@ -838,7 +869,7 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 
   it('preserves the owner-locked Pub/Sub after save and reopen', async () => {
-    await selectExternalApp('service-project', 'event-publisher');
+    await selectReferencedApp('service-project', 'event-publisher');
     const addressInput = screen.getByLabelText('Address');
     fireEvent.change(addressInput, { target: { value: 'EVENTS.TOPIC' } });
     await waitForPopperUpdates();
@@ -848,12 +879,12 @@ describe('AddressManager — owner-locked Pub/Sub inference', () => {
   });
 });
 
-describe('AddressManager — external create option on namespace/app typeaheads', () => {
+describe('AddressManager — referenced create option on namespace/app typeaheads', () => {
   beforeEach(async () => {
-    setupExternalMocks();
+    setupReferencedMocks();
     render(<Wrapper />);
     addEntry();
-    await selectExternal();
+    await selectReferenced();
   });
 
   afterEach(async () => {
@@ -884,5 +915,97 @@ describe('AddressManager — external create option on namespace/app typeaheads'
     fireEvent.change(nsInput, { target: { value: 'service-project' } });
     await waitForPopperUpdates();
     expect(screen.queryByText('Create "{{value}}"')).not.toBeInTheDocument();
+  });
+});
+
+describe('AddressManager — gates on an owned address', () => {
+  beforeEach(() => {
+    setupReferencedMocks();
+    render(<Wrapper />);
+    addEntry();
+  });
+
+  afterEach(async () => {
+    await waitForPopperUpdates();
+    mockWatchResource.mockReset();
+  });
+
+  it('shows both gate editors for an owned address and none for a referenced one', async () => {
+    expect(screen.getByTestId('address-producer-gate-0')).toBeInTheDocument();
+    expect(screen.getByTestId('address-consumer-gate-0')).toBeInTheDocument();
+    await selectReferenced();
+    expect(screen.queryByTestId('address-producer-gate-0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('address-consumer-gate-0')).not.toBeInTheDocument();
+  });
+
+  it('opens a gate to a namespace and flags it on the card', async () => {
+    fireEvent.change(screen.getByTestId('address-name-input-0'), {
+      target: { value: 'ORDERS.OUT' },
+    });
+    await selectTypeaheadOption('Who may consume: namespace', 'ns-alpha');
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-add'));
+    expect(screen.getByTestId('address-consumer-gate-0-principal-0')).toHaveTextContent('ns-alpha');
+    saveModal();
+    expect(screen.getByTestId('address-consumer-gate-0')).toBeInTheDocument();
+    expect(screen.getByText('Consumers gated')).toBeInTheDocument();
+    expect(screen.queryByText('Producers gated')).not.toBeInTheDocument();
+  });
+
+  it('opens a gate to one app of a namespace', async () => {
+    await selectTypeaheadOption('Who may produce: namespace', 'service-project');
+    await selectTypeaheadOption('Who may produce: app name', 'order-generator');
+    fireEvent.click(screen.getByTestId('address-producer-gate-0-add'));
+    expect(screen.getByTestId('address-producer-gate-0-principal-0')).toHaveTextContent(
+      'service-project/order-generator',
+    );
+  });
+
+  it('reads the principals back when the modal is reopened', async () => {
+    fireEvent.change(screen.getByTestId('address-name-input-0'), {
+      target: { value: 'ORDERS.OUT' },
+    });
+    await selectTypeaheadOption('Who may consume: namespace', 'ns-alpha');
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-add'));
+    saveModal();
+    openEditModal(0);
+    expect(screen.getByTestId('address-consumer-gate-0-principal-0')).toHaveTextContent('ns-alpha');
+  });
+
+  it('switches to a custom expression carrying the compiled gate', async () => {
+    await selectTypeaheadOption('Who may consume: namespace', 'ns-alpha');
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-add'));
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-custom-switch'));
+    expect(screen.getByTestId('address-consumer-gate-0-expression')).toHaveValue(
+      "app.metadata.namespace == 'ns-alpha'",
+    );
+  });
+
+  it('disables Done while a custom expression does not parse', () => {
+    fireEvent.change(screen.getByTestId('address-name-input-0'), {
+      target: { value: 'ORDERS.OUT' },
+    });
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-custom-switch'));
+    fireEvent.change(screen.getByTestId('address-consumer-gate-0-expression'), {
+      target: { value: 'app.metadata.namespace ==' },
+    });
+    expect(screen.getByTestId('modal-done-btn')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('address-consumer-gate-0-expression'), {
+      target: { value: "app.metadata.labels['tier'] == 'prd'" },
+    });
+    expect(screen.getByTestId('modal-done-btn')).not.toBeDisabled();
+  });
+
+  it('refuses to leave custom mode while the expression cannot be read as a list', () => {
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-custom-switch'));
+    fireEvent.change(screen.getByTestId('address-consumer-gate-0-expression'), {
+      target: { value: "app.metadata.labels['tier'] == 'prd'" },
+    });
+    fireEvent.click(screen.getByTestId('address-consumer-gate-0-custom-switch'));
+    expect(screen.getByTestId('address-consumer-gate-0-expression')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This expression cannot be edited as a list of namespaces. Clear it to start from a list.',
+      ),
+    ).toBeInTheDocument();
   });
 });

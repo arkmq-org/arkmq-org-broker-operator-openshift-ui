@@ -5,19 +5,25 @@ export enum EditorType {
   YAML = 'yaml',
 }
 
-export interface MatchAddress {
+/**
+ * A capability entry: the app produces to or consumes from an address.
+ * Without `appName` the address is the app's own (the operator treats it as owned
+ * even when it is missing from `spec.addresses`); with `appName` it references an
+ * address another app owns and gates.
+ */
+export interface AddressRef {
   address: string;
-  /** Cross-app reference app name; empty for local addresses. */
+  /** Owning app of a cross-app reference; empty for the app's own addresses. */
   appName?: string;
-  /** Cross-app reference app namespace; empty for local addresses. */
+  /** Namespace of the owning app; defaults to this app's namespace when `appName` is set. */
   appNamespace?: string;
   pubSub?: boolean;
   subscriptions?: string[];
 }
 
 export interface BrokerAppCapability {
-  producerOf?: MatchAddress[];
-  consumerOf?: MatchAddress[];
+  producerOf?: AddressRef[];
+  consumerOf?: AddressRef[];
 }
 
 export interface ResourceList {
@@ -30,19 +36,27 @@ export interface ResourceRequirements {
   limits?: ResourceList;
 }
 
-export interface PrivateAddress {
+/**
+ * An address this app owns. Private by default: other apps may only use it in a
+ * role whose gate admits them. A gate is a CEL expression evaluated by the operator
+ * with the requesting BrokerApp bound to `app`.
+ */
+export interface AddressSpec {
   address: string;
   pubSub?: boolean;
   subscriptions?: string[];
+  /** Which apps may produce to this address; empty means none but the owner. */
+  producerOfAppSelector?: string;
+  /** Which apps may consume from this address; empty means none but the owner. */
+  consumerOfAppSelector?: string;
 }
 
 export interface BrokerAppSpec {
   serviceSelector: { matchLabels?: Record<string, string> };
   capabilities?: BrokerAppCapability[];
   resources?: ResourceRequirements;
-  /** Private addresses whose lifecycle is tied to this app. */
-  addresses?: PrivateAddress[];
-  sharedAddresses?: PrivateAddress[];
+  /** Addresses whose lifecycle is tied to this app. */
+  addresses?: AddressSpec[];
 }
 
 export interface BrokerAppServiceBinding {

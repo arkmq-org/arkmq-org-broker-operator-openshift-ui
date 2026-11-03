@@ -70,11 +70,11 @@ describe('BrokerAppOverviewTab', () => {
     expect(screen.getByDisplayValue('ex-aao.default.svc.cluster.local')).toBeInTheDocument();
   });
 
-  it('displays hydrated addresses with ownership and direction', () => {
+  it('displays hydrated addresses with kind and direction', () => {
     render(<BrokerAppOverviewTab obj={brokerApp} />);
     expect(screen.getByText('payment.transactions')).toBeInTheDocument();
     expect(screen.getByText('payment.requests')).toBeInTheDocument();
-    expect(screen.getByText('Private')).toBeInTheDocument();
-    expect(screen.getByText('External')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
+    expect(screen.getByText('Referenced')).toBeInTheDocument();
   });
 });

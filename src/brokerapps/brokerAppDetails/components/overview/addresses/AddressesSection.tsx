@@ -12,25 +12,24 @@ import {
   Stack,
   StackItem,
   Title,
+  Tooltip,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import type { BrokerAppCR } from '../../../../../k8s/types';
-import type { AddressOwnership } from '../../../../../reducers/brokerapp/reducer';
+import type { AddressKind } from '../../../../../reducers/brokerapp/reducer';
 import { hydrateAddresses } from '../../../../../reducers/brokerapp/reducer';
 import './AddressesSection.css';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__addresses-section';
 
-const OWNERSHIP_COLORS: Record<AddressOwnership, 'blue' | 'yellow' | 'grey'> = {
-  private: 'blue',
-  shared: 'yellow',
-  external: 'grey',
+const KIND_COLORS: Record<AddressKind, 'blue' | 'grey'> = {
+  owned: 'blue',
+  referenced: 'grey',
 };
 
-const OWNERSHIP_LABELS: Record<AddressOwnership, string> = {
-  private: 'Private',
-  shared: 'Shared',
-  external: 'External',
+const KIND_LABELS: Record<AddressKind, string> = {
+  owned: 'Owned',
+  referenced: 'Referenced',
 };
 
 export interface AddressesSectionProps {
@@ -40,8 +39,8 @@ export interface AddressesSectionProps {
 
 /**
  * Read-only address display for the BrokerApp Details page.
- * Hydrates the three CRD address fields (addresses, sharedAddresses, capabilities)
- * into a unified list and renders them as labelled cards.
+ * Hydrates the CRD address fields (addresses, capabilities) into a unified list and
+ * renders them as labelled cards.
  */
 export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -54,7 +53,7 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
       </Title>
       <Content component="p" className="pf-v6-u-mb-md">
         {t(
-          'Addresses configured for this app. Private and shared addresses are provisioned on the broker. External addresses reference addresses owned by other apps.',
+          'Addresses configured for this app. Owned addresses are provisioned on the broker and opened to other apps through gates. Referenced addresses belong to another app.',
         )}
       </Content>
 
@@ -71,8 +70,8 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
                 <Stack hasGutter>
                   <StackItem>
                     <LabelGroup numLabels={5}>
-                      <Label color={OWNERSHIP_COLORS[entry.ownership]} isCompact>
-                        {t(OWNERSHIP_LABELS[entry.ownership])}
+                      <Label color={KIND_COLORS[entry.kind]} isCompact>
+                        {t(KIND_LABELS[entry.kind])}
                       </Label>
                       {(entry.direction === 'produces' || entry.direction === 'both') && (
                         <Label color="green" isCompact>
@@ -84,10 +83,24 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
                           {t('Consumes')}
                         </Label>
                       )}
-                      {!!(entry.ownership !== 'external' && entry.pubSub) && (
+                      {!!entry.pubSub && (
                         <Label color="teal" isCompact>
                           {t('Pub/Sub')}
                         </Label>
+                      )}
+                      {!!entry.producerGate && (
+                        <Tooltip content={entry.producerGate}>
+                          <Label color="yellow" isCompact>
+                            {t('Producers gated')}
+                          </Label>
+                        </Tooltip>
+                      )}
+                      {!!entry.consumerGate && (
+                        <Tooltip content={entry.consumerGate}>
+                          <Label color="yellow" isCompact>
+                            {t('Consumers gated')}
+                          </Label>
+                        </Tooltip>
                       )}
                       {!!(entry.appName && entry.appNamespace) && (
                         <Label color="purple" isCompact>

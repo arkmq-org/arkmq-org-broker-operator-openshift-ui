@@ -11,7 +11,6 @@ import {
   validateCpuQuantity,
   validateMemoryQuantity,
   validateNoDuplicateAddresses,
-  validateNoAddressOverlap,
   validateAddressEntries,
   validateYamlDuplicateBrokerServiceLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
@@ -467,39 +466,6 @@ describe('validateNoDuplicateAddresses', () => {
   });
 });
 
-describe('validateNoAddressOverlap', () => {
-  it.each<[string[], string[]]>([
-    [['orders.private'], ['shared.topic']],
-    [[], ['shared.topic']],
-    [['orders.private'], []],
-    [[], []],
-  ])('returns null for non-overlapping lists %j / %j', (priv, shared) => {
-    expect(validateNoAddressOverlap(priv, shared)).toBeNull();
-  });
-
-  it('returns an error naming the overlapping address', () => {
-    expect(validateNoAddressOverlap(['chungus', 'other'], ['chungus'])).toBe(
-      'Address "chungus" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('returns the first overlapping address when multiple overlap', () => {
-    expect(validateNoAddressOverlap(['a', 'b', 'c'], ['b', 'c'])).toBe(
-      'Address "b" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('detects overlap when addresses differ only by surrounding whitespace', () => {
-    expect(validateNoAddressOverlap(['  orders  '], ['orders'])).toBe(
-      'Address "orders" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('ignores empty/whitespace-only entries when checking overlap', () => {
-    expect(validateNoAddressOverlap(['', '   '], ['', '   '])).toBeNull();
-  });
-});
-
 const validBrokerAppCR: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
@@ -537,8 +503,13 @@ describe('validateBrokerAppCR', () => {
           requests: { cpu: '250m', memory: '256Mi' },
           limits: { cpu: '1', memory: '1Gi' },
         },
-        addresses: [{ address: 'orders' }],
-        sharedAddresses: [{ address: 'events' }],
+        addresses: [
+          { address: 'orders' },
+          { address: 'events', consumerOfAppSelector: "app.metadata.namespace == 'team-b'" },
+        ],
+        capabilities: [
+          { producerOf: [{ address: 'remote', appName: 'other', appNamespace: 'elsewhere' }] },
+        ],
       },
     };
     expect(validateBrokerAppCR(cr, dumpYaml(cr))).toBeNull();
@@ -616,31 +587,52 @@ describe('validateBrokerAppCR', () => {
     expect(error).toContain('spec.addresses: Duplicate address "orders"');
   });
 
-  it('rejects duplicate addresses in spec.sharedAddresses', () => {
+  it('rejects a gate that is not valid CEL', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
       spec: {
         serviceSelector: {},
-        sharedAddresses: [{ address: 'events' }, { address: 'events' }],
+        addresses: [{ address: 'events', producerOfAppSelector: 'app.metadata.namespace ==' }],
       },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
-    expect(error).toContain('spec.sharedAddresses: Duplicate address "events"');
+    expect(error).toContain('spec.addresses[0].producerOfAppSelector:');
   });
 
-  it('rejects overlapping addresses between spec.addresses and spec.sharedAddresses', () => {
+  it('accepts a gate the form cannot interpret as long as it parses', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
       spec: {
         serviceSelector: {},
-        addresses: [{ address: 'overlap' }],
-        sharedAddresses: [{ address: 'overlap' }],
+        addresses: [
+          { address: 'events', consumerOfAppSelector: "app.metadata.labels['tier'] == 'prd'" },
+        ],
+      },
+    };
+    expect(validateBrokerAppCR(cr, dumpYaml(cr))).toBeNull();
+  });
+
+  it('rejects a capability with an app namespace but no app name', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        serviceSelector: {},
+        capabilities: [{ consumerOf: [{ address: 'remote', appNamespace: 'elsewhere' }] }],
       },
     };
     const error = validateBrokerAppCR(cr, dumpYaml(cr));
     expect(error).toContain(
-      'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
+      'spec.capabilities[0].consumerOf[0].appName: App name is required when app namespace is set',
     );
+  });
+
+  it('rejects an empty capability address', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { serviceSelector: {}, capabilities: [{ producerOf: [{ address: ' ' }] }] },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.capabilities[0].producerOf[0].address: Address is required');
   });
 
   it('collects multiple errors separated by newlines', () => {

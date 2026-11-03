@@ -25,23 +25,26 @@ import {
   Tooltip,
 } from '@patternfly/react-core';
 import { OutlinedQuestionCircleIcon } from '@patternfly/react-icons';
-import { useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 import {
   useBrokerAppFormDispatch,
   useBrokerAppFormState,
 } from '../../../reducers/brokerapp/reducer';
-import type { AddressOwnership, AddressDirection } from '../../../reducers/brokerapp/reducer';
-import type { BrokerAppCR } from '../../../k8s/types';
-import { BrokerAppModel } from '../../../k8s/models';
+import type { AddressKind, AddressDirection } from '../../../reducers/brokerapp/reducer';
+import { evaluateGateFor, type GateVerdict } from '../../../dataflow/gates';
+import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { TypeaheadSelect } from '../../../shared-components/TypeaheadSelect';
-import { validateAddressEntries, validateDuplicateAddressEntries } from '../../../validation/k8s';
+import {
+  validateAddressEntries,
+  validateCelExpression,
+  validateDuplicateAddressEntries,
+} from '../../../validation/k8s';
+import { GateEditor, gateSettingFrom, type GateSetting } from './GateEditor';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
-const OWNERSHIP_OPTIONS: { value: AddressOwnership; label: string }[] = [
-  { value: 'private', label: 'Private' },
-  { value: 'shared', label: 'Shared' },
-  { value: 'external', label: 'External' },
+const KIND_OPTIONS: { value: AddressKind; label: string }[] = [
+  { value: 'owned', label: 'Owned' },
+  { value: 'referenced', label: 'Referenced' },
 ];
 
 /**
@@ -69,9 +72,20 @@ const FieldLabelHelp: React.FC<{ ariaLabel: string; tooltip: string }> = ({
   </Tooltip>
 );
 
+/** The gate a referenced address must pass, as the owner declares it for one role. */
+const ownerGateFor = (
+  owner: { producerOfAppSelector?: string; consumerOfAppSelector?: string } | undefined,
+  role: 'producer' | 'consumer',
+): string | undefined =>
+  role === 'producer' ? owner?.producerOfAppSelector : owner?.consumerOfAppSelector;
+
 /**
  * Modal form for editing a single address entry. All fields are buffered in local state
  * and are only dispatched to reducer when Done is clicked. Cancelling discards changes.
+ *
+ * Owned addresses expose two gate editors (who may produce, who may consume); the
+ * reducer compiles list gates to CEL on save, custom expressions are stored verbatim.
+ * Referenced addresses pick an owner app and are told whether its gate admits this app.
  */
 export const AddressEditModal: React.FC<{
   index: number;
@@ -82,9 +96,15 @@ export const AddressEditModal: React.FC<{
   const state = useBrokerAppFormState();
   const dispatch = useBrokerAppFormDispatch();
   const entry = state.addresses[index];
+  const thisApp = {
+    namespace: state.cr.metadata?.namespace ?? '',
+    name: state.cr.metadata?.name ?? '',
+  };
+
+  const { universe, apps: allBrokerApps, appsLoaded, appsError } = useGateUniverse();
 
   const [localAddress, setLocalAddress] = useState(entry.address);
-  const [localOwnership, setLocalOwnership] = useState<AddressOwnership>(entry.ownership);
+  const [localKind, setLocalKind] = useState<AddressKind>(entry.kind);
   const [localProduces, setLocalProduces] = useState(
     entry.direction === 'produces' || entry.direction === 'both',
   );
@@ -97,61 +117,50 @@ export const AddressEditModal: React.FC<{
   const [localAppNamespace, setLocalAppNamespace] = useState(entry.appNamespace ?? '');
   const [confirmedNamespace, setConfirmedNamespace] = useState(entry.appNamespace ?? '');
   const [confirmedAppName, setConfirmedAppName] = useState(entry.appName ?? '');
+  // Gates are interpreted once, when the modal opens: generated gates carry their own
+  // candidates as literals, so a universe that is still loading cannot change the answer.
+  const [producerGate, setProducerGate] = useState<GateSetting>(() =>
+    gateSettingFrom(entry.producerGate, universe),
+  );
+  const [consumerGate, setConsumerGate] = useState<GateSetting>(() =>
+    gateSettingFrom(entry.consumerGate, universe),
+  );
 
   const [nameTouched, setNameTouched] = useState(false);
   const [appNameTouched, setAppNameTouched] = useState(false);
   const [appNamespaceTouched, setAppNamespaceTouched] = useState(false);
 
-  const isExternal = localOwnership === 'external';
+  const isReferenced = localKind === 'referenced';
 
-  const [allBrokerApps, appsLoaded, appsError] = useK8sWatchResource<BrokerAppCR[]>(
-    isExternal
-      ? {
-          groupVersionKind: {
-            group: BrokerAppModel.apiGroup,
-            version: BrokerAppModel.apiVersion,
-            kind: BrokerAppModel.kind,
-          },
-          isList: true,
-        }
-      : null,
-  ) as [BrokerAppCR[], boolean, Error | undefined];
-
-  const filteredNamespaces = React.useMemo((): string[] => {
-    if (!appsLoaded || !Array.isArray(allBrokerApps)) return [];
-    const nsSet = new Set<string>();
-    for (const app of allBrokerApps) {
-      const ns = app.metadata?.namespace;
-      if (ns) nsSet.add(ns);
-    }
-    return Array.from(nsSet)
-      .filter((ns) => ns.toLowerCase().includes(localAppNamespace.toLowerCase()))
-      .sort();
-  }, [allBrokerApps, appsLoaded, localAppNamespace]);
+  const filteredNamespaces = React.useMemo(
+    (): string[] =>
+      universe.namespaces.filter((ns) =>
+        ns.toLowerCase().includes(localAppNamespace.toLowerCase()),
+      ),
+    [universe.namespaces, localAppNamespace],
+  );
 
   const filteredApps = React.useMemo(() => {
-    if (!confirmedNamespace || !appsLoaded || !Array.isArray(allBrokerApps)) return [];
-    return allBrokerApps
-      .filter((app) => app.metadata?.namespace === confirmedNamespace)
-      .map((app) => app.metadata?.name ?? '')
-      .filter(Boolean)
-      .filter((name) => name.toLowerCase().includes(localAppName.toLowerCase()))
-      .sort();
-  }, [allBrokerApps, appsLoaded, confirmedNamespace, localAppName]);
+    if (!confirmedNamespace) return [];
+    return (universe.appsByNamespace[confirmedNamespace] ?? [])
+      .filter((name) => name !== thisApp.name || confirmedNamespace !== thisApp.namespace)
+      .filter((name) => name.toLowerCase().includes(localAppName.toLowerCase()));
+  }, [universe.appsByNamespace, confirmedNamespace, localAppName, thisApp.name, thisApp.namespace]);
 
-  // The BrokerApp owning the external address, once its namespace and name are confirmed.
+  // The BrokerApp owning the referenced address, once its namespace and name are confirmed.
   const targetApp = React.useMemo(() => {
-    if (!confirmedAppName || !confirmedNamespace || !appsLoaded || !Array.isArray(allBrokerApps))
-      return undefined;
+    if (!confirmedAppName || !confirmedNamespace || !appsLoaded) return undefined;
     return allBrokerApps.find(
       (app) =>
         app.metadata?.namespace === confirmedNamespace && app.metadata.name === confirmedAppName,
     );
   }, [allBrokerApps, appsLoaded, confirmedNamespace, confirmedAppName]);
 
-  const filteredSharedAddresses = React.useMemo(
+  // Only addresses the owner opened in some role can be referenced at all.
+  const ownerSharedAddresses = React.useMemo(
     () =>
-      (targetApp?.spec.sharedAddresses ?? [])
+      (targetApp?.spec.addresses ?? [])
+        .filter((a) => Boolean(a.producerOfAppSelector) || Boolean(a.consumerOfAppSelector))
         .map((a) => a.address)
         .filter(Boolean)
         .filter((addr) => addr.toLowerCase().includes(localAddress.toLowerCase()))
@@ -160,8 +169,8 @@ export const AddressEditModal: React.FC<{
   );
 
   // The operator rejects mixed semantics; when the owner declares this address, lock to its routing.
-  const ownerDeclared = isExternal
-    ? targetApp?.spec.sharedAddresses?.find((a) => a.address === localAddress)
+  const ownerDeclared = isReferenced
+    ? targetApp?.spec.addresses?.find((a) => a.address === localAddress)
     : undefined;
   const effectivePubSub = ownerDeclared ? !!ownerDeclared.pubSub : localPubSub;
 
@@ -176,19 +185,19 @@ export const AddressEditModal: React.FC<{
 
   const noDirection = !localProduces && !localConsumes;
   const directionError =
-    noDirection && isExternal
-      ? 'At least one direction is required for external addresses'
+    noDirection && isReferenced
+      ? 'At least one direction is required for referenced addresses'
       : undefined;
   const directionWarning =
-    noDirection && !isExternal && localOwnership !== 'shared'
-      ? 'Without a direction this private address will only reserve the name on the broker'
+    noDirection && !isReferenced
+      ? 'Without a direction this address only reserves the name on the broker for the apps its gates admit'
       : undefined;
   const subscriptionError =
     effectivePubSub && localConsumes && !localSubscriptions.length
       ? 'At least one subscription is required for pub/sub consumers'
       : undefined;
   const hasPartialRef =
-    isExternal &&
+    isReferenced &&
     ((localAppName.trim() && !localAppNamespace.trim()) ||
       (!localAppName.trim() && localAppNamespace.trim()));
   const appNameError =
@@ -200,8 +209,57 @@ export const AddressEditModal: React.FC<{
       ? 'App namespace is required when app name is set'
       : undefined;
   const duplicateError = duplicateErrors[index];
+  const gateError =
+    !isReferenced &&
+    [producerGate, consumerGate].some(
+      (gate) => gate.mode === 'custom' && validateCelExpression(gate.expression) !== null,
+    );
   const isModalValid =
-    !requiredError && !duplicateError && !directionError && !subscriptionError && !hasPartialRef;
+    !requiredError &&
+    !duplicateError &&
+    !directionError &&
+    !subscriptionError &&
+    !hasPartialRef &&
+    !gateError;
+
+  // What the owner's gates say about this app, per requested role.
+  const verdicts: { role: 'producer' | 'consumer'; verdict: GateVerdict }[] =
+    isReferenced && ownerDeclared && thisApp.name
+      ? [
+          ...(localProduces
+            ? [
+                {
+                  role: 'producer' as const,
+                  verdict: evaluateGateFor(ownerGateFor(ownerDeclared, 'producer'), thisApp),
+                },
+              ]
+            : []),
+          ...(localConsumes
+            ? [
+                {
+                  role: 'consumer' as const,
+                  verdict: evaluateGateFor(ownerGateFor(ownerDeclared, 'consumer'), thisApp),
+                },
+              ]
+            : []),
+        ]
+      : [];
+
+  const verdictText = (role: 'producer' | 'consumer', verdict: GateVerdict): string => {
+    if (verdict === 'unknown') {
+      return role === 'producer'
+        ? t('The owner gates producers with an expression this form cannot evaluate')
+        : t('The owner gates consumers with an expression this form cannot evaluate');
+    }
+    if (verdict) {
+      return role === 'producer'
+        ? t('The owner admits this app as a producer')
+        : t('The owner admits this app as a consumer');
+    }
+    return role === 'producer'
+      ? t('The owner does not admit this app as a producer; the operator will reject it')
+      : t('The owner does not admit this app as a consumer; the operator will reject it');
+  };
 
   const handleDone = () => {
     const resolvedDirection: AddressDirection =
@@ -218,14 +276,34 @@ export const AddressEditModal: React.FC<{
       payload: {
         index,
         address: localAddress,
-        ownership: localOwnership,
+        kind: localKind,
         direction: resolvedDirection,
         pubSub: effectivePubSub,
         subscriptions: localSubscriptions,
-        appName: isExternal ? localAppName.trim() || undefined : undefined,
-        appNamespace: isExternal ? localAppNamespace.trim() || undefined : undefined,
+        appName: isReferenced ? localAppName.trim() || undefined : undefined,
+        appNamespace: isReferenced ? localAppNamespace.trim() || undefined : undefined,
+        producerGate:
+          !isReferenced && producerGate.mode === 'custom'
+            ? producerGate.expression.trim() || undefined
+            : undefined,
+        consumerGate:
+          !isReferenced && consumerGate.mode === 'custom'
+            ? consumerGate.expression.trim() || undefined
+            : undefined,
       },
     });
+    if (!isReferenced && producerGate.mode === 'principals') {
+      dispatch({
+        type: 'SET_ADDRESS_GATE',
+        payload: { index, role: 'producer', principals: producerGate.principals },
+      });
+    }
+    if (!isReferenced && consumerGate.mode === 'principals') {
+      dispatch({
+        type: 'SET_ADDRESS_GATE',
+        payload: { index, role: 'consumer', principals: consumerGate.principals },
+      });
+    }
 
     onSave();
   };
@@ -237,34 +315,34 @@ export const AddressEditModal: React.FC<{
         <Stack hasGutter>
           <StackItem>
             <FormGroup
-              label={t('Ownership')}
-              fieldId={`address-ownership-${String(index)}`}
+              label={t('Kind')}
+              fieldId={`address-kind-${String(index)}`}
               labelHelp={
                 <FieldLabelHelp
-                  ariaLabel={t('More info for Ownership field')}
+                  ariaLabel={t('More info for Kind field')}
                   tooltip={t(
-                    'Private addresses can only be used by this app. Shared addresses can be referenced by other apps. External addresses reference addresses owned by another app.',
+                    'Owned addresses are provisioned with this app and stay private unless a gate opens them to other apps. Referenced addresses belong to another app whose gate must admit this one.',
                   )}
                 />
               }
             >
-              <ToggleGroup data-test={`address-ownership-${String(index)}`}>
-                {OWNERSHIP_OPTIONS.map((opt) => (
+              <ToggleGroup data-test={`address-kind-${String(index)}`}>
+                {KIND_OPTIONS.map((opt) => (
                   <ToggleGroupItem
                     key={opt.value}
                     text={t(opt.label)}
-                    isSelected={localOwnership === opt.value}
+                    isSelected={localKind === opt.value}
                     onChange={() => {
-                      setLocalOwnership(opt.value);
+                      setLocalKind(opt.value);
                     }}
-                    data-test={`address-ownership-${opt.value}-${String(index)}`}
+                    data-test={`address-kind-${opt.value}-${String(index)}`}
                   />
                 ))}
               </ToggleGroup>
             </FormGroup>
           </StackItem>
 
-          {isExternal && (
+          {isReferenced && (
             <StackItem>
               <Split hasGutter>
                 <SplitItem isFilled>
@@ -375,12 +453,12 @@ export const AddressEditModal: React.FC<{
                 <FieldLabelHelp
                   ariaLabel={t('More info for Address field')}
                   tooltip={t(
-                    'The name used to route messages on the broker. Private and shared addresses are provisioned with a lifecycle tied to this app.',
+                    'The name used to route messages on the broker. Owned addresses are provisioned with a lifecycle tied to this app.',
                   )}
                 />
               }
             >
-              {isExternal ? (
+              {isReferenced ? (
                 <TypeaheadSelect
                   id={`address-name-${String(index)}`}
                   value={localAddress}
@@ -392,15 +470,13 @@ export const AddressEditModal: React.FC<{
                     setNameTouched(true);
                     // The owner decides the routing: referencing its address with the other
                     // semantics would get the app rejected by the operator.
-                    const declared = targetApp?.spec.sharedAddresses?.find(
-                      (a) => a.address === addr,
-                    );
+                    const declared = targetApp?.spec.addresses?.find((a) => a.address === addr);
                     if (declared) setLocalPubSub(!!declared.pubSub);
                   }}
                   onClose={() => {
                     setNameTouched(true);
                   }}
-                  options={filteredSharedAddresses}
+                  options={ownerSharedAddresses}
                   placeholder={t('e.g., orders.created')}
                   ariaLabel={t('Address')}
                   allowCreate
@@ -430,6 +506,23 @@ export const AddressEditModal: React.FC<{
                 <FormHelperText>
                   <HelperText>
                     <HelperTextItem variant="error">{t(errorMessage)}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              )}
+              {verdicts.length > 0 && (
+                <FormHelperText>
+                  <HelperText>
+                    {verdicts.map(({ role, verdict }) => (
+                      <HelperTextItem
+                        key={role}
+                        variant={
+                          verdict === 'unknown' ? 'indeterminate' : verdict ? 'success' : 'warning'
+                        }
+                        data-test={`address-gate-verdict-${role}-${String(index)}`}
+                      >
+                        {verdictText(role, verdict)}
+                      </HelperTextItem>
+                    ))}
                   </HelperText>
                 </FormHelperText>
               )}
@@ -475,13 +568,45 @@ export const AddressEditModal: React.FC<{
                     {t(
                       directionError ??
                         directionWarning ??
-                        'Without a direction this private address will only reserve the name on the broker',
+                        'Without a direction this address only reserves the name on the broker for the apps its gates admit',
                     )}
                   </HelperTextItem>
                 </HelperText>
               </FormHelperText>
             </FormGroup>
           </StackItem>
+
+          {!isReferenced && (
+            <StackItem>
+              <GateEditor
+                id={`address-producer-gate-${String(index)}`}
+                label={t('Who may produce')}
+                helpText={t(
+                  'Other apps allowed to send to this address. Each party is a namespace, or one app inside a namespace. Without any, only this app produces.',
+                )}
+                value={producerGate}
+                onChange={setProducerGate}
+                universe={universe}
+                universeLoaded={appsLoaded}
+              />
+            </StackItem>
+          )}
+
+          {!isReferenced && (
+            <StackItem>
+              <GateEditor
+                id={`address-consumer-gate-${String(index)}`}
+                label={t('Who may consume')}
+                helpText={t(
+                  'Other apps allowed to receive from this address. Each party is a namespace, or one app inside a namespace. Without any, only this app consumes.',
+                )}
+                value={consumerGate}
+                onChange={setConsumerGate}
+                universe={universe}
+                universeLoaded={appsLoaded}
+              />
+            </StackItem>
+          )}
 
           <StackItem>
             <Split hasGutter>
@@ -518,7 +643,7 @@ export const AddressEditModal: React.FC<{
             </Split>
           </StackItem>
 
-          {effectivePubSub && isExternal && !localConsumes && (
+          {effectivePubSub && isReferenced && !localConsumes && (
             <StackItem>
               <HelperText>
                 <HelperTextItem
@@ -526,14 +651,14 @@ export const AddressEditModal: React.FC<{
                   data-test={`address-no-subscriptions-${String(index)}`}
                 >
                   {t(
-                    'Subscriptions are only available when consuming an external address. Check Consumes to subscribe.',
+                    'Subscriptions are only available when consuming a referenced address. Check Consumes to subscribe.',
                   )}
                 </HelperTextItem>
               </HelperText>
             </StackItem>
           )}
 
-          {effectivePubSub && (!isExternal || localConsumes) && (
+          {effectivePubSub && (!isReferenced || localConsumes) && (
             <StackItem>
               <FormGroup
                 label={t('Subscriptions')}

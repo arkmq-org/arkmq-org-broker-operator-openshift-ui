@@ -188,22 +188,6 @@ export const validateNoDuplicateAddresses = (entries: { address: string }[]): st
   return null;
 };
 
-// TODO: i18n — this returns an interpolated English string; callers throw it as an Error
-// so it bypasses t(). To translate, return the overlap address separately and let the call site
-// build the message with t() interpolation.
-// Ensures no address is in both spec.addresses and spec.sharedAddresses; if so returns error naming first overlapping address, else null.
-export const validateNoAddressOverlap = (
-  privateAddresses: string[],
-  sharedAddresses: string[],
-): string | null => {
-  const sharedSet = new Set(sharedAddresses.map((a) => a.trim()));
-  const overlap = privateAddresses.map((a) => a.trim()).find((a) => a && sharedSet.has(a));
-
-  return overlap
-    ? `Address "${overlap}" cannot appear in both spec.addresses and spec.sharedAddresses`
-    : null;
-};
-
 export const validateYamlDuplicateBrokerServiceLabels = (yamlContent: string): string | null =>
   validateYamlDuplicateKeysInMapping(yamlContent, ['metadata', 'labels'], 'metadata.labels');
 
@@ -373,20 +357,39 @@ export const validateBrokerAppCR = (cr: BrokerAppCR, yaml?: string): string | nu
   const privateDup = validateNoDuplicateAddresses(privateAddrs);
   if (privateDup) errors.push(fmt('spec.addresses', privateDup));
 
-  const sharedAddrs = spec?.sharedAddresses ?? [];
-  sharedAddrs.forEach((a, i) => {
-    if (!a.address.trim()) {
-      errors.push(fmt(`spec.sharedAddresses[${String(i)}].address`, 'Address is required'));
+  privateAddrs.forEach((a, i) => {
+    const producerGateError = validateCelExpression(a.producerOfAppSelector ?? '');
+    if (producerGateError) {
+      errors.push(fmt(`spec.addresses[${String(i)}].producerOfAppSelector`, producerGateError));
+    }
+    const consumerGateError = validateCelExpression(a.consumerOfAppSelector ?? '');
+    if (consumerGateError) {
+      errors.push(fmt(`spec.addresses[${String(i)}].consumerOfAppSelector`, consumerGateError));
     }
   });
-  const sharedDup = validateNoDuplicateAddresses(sharedAddrs);
-  if (sharedDup) errors.push(fmt('spec.sharedAddresses', sharedDup));
 
-  const overlapError = validateNoAddressOverlap(
-    privateAddrs.map((a) => a.address),
-    sharedAddrs.map((a) => a.address),
-  );
-  if (overlapError) errors.push(fmt('spec.addresses', overlapError));
+  spec?.capabilities?.forEach((capability, c) => {
+    (['producerOf', 'consumerOf'] as const).forEach((role) => {
+      capability[role]?.forEach((ref, i) => {
+        if (!(ref.address as string | undefined)?.trim()) {
+          errors.push(
+            fmt(
+              `spec.capabilities[${String(c)}].${role}[${String(i)}].address`,
+              'Address is required',
+            ),
+          );
+        }
+        if (ref.appNamespace && !ref.appName) {
+          errors.push(
+            fmt(
+              `spec.capabilities[${String(c)}].${role}[${String(i)}].appName`,
+              'App name is required when app namespace is set',
+            ),
+          );
+        }
+      });
+    });
+  });
 
   return errors.length ? errors.join('\n') : null;
 };
