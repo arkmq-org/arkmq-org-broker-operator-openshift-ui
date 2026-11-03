@@ -147,6 +147,7 @@ src/
   reducers/              # Form state reducers by resource type
   k8s/                   # CRD models and types
   validation/            # Shared validation rules
+  dataflow/              # Data flow diagram: gates, pure graph model, topology renderer
 console-extensions.json  # Plugin extension declarations
 package.json             # Plugin metadata in consolePlugin section
 tsconfig.json            # TypeScript config (strict: true)

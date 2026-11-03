@@ -279,7 +279,7 @@ spec:
     await page.getByRole('textbox', { name: 'Label value' }).click();
     await page.getByRole('textbox', { name: 'Label value' }).fill(SERVICE_NAME);
 
-    // 3. Add multiple addresses via the card-based address manager.
+    // 3. Add multiple addresses via the data flow editor: each opens the side panel.
     for (let i = 0; i < addresses.length; i++) {
       await page.locator('[data-test="add-address-btn"]').click();
       await page.locator(`[data-test="address-name-input-${String(i)}"]`).fill(addresses[i]);
@@ -660,11 +660,11 @@ spec:
       console.log(`✓ Provisioned service link navigated to ${SERVICE_NAME} detail`);
     });
 
-    // ── Test: addresses section shows hydrated address cards ────────────────
+    // ── Test: data flow diagram shows the produced addresses ────────────────
     // Depends on 'multiple producerOf addresses appear in spec' having run first and
     // created e2e-app-multi-produces with QUEUE.ORDERS/INVOICES/NOTIFICATIONS in producerOf.
 
-    test('addresses section shows producer address cards with direction labels', async ({
+    test('data flow diagram shows producer addresses flowing from the namespace', async ({
       page,
     }) => {
       const appName = 'e2e-app-multi-produces';
@@ -677,20 +677,124 @@ spec:
         timeout: 30000,
       });
 
-      const addressList = page.locator('[data-test="address-list"]');
+      const diagram = page.locator('[data-test="address-list"]');
       for (const addr of producerAddresses) {
-        await expect(addressList.getByText(addr)).toBeVisible({ timeout: 15000 });
-        console.log(`✓ Address "${addr}" visible in addresses section`);
+        await expect(diagram.locator(`[data-test="dataflow-node-addr:${addr}"]`)).toBeVisible({
+          timeout: 15000,
+        });
+        // The app produces: the arrow leaves the namespace box and enters the address box.
+        await expect(
+          diagram.locator(`[data-test="dataflow-edge-produce:ns:${TEST_NAMESPACE}->addr:${addr}"]`),
+        ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
+        console.log(`✓ Address "${addr}" drawn with a produce arrow from ${TEST_NAMESPACE}`);
       }
 
-      // Each address card should show a "Produces" direction label.
-      const produceLabels = addressList.getByText('Produces');
-      await expect(produceLabels.first()).toBeVisible({ timeout: 15000 });
-      console.log(`✓ Produces direction labels visible on address cards`);
+      // Producer-only addresses have no consume arrow.
+      await expect(diagram.locator('[data-test^="dataflow-edge-consume:"]')).toHaveCount(0);
+      console.log('✓ No consume arrow on producer-only addresses');
+    });
 
-      // No "Consumes" direction label should be present for producer-only addresses.
-      await expect(addressList.getByText('Consumes')).not.toBeVisible();
-      console.log(`✓ No Consumes label on producer-only addresses`);
+    // ── Test: the service diagram pairs gates with declared flows ──────────────
+    // An owner opens GATED.Q to one reader by name and to a namespace nobody lives in;
+    // a reader and an intruder both reference it. The service page must show the
+    // reader's flow attached to its own box, the intruder's flow broken, and the
+    // empty namespace as an open door.
+
+    test('service data flow diagram shows realised, broken and unused gates', async ({ page }) => {
+      test.setTimeout(1_800_000); // 30 minutes — three apps must bind to the running service
+      const owner = 'e2e-app-gate-owner';
+      const reader = 'e2e-app-gate-reader';
+      const intruder = 'e2e-app-gate-intruder';
+      const emptyNamespace = 'e2e-nobody-home';
+
+      applyYaml(`
+apiVersion: ${BROKERAPP_API}
+kind: BrokerApp
+metadata:
+  name: ${owner}
+  namespace: ${TEST_NAMESPACE}
+spec:
+  serviceSelector:
+    matchLabels:
+      tier: e2e
+  addresses:
+  - address: GATED.Q
+    consumerOfAppSelector: "app.metadata.namespace == '${TEST_NAMESPACE}' && app.metadata.name == '${reader}'"
+    producerOfAppSelector: "app.metadata.namespace == '${emptyNamespace}'"
+  capabilities:
+  - producerOf:
+    - address: GATED.Q
+`);
+      await waitForCondition('brokerapp', owner, TEST_NAMESPACE, 'Deployed', 'True', 900000);
+      console.log(`✓ ${owner} deployed`);
+
+      for (const name of [reader, intruder]) {
+        applyYaml(`
+apiVersion: ${BROKERAPP_API}
+kind: BrokerApp
+metadata:
+  name: ${name}
+  namespace: ${TEST_NAMESPACE}
+spec:
+  serviceSelector:
+    matchLabels:
+      tier: e2e
+  capabilities:
+  - consumerOf:
+    - address: GATED.Q
+      appNamespace: ${TEST_NAMESPACE}
+      appName: ${owner}
+`);
+      }
+      await waitForCondition('brokerapp', reader, TEST_NAMESPACE, 'Deployed', 'True', 900000);
+      console.log(`✓ ${reader} deployed: the owner's gate admits it`);
+      await waitForCondition('brokerapp', intruder, TEST_NAMESPACE, 'Deployed', 'False', 900000);
+      console.log(`✓ ${intruder} refused by the operator`);
+
+      await login(page, 'kubeadmin', process.env.KUBEADMIN_PASSWORD || 'kubeadmin');
+      await page.goto(
+        `/k8s/ns/${TEST_NAMESPACE}/broker.arkmq.org~v1beta2~BrokerService/${SERVICE_NAME}`,
+        { waitUntil: 'domcontentloaded' },
+      );
+      await page.waitForSelector('[data-test="broker-service-dataflow"]', { timeout: 30000 });
+      const diagram = page.locator('[data-test="dataflow-diagram"]');
+
+      await expect(diagram.locator('[data-test="dataflow-node-addr:GATED.Q"]')).toBeVisible({
+        timeout: 30000,
+      });
+      // The gate names the reader, so the reader gets its own box inside the namespace.
+      await expect(
+        diagram.locator(`[data-test="dataflow-node-app:${TEST_NAMESPACE}/${reader}"]`),
+      ).toBeVisible({ timeout: 15000 });
+      await expect(
+        diagram.locator(
+          `[data-test="dataflow-edge-consume:addr:GATED.Q->app:${TEST_NAMESPACE}/${reader}"]`,
+        ),
+      ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
+      console.log('✓ Reader flow attached to its own box, realised');
+
+      // The intruder has no box: its refused flow ends at the namespace, broken.
+      await expect(
+        diagram.locator(`[data-test="dataflow-edge-consume:addr:GATED.Q->ns:${TEST_NAMESPACE}"]`),
+      ).toHaveAttribute('data-kind', 'broken', { timeout: 15000 });
+      await expect(page.locator('[data-test="dataflow-issue-refused"]')).toBeVisible({
+        timeout: 15000,
+      });
+      await expect(page.locator('[data-test="dataflow-issue-notDeployed"]')).toContainText(
+        'does not share',
+        { timeout: 15000 },
+      );
+      console.log('✓ Intruder flow drawn broken with the operator message');
+
+      // Nobody lives in the producer namespace: an open door.
+      await expect(
+        diagram.locator(`[data-test="dataflow-edge-produce:ns:${emptyNamespace}->addr:GATED.Q"]`),
+      ).toHaveAttribute('data-kind', 'unused', { timeout: 15000 });
+      console.log('✓ Producer gate to an empty namespace drawn as an open door');
+
+      kubectl(`delete brokerapp ${intruder} ${reader} ${owner} -n ${TEST_NAMESPACE}`, {
+        ignoreError: true,
+      });
     });
   });
 
@@ -710,7 +814,7 @@ spec:
     });
     await page.waitForSelector('[data-test="edit-brokerapp-title"]', { timeout: 30000 });
 
-    // Add a producerOf address via the card-based address manager.
+    // Add a producerOf address via the data flow editor's side panel.
     await page.locator('[data-test="add-address-btn"]').click();
     await page.locator('[data-test="address-name-input-0"]').fill(newAddress);
     await expect(page.locator('[data-test="address-direction-produces-0"]')).toBeChecked();
