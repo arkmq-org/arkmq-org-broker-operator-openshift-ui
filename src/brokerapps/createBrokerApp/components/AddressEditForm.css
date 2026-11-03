@@ -1,0 +1,9 @@
+.plugin__arkmq-org-broker-operator-openshift-ui__address-manager-help-icon {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--pf-v6-global--Color--200);
+  display: inline-flex;
+  align-items: center;
+}

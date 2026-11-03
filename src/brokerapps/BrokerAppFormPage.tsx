@@ -13,7 +13,7 @@ import { useBrokerAppFormState, useBrokerAppFormDispatch } from '../reducers/bro
 import { ResourceFormEditor } from '../shared-components/ResourceFormEditor';
 import { GeneralDetailsSection } from './createBrokerApp/components/GeneralDetailsSection';
 import { SelectorSection } from './createBrokerApp/components/SelectorSection';
-import { AddressManager } from './createBrokerApp/components/AddressManager';
+import { AddressDataflowEditor } from './createBrokerApp/components/AddressDataflowEditor';
 import { ResourcesSection } from './createBrokerApp/components/ResourcesSection';
 
 interface BrokerAppFormPageProps {
@@ -120,7 +120,7 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
           onCancel={onCancel}
         >
           <GeneralDetailsSection namespace={namespace} isEditMode={isEditMode} />
-          <AddressManager />
+          <AddressDataflowEditor />
           <SelectorSection namespace={namespace} />
           <ResourcesSection />
         </ResourceFormEditor>

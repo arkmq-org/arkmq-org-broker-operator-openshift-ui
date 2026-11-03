@@ -104,7 +104,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     [controller, t],
   );
 
-  if (!model.nodes?.length && emptyState) {
+  if (!model.nodes?.length && emptyState && !sideBar) {
     return <div data-test={dataTest}>{emptyState}</div>;
   }
 

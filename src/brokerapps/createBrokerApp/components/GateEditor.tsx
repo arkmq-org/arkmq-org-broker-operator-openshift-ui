@@ -26,6 +26,7 @@ import {
 } from '../../../dataflow/gates';
 import { TypeaheadSelect } from '../../../shared-components/TypeaheadSelect';
 import { validateCelExpression } from '../../../validation/k8s';
+import './AddressEditForm.css';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
