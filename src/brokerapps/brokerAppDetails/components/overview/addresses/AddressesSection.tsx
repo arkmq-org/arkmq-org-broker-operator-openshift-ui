@@ -7,7 +7,6 @@ import { DataflowDiagram } from '../../../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../../../dataflow/DataflowLegend';
 import { buildDataflowGraph, referencedOwnerRefs } from '../../../../../dataflow/graph';
-import { toTopologyModel } from '../../../../../dataflow/topologyModel';
 import { useGateUniverse } from '../../../../../dataflow/useGateUniverse';
 
 export interface AddressesSectionProps {
@@ -32,7 +31,6 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
     [brokerApp, ownerApps, universe],
   );
   const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
-  const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
   const hasAddresses = graph.nodes.some((node) => node.kind === 'address');
 
   return (
@@ -57,7 +55,7 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
       ) : null}
       {hasAddresses ? (
         <>
-          <DataflowDiagram model={model} dataTest="address-list" />
+          <DataflowDiagram graph={graph} labels={labels} dataTest="address-list" />
           <DataflowLegend />
           <DataflowIssues graph={graph} />
         </>

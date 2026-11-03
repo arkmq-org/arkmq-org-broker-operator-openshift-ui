@@ -27,7 +27,6 @@ import { DataflowLegend } from '../../../dataflow/DataflowLegend';
 import { addressNodeId, buildDataflowGraph } from '../../../dataflow/graph';
 import type { ConnectorTarget, DataflowEditing } from '../../../dataflow/topologyComponents';
 import { connectionAction } from './dataflowConnections';
-import { toTopologyModel } from '../../../dataflow/topologyModel';
 import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { AddressEditForm } from './AddressEditForm';
 
@@ -67,7 +66,6 @@ export const AddressDataflowEditor: React.FC = () => {
     [state.cr, allApps, universe],
   );
   const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
-  const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
 
   const editingEntry = editing ? state.addresses[editing.index] : undefined;
   const selectedIds = editingEntry?.address.trim()
@@ -211,7 +209,8 @@ export const AddressDataflowEditor: React.FC = () => {
         </ToolbarContent>
       </Toolbar>
       <DataflowDiagram
-        model={model}
+        graph={graph}
+        labels={labels}
         selectedIds={selectedIds}
         onSelect={handleSelect}
         sideBar={sideBar}

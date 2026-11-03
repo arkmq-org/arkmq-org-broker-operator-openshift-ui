@@ -21,6 +21,7 @@ export class Visualization {
   subscribers = new Set<() => void>();
   registerLayoutFactory = jest.fn();
   registerComponentFactory = jest.fn();
+  registerElementFactory = jest.fn();
   fromModel(model: MockModel): void {
     this.model = model;
     this.subscribers.forEach((notify) => {
@@ -206,6 +207,13 @@ export class ColaGroupsLayout extends DagreGroupsLayout {}
 export class GridLayout extends DagreGroupsLayout {}
 export class ConcentricLayout extends DagreGroupsLayout {}
 export class BreadthFirstLayout extends DagreGroupsLayout {}
+export class PipelineDagreGroupsLayout extends DagreGroupsLayout {}
+export const pipelineElementFactory = (): undefined => undefined;
+export const DEFAULT_SPACER_NODE_TYPE = 'DEFAULT_SPACER_NODE';
+export const TaskNode = Null;
+export const TaskEdge = Null;
+export const DefaultTaskGroup = Null;
+export const SpacerNode = Null;
 export const GRAPH_LAYOUT_END_EVENT = 'graph-layout-end';
 export const action = <T,>(fn: T): T => fn;
 

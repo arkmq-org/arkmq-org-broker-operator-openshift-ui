@@ -5,9 +5,11 @@ import {
   CREATE_CONNECTOR_DROP_TYPE,
   Decorator,
   DEFAULT_DECORATOR_RADIUS,
+  DEFAULT_SPACER_NODE_TYPE,
   DefaultEdge,
   DefaultGroup,
   DefaultNode,
+  DefaultTaskGroup,
   EdgeTerminalType,
   getDefaultShapeDecoratorCenter,
   GraphComponent,
@@ -15,6 +17,9 @@ import {
   ModelKind,
   NodeStatus,
   observer,
+  SpacerNode,
+  TaskEdge,
+  TaskNode,
   TopologyQuadrant,
   withContextMenu,
   withCreateConnector,
@@ -47,6 +52,7 @@ import {
 } from '@patternfly/react-icons';
 import type { SVGIconProps } from '@patternfly/react-icons/dist/esm/createIcon';
 import type { DataflowEdge, DataflowNode } from './graph';
+import { PIPELINE_TYPES } from './pipelineModel';
 import { EDGE_TYPE, NODE_TYPES } from './topologyModel';
 
 export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__dataflow';
@@ -442,6 +448,91 @@ const editable = (component: React.ComponentType<NodeProps>) => {
   return withCreateConnector(onCreateConnector)(withMenu as React.ComponentType<NodeProps>);
 };
 
+/** The pipeline rendering of a box: a task pill with the kind's icon and badge. */
+const PipelineTask: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
+  ({ element, selected, onSelect }) => {
+    const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+    const data = nodeData(element);
+    const kindOf = (): { icon: React.ComponentType<SVGIconProps>; badge: string } => {
+      switch (data?.kind) {
+        case 'address':
+          return data.pubSub
+            ? { icon: BroadcastTowerIcon, badge: t('topic') }
+            : { icon: EnvelopeIcon, badge: t('queue') };
+        case 'credential':
+          return { icon: KeyIcon, badge: t('secret') };
+        case 'anyApp':
+          return { icon: AsteriskIcon, badge: t('app') };
+        case 'anyNamespace':
+          return { icon: GlobeIcon, badge: t('namespace') };
+        case 'customGate':
+          return { icon: CodeIcon, badge: t('gate') };
+        default:
+          return { icon: FolderIcon, badge: t('namespace') };
+      }
+    };
+    const { icon: Icon, badge } = kindOf();
+    return (
+      <g data-test={`dataflow-node-${element.getId()}`} data-kind={data?.kind}>
+        <TaskNode
+          element={element}
+          selected={selected}
+          onSelect={onSelect}
+          taskIcon={<Icon />}
+          badge={badge}
+          truncateLength={40}
+        />
+      </g>
+    );
+  },
+);
+
+/** The pipeline rendering of a namespace or app box: a task group. */
+const PipelineGroup: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
+  ({ element, selected, onSelect }) => {
+    const data = nodeData(element);
+    return (
+      <g data-test={`dataflow-node-${element.getId()}`} data-kind={data?.kind}>
+        <DefaultTaskGroup
+          element={element as Node}
+          selected={selected}
+          onSelect={onSelect}
+          collapsible={false}
+        />
+      </g>
+    );
+  },
+);
+
+/** The pipeline rendering of a flow: the right-angled task edge. */
+const PipelineEdge: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
+  ({ element, selected, onSelect }) => {
+    const data = edgeData(element);
+    const kind = data?.kind ?? 'declared';
+    const status =
+      kind === 'broken' ? NodeStatus.danger : kind === 'unused' ? NodeStatus.warning : undefined;
+    return (
+      <g
+        data-test={`dataflow-edge-${element.getId()}`}
+        data-kind={kind}
+        className={`${DATAFLOW_CLASS}-edge ${DATAFLOW_CLASS}-edge--${kind}`}
+      >
+        <TaskEdge
+          element={element as Edge}
+          selected={selected}
+          onSelect={onSelect}
+          endTerminalType={EdgeTerminalType.directional}
+          endTerminalStatus={status}
+        />
+      </g>
+    );
+  },
+);
+
+const SelectablePipelineTask = withSelection()(PipelineTask);
+const SelectablePipelineGroup = withSelection()(PipelineGroup);
+const SelectablePipelineEdge = withSelection()(PipelineEdge);
+
 const SelectableAddress = editable(AddressNode);
 const SelectableParty = editable(PartyNode);
 const SelectableNamespaceGroup = withSelection()(withDragNode()(NamespaceGroup));
@@ -457,6 +548,14 @@ export const dataflowComponentFactory: ComponentFactory = (kind, type) => {
   if (kind === ModelKind.graph) return DropGraph;
   if (kind === ModelKind.edge && type === EDGE_TYPE) return SelectableEdge;
   switch (type) {
+    case PIPELINE_TYPES.task:
+      return SelectablePipelineTask;
+    case PIPELINE_TYPES.group:
+      return SelectablePipelineGroup;
+    case PIPELINE_TYPES.edge:
+      return SelectablePipelineEdge;
+    case DEFAULT_SPACER_NODE_TYPE:
+      return SpacerNode;
     case NODE_TYPES.address:
       return SelectableAddress;
     case NODE_TYPES.namespaceGroup:

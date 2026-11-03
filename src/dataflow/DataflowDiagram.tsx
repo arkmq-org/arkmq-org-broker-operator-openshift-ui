@@ -21,6 +21,9 @@ import {
   ForceLayout,
   GRAPH_LAYOUT_END_EVENT,
   GridLayout,
+  LEFT_TO_RIGHT,
+  PipelineDagreGroupsLayout,
+  pipelineElementFactory,
   SELECTION_EVENT,
   TopologyControlBar,
   TopologyView,
@@ -31,19 +34,26 @@ import {
   type Layout,
   type LayoutFactory,
   type LayoutOptions,
-  type Model,
   type SelectionEventListener,
 } from '@patternfly/react-topology';
+import type { DataflowGraph } from './graph';
+import { toPipelineModel } from './pipelineModel';
 import {
   DATAFLOW_CLASS,
   dataflowComponentFactory,
   type DataflowEditing,
 } from './topologyComponents';
+import { toTopologyModel, type TopologyLabels } from './topologyModel';
 import './dataflow.css';
 
-/** The layouts react-topology ships, offered as they are; Dagre reads left to right, which suits a flow. */
+/**
+ * The layouts react-topology ships, offered as they are; Dagre reads left to right,
+ * which suits a flow. Pipeline is not a layout of the same graph but the pipelines
+ * package drawing it: task pills, task groups and right-angled task edges.
+ */
 export const LAYOUTS = [
   'Dagre',
+  'Pipeline',
   'Force',
   'Cola',
   'ColaGroups',
@@ -79,14 +89,17 @@ const layoutFactory: LayoutFactory = (type: string, graph: Graph): Layout | unde
       return new GridLayout(graph, spacing);
     case 'ColaGroups':
       return new ColaGroupsLayout(graph, { ...spacing, layoutOnDrag: false });
+    case 'Pipeline':
+      return new PipelineDagreGroupsLayout(graph, { rankdir: LEFT_TO_RIGHT });
     default:
       return new DagreLayout(graph, spacing);
   }
 };
 
 export interface DataflowDiagramProps {
-  /** Topology model from `toTopologyModel`; a new object triggers a re-layout. */
-  model: Model;
+  /** The graph to draw; a new object triggers a re-layout. */
+  graph: DataflowGraph;
+  labels: TopologyLabels;
   /** Ids of the selected elements; selection is controlled by the caller. */
   selectedIds?: string[];
   onSelect?: (ids: string[]) => void;
@@ -113,7 +126,8 @@ export interface DataflowDiagramProps {
  * side effect on an external system, which is what the effects below do.
  */
 export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
-  model,
+  graph,
+  labels,
   selectedIds,
   onSelect,
   sideBar,
@@ -128,6 +142,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
 
   const controller = useMemo(() => {
     const visualization = new Visualization();
+    visualization.registerElementFactory(pipelineElementFactory);
     visualization.registerLayoutFactory(layoutFactory);
     visualization.registerComponentFactory(dataflowComponentFactory);
     visualization.addEventListener(GRAPH_LAYOUT_END_EVENT, () => {
@@ -135,6 +150,11 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     });
     return visualization;
   }, []);
+
+  const model = useMemo(
+    () => (layout === 'Pipeline' ? toPipelineModel(graph, labels) : toTopologyModel(graph, labels)),
+    [graph, labels, layout],
+  );
 
   useEffect(() => {
     controller.fromModel(

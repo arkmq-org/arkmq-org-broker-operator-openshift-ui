@@ -1,0 +1,98 @@
+import {
+  EdgeAnimationSpeed,
+  EdgeStyle,
+  type EdgeModel,
+  type Model,
+  type PipelineNodeModel,
+} from '@patternfly/react-topology';
+import type { DataflowEdge, DataflowGraph, DataflowNode } from './graph';
+import type { TopologyLabels } from './topologyModel';
+
+/** Node and edge types of the pipeline rendering, so the component factory can tell them apart. */
+export const PIPELINE_TYPES = {
+  task: 'dataflow-pipeline-task',
+  group: 'dataflow-pipeline-group',
+  edge: 'dataflow-pipeline-edge',
+} as const;
+
+export const TASK_HEIGHT = 32;
+const CHAR_WIDTH = 7.5;
+const TASK_PADDING = 76;
+
+const taskWidth = (label: string): number =>
+  Math.max(150, Math.round(Math.min(label.length, 40) * CHAR_WIDTH + TASK_PADDING));
+
+const labelOf = (node: DataflowNode, labels: TopologyLabels): string => {
+  switch (node.kind) {
+    case 'namespace':
+      return node.namespace;
+    case 'app':
+      return node.name;
+    case 'credential':
+      return node.secret;
+    case 'anyApp':
+      return labels.anyApp;
+    case 'anyNamespace':
+      return labels.anyNamespace;
+    case 'address':
+      return node.address;
+    case 'customGate':
+      return node.expression;
+  }
+};
+
+const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
+  node.kind === 'app' ||
+  (node.kind === 'namespace' && graph.nodes.some((n) => 'parent' in n && n.parent === node.id));
+
+/**
+ * The same graph as a pipeline: every box becomes a task pill laid out left to right
+ * by the pipeline layout, namespaces and apps become task groups, and each arrow a
+ * task edge with the pipeline's right-angled routing. `runAfterTasks` repeats the
+ * arrows so the pipeline element factory sees a pipeline; the edges are still ours,
+ * so their kind (declared, allowed, broken, unused) survives.
+ */
+export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): Model => {
+  const runAfter = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    runAfter.set(edge.target, [...(runAfter.get(edge.target) ?? []), edge.source]);
+  }
+  const nodes: PipelineNodeModel[] = graph.nodes.map((node) => {
+    const label = labelOf(node, labels);
+    if (isGroup(node, graph)) {
+      return {
+        id: node.id,
+        type: PIPELINE_TYPES.group,
+        label,
+        group: true,
+        children: graph.nodes.filter((n) => 'parent' in n && n.parent === node.id).map((n) => n.id),
+        style: { padding: [40, 25] },
+        runAfterTasks: [],
+        data: node,
+      };
+    }
+    return {
+      id: node.id,
+      type: PIPELINE_TYPES.task,
+      label,
+      width: taskWidth(label),
+      height: TASK_HEIGHT,
+      style: { padding: [0, 15] },
+      runAfterTasks: runAfter.get(node.id) ?? [],
+      data: node,
+    };
+  });
+  const edges: EdgeModel[] = graph.edges.map((edge: DataflowEdge) => {
+    const gate = edge.kind === 'allowed' || edge.kind === 'unused';
+    return {
+      id: edge.id,
+      type: PIPELINE_TYPES.edge,
+      source: edge.source,
+      target: edge.target,
+      edgeStyle: gate ? EdgeStyle.dashedMd : EdgeStyle.default,
+      animationSpeed: gate ? EdgeAnimationSpeed.medium : EdgeAnimationSpeed.none,
+      data: edge,
+    };
+  });
+  return { graph: { id: 'dataflow', type: 'graph' }, nodes, edges };
+};

@@ -6,7 +6,6 @@ import { DataflowDiagram } from '../../../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../../../dataflow/DataflowLegend';
 import { buildDataflowGraph } from '../../../../../dataflow/graph';
-import { toTopologyModel } from '../../../../../dataflow/topologyModel';
 import { useGateUniverse } from '../../../../../dataflow/useGateUniverse';
 import { useBoundBrokerApps } from '../loadedApps/useBoundBrokerApps';
 
@@ -31,7 +30,6 @@ export const DataflowSection: FC<DataflowSectionProps> = ({ brokerService }) => 
     [apps, universe],
   );
   const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
-  const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
   const hasAddresses = graph.nodes.some((node) => node.kind === 'address');
 
   return (
@@ -63,7 +61,12 @@ export const DataflowSection: FC<DataflowSectionProps> = ({ brokerService }) => 
       ) : null}
       {hasAddresses ? (
         <>
-          <DataflowDiagram model={model} dataTest="dataflow-diagram" height="40rem" />
+          <DataflowDiagram
+            graph={graph}
+            labels={labels}
+            dataTest="dataflow-diagram"
+            height="40rem"
+          />
           <DataflowLegend />
           <DataflowIssues graph={graph} />
         </>
