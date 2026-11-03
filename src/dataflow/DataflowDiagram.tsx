@@ -1,25 +1,81 @@
 import * as React from 'react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Dropdown,
+  DropdownItem,
+  DropdownList,
+  MenuToggle,
+  ToolbarItem,
+  type MenuToggleElement,
+} from '@patternfly/react-core';
+import {
+  action,
+  BreadthFirstLayout,
+  ColaGroupsLayout,
+  ColaLayout,
+  ConcentricLayout,
+  createTopologyControlButtons,
+  DagreLayout,
+  defaultControlButtonsOptions,
+  ForceLayout,
+  GRAPH_LAYOUT_END_EVENT,
+  GridLayout,
   SELECTION_EVENT,
   TopologyControlBar,
   TopologyView,
   Visualization,
   VisualizationProvider,
   VisualizationSurface,
-  createTopologyControlButtons,
-  defaultControlButtonsOptions,
+  type Graph,
+  type Layout,
+  type LayoutFactory,
   type Model,
   type SelectionEventListener,
 } from '@patternfly/react-topology';
 import {
   DATAFLOW_CLASS,
   dataflowComponentFactory,
-  dataflowLayoutFactory,
   type DataflowEditing,
 } from './topologyComponents';
 import './dataflow.css';
+
+/** The layouts react-topology ships, offered as they are; Dagre reads left to right, which suits a flow. */
+export const LAYOUTS = [
+  'Dagre',
+  'Force',
+  'Cola',
+  'ColaGroups',
+  'ColaNoForce',
+  'Grid',
+  'Concentric',
+  'BreadthFirst',
+] as const;
+export type LayoutName = (typeof LAYOUTS)[number];
+export const DEFAULT_LAYOUT: LayoutName = 'Dagre';
+
+const layoutFactory: LayoutFactory = (type: string, graph: Graph): Layout | undefined => {
+  switch (type) {
+    case 'BreadthFirst':
+      return new BreadthFirstLayout(graph);
+    case 'Cola':
+      return new ColaLayout(graph);
+    case 'ColaNoForce':
+      return new ColaLayout(graph, { layoutOnDrag: false });
+    case 'Concentric':
+      return new ConcentricLayout(graph);
+    case 'Dagre':
+      return new DagreLayout(graph);
+    case 'Force':
+      return new ForceLayout(graph);
+    case 'Grid':
+      return new GridLayout(graph);
+    case 'ColaGroups':
+      return new ColaGroupsLayout(graph, { layoutOnDrag: false });
+    default:
+      return new DagreLayout(graph);
+  }
+};
 
 export interface DataflowDiagramProps {
   /** Topology model from `toTopologyModel`; a new object triggers a re-layout. */
@@ -41,9 +97,10 @@ export interface DataflowDiagramProps {
 
 /**
  * The boxes-and-arrows view of messaging flows, shared by the BrokerApp form, the
- * BrokerApp details page and the BrokerService details page. It only draws the model
- * it is given and reports selections; what the picture means is decided in
- * `buildDataflowGraph`, what it looks like in `topologyComponents`.
+ * BrokerApp details page and the BrokerService details page. It draws the model it
+ * is given with the layout chosen in its toolbar and reports selections; what the
+ * picture means is decided in `buildDataflowGraph`, what it looks like in
+ * `topologyComponents`.
  *
  * The topology controller is a mobx store outside React, so feeding it the model is a
  * side effect on an external system, which is what the effects below do.
@@ -59,17 +116,25 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   dataTest = 'dataflow-diagram',
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
+  const [layout, setLayout] = useState<LayoutName>(DEFAULT_LAYOUT);
 
   const controller = useMemo(() => {
     const visualization = new Visualization();
-    visualization.registerLayoutFactory(dataflowLayoutFactory);
+    visualization.registerLayoutFactory(layoutFactory);
     visualization.registerComponentFactory(dataflowComponentFactory);
+    visualization.addEventListener(GRAPH_LAYOUT_END_EVENT, () => {
+      visualization.getGraph().fit(80);
+    });
     return visualization;
   }, []);
 
   useEffect(() => {
-    controller.fromModel(model, false);
-  }, [controller, model]);
+    controller.fromModel(
+      { ...model, graph: { ...model.graph, id: 'g1', type: 'graph', layout } },
+      false,
+    );
+  }, [controller, model, layout]);
 
   useEffect(() => {
     if (!onSelect) return undefined;
@@ -82,40 +147,73 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     };
   }, [controller, onSelect]);
 
-  const controlButtons = useMemo(
-    () =>
-      createTopologyControlButtons({
-        ...defaultControlButtonsOptions,
-        zoomInCallback: () => {
-          controller.getGraph().scaleBy(4 / 3);
-        },
-        zoomOutCallback: () => {
-          controller.getGraph().scaleBy(0.75);
-        },
-        fitToScreenCallback: () => {
-          controller.getGraph().fit(40);
-        },
-        resetViewCallback: () => {
-          controller.getGraph().reset();
-          controller.getGraph().layout();
-        },
-        legend: false,
-        zoomInAriaLabel: t('Zoom in'),
-        zoomOutAriaLabel: t('Zoom out'),
-        fitToScreenAriaLabel: t('Fit to screen'),
-        resetViewAriaLabel: t('Reset view'),
-      }),
-    [controller, t],
-  );
-
   if (!model.nodes?.length && emptyState && !sideBar) {
     return <div data-test={dataTest}>{emptyState}</div>;
   }
 
+  const layoutDropdown = (
+    <>
+      <ToolbarItem variant="label">{t('Layout')}</ToolbarItem>
+      <ToolbarItem>
+        <Dropdown
+          toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
+            <MenuToggle
+              ref={toggleRef}
+              onClick={() => {
+                setLayoutDropdownOpen(!layoutDropdownOpen);
+              }}
+              data-test="dataflow-layout-toggle"
+            >
+              {layout}
+            </MenuToggle>
+          )}
+          isOpen={layoutDropdownOpen}
+          onOpenChange={setLayoutDropdownOpen}
+        >
+          <DropdownList>
+            {LAYOUTS.map((name) => (
+              <DropdownItem
+                key={name}
+                onClick={() => {
+                  setLayout(name);
+                  setLayoutDropdownOpen(false);
+                }}
+                data-test={`dataflow-layout-${name}`}
+              >
+                {name}
+              </DropdownItem>
+            ))}
+          </DropdownList>
+        </Dropdown>
+      </ToolbarItem>
+    </>
+  );
+
   return (
     <div className={`${DATAFLOW_CLASS}-container`} style={{ height }} data-test={dataTest}>
       <TopologyView
-        controlBar={<TopologyControlBar controlButtons={controlButtons} />}
+        viewToolbar={<ToolbarItem>{layoutDropdown}</ToolbarItem>}
+        controlBar={
+          <TopologyControlBar
+            controlButtons={createTopologyControlButtons({
+              ...defaultControlButtonsOptions,
+              zoomInCallback: action(() => {
+                controller.getGraph().scaleBy(4 / 3);
+              }),
+              zoomOutCallback: action(() => {
+                controller.getGraph().scaleBy(0.75);
+              }),
+              fitToScreenCallback: action(() => {
+                controller.getGraph().fit(80);
+              }),
+              resetViewCallback: action(() => {
+                controller.getGraph().reset();
+                controller.getGraph().layout();
+              }),
+              legend: false,
+            })}
+          />
+        }
         sideBar={sideBar}
         sideBarOpen={Boolean(sideBar)}
         sideBarResizable

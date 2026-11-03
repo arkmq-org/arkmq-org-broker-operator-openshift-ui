@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   ContextMenuItem,
   CREATE_CONNECTOR_DROP_TYPE,
-  DagreLayout,
   Decorator,
   DEFAULT_DECORATOR_RADIUS,
   DefaultEdge,
@@ -13,9 +12,7 @@ import {
   getDefaultShapeDecoratorCenter,
   GraphComponent,
   isGraph,
-  LEFT_TO_RIGHT,
   ModelKind,
-  NodeShape,
   NodeStatus,
   observer,
   TopologyQuadrant,
@@ -30,7 +27,6 @@ import {
   type Edge,
   type Graph,
   type GraphElement,
-  type LayoutFactory,
   type Node,
   type WithContextMenuProps,
   type WithCreateConnectorProps,
@@ -51,7 +47,7 @@ import {
 } from '@patternfly/react-icons';
 import type { SVGIconProps } from '@patternfly/react-icons/dist/esm/createIcon';
 import { ANY_APP, type DataflowEdge, type DataflowNode } from './graph';
-import { DATAFLOW_LAYOUT, EDGE_TYPE, NODE_TYPES } from './topologyModel';
+import { EDGE_TYPE, NODE_TYPES } from './topologyModel';
 
 export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__dataflow';
 
@@ -451,25 +447,3 @@ export const dataflowComponentFactory: ComponentFactory = (kind, type) => {
       return undefined;
   }
 };
-
-/**
- * Dagre, left to right, with namespaces as compound groups: the Mermaid flowchart
- * picture. The plain DagreLayout hands dagre the groups as clusters, so an arrow
- * between two namespaces still orders them; DagreGroupsLayout would lay each group
- * out alone and drop those arrows from the layout.
- */
-export const dataflowLayoutFactory: LayoutFactory = (type, graph) =>
-  type === DATAFLOW_LAYOUT
-    ? new DagreLayout(graph, {
-        rankdir: LEFT_TO_RIGHT,
-        nodesep: 60,
-        ranksep: 110,
-        edgesep: 30,
-        marginx: 24,
-        marginy: 24,
-        layoutOnDrag: false,
-        ignoreGroups: false,
-      })
-    : undefined;
-
-export { NodeShape };

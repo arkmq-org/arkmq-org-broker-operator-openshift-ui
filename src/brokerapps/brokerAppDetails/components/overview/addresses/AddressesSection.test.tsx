@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useK8sWatchResources } from '@openshift-console/dynamic-plugin-sdk';
 import type { BrokerAppCR } from '../../../../../k8s/types';
 import { AddressesSection } from './AddressesSection';
@@ -147,6 +147,14 @@ describe('AddressesSection', () => {
     });
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByTestId('dataflow-owners-warning')).toBeInTheDocument();
+  });
+
+  it('lays the diagram out with Dagre by default and lets the viewer switch', () => {
+    render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
+    expect(screen.getByTestId('mock-topology-surface')).toHaveAttribute('data-layout', 'Dagre');
+    fireEvent.click(screen.getByTestId('dataflow-layout-toggle'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Grid' }));
+    expect(screen.getByTestId('mock-topology-surface')).toHaveAttribute('data-layout', 'Grid');
   });
 
   it('shows the legend next to the diagram', () => {

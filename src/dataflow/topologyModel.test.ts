@@ -1,12 +1,6 @@
 import { EdgeAnimationSpeed, EdgeStyle, NodeShape, NodeStatus } from '@patternfly/react-topology';
 import type { DataflowGraph } from './graph';
-import {
-  DATAFLOW_LAYOUT,
-  EDGE_TYPE,
-  NODE_SIZE,
-  NODE_TYPES,
-  toTopologyModel,
-} from './topologyModel';
+import { EDGE_TYPE, NODE_SIZE, NODE_TYPES, toTopologyModel } from './topologyModel';
 
 const graph: DataflowGraph = {
   nodes: [
@@ -98,8 +92,9 @@ describe('toTopologyModel', () => {
   const node = (id: string) => model.nodes?.find((n) => n.id === id);
   const edge = (id: string) => model.edges?.find((e) => e.id === id);
 
-  it('names the layout the diagram registers', () => {
-    expect(model.graph).toMatchObject({ type: 'graph', layout: DATAFLOW_LAYOUT });
+  it('leaves the layout to the diagram, which lets the viewer pick one', () => {
+    expect(model.graph).toMatchObject({ type: 'graph' });
+    expect(model.graph?.layout).toBeUndefined();
   });
 
   it('turns a namespace with app or address boxes into a group holding them', () => {

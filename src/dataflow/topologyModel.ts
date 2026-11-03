@@ -10,8 +10,6 @@ import {
 import { ANY_APP, type DataflowEdge, type DataflowGraph, type DataflowNode } from './graph';
 import { ANY_NAMESPACE } from './gates';
 
-/** Layout name the diagram registers its dagre factory under. */
-export const DATAFLOW_LAYOUT = 'dataflow';
 export const DATAFLOW_GRAPH_ID = 'dataflow';
 
 /** Topology node types, one per dataflow node kind, so the component factory can pick a renderer. */
@@ -132,7 +130,7 @@ const toEdgeModel = (edge: DataflowEdge): EdgeModel => {
  * animated, declared ones solid.
  */
 export const toTopologyModel = (graph: DataflowGraph, labels: TopologyLabels): Model => ({
-  graph: { id: DATAFLOW_GRAPH_ID, type: 'graph', layout: DATAFLOW_LAYOUT },
+  graph: { id: DATAFLOW_GRAPH_ID, type: 'graph' },
   nodes: graph.nodes.map((node) => toNodeModel(node, graph, labels)),
   edges: graph.edges.map(toEdgeModel),
 });

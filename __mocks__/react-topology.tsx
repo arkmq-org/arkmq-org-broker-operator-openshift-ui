@@ -10,6 +10,7 @@ import { createContext, useContext, useState } from 'react';
 type Listener = (...args: unknown[]) => void;
 
 interface MockModel {
+  graph?: { layout?: string };
   nodes?: { id: string; type: string; label?: string; data?: unknown }[];
   edges?: { id: string; type: string; source?: string; target?: string; data?: unknown }[];
 }
@@ -76,7 +77,7 @@ export const VisualizationSurface: React.FC<{ state?: { selectedIds?: string[] }
   }, [controller]);
   const selected = new Set(state?.selectedIds ?? []);
   return (
-    <div data-test="mock-topology-surface">
+    <div data-test="mock-topology-surface" data-layout={controller?.model.graph?.layout}>
       {controller?.model.nodes?.map((node) => {
         const data = node.data as { kind?: string } | undefined;
         return (
@@ -116,11 +117,13 @@ export const VisualizationSurface: React.FC<{ state?: { selectedIds?: string[] }
 export const TopologyView: React.FC<{
   children?: React.ReactNode;
   controlBar?: React.ReactNode;
+  viewToolbar?: React.ReactNode;
   sideBar?: React.ReactNode;
   sideBarOpen?: boolean;
   sideBarResizable?: boolean;
-}> = ({ children, controlBar, sideBar, sideBarOpen }) => (
+}> = ({ children, controlBar, viewToolbar, sideBar, sideBarOpen }) => (
   <div data-test="mock-topology-view">
+    {viewToolbar}
     {controlBar}
     {children}
     {sideBarOpen ? <aside data-test="mock-topology-sidebar">{sideBar}</aside> : null}
@@ -193,10 +196,18 @@ export const observer = <P,>(Component: React.ComponentType<P>): React.Component
 export class DagreGroupsLayout {
   constructor(
     public graph: unknown,
-    public options: unknown,
+    public options?: unknown,
   ) {}
 }
 export class DagreLayout extends DagreGroupsLayout {}
+export class ForceLayout extends DagreGroupsLayout {}
+export class ColaLayout extends DagreGroupsLayout {}
+export class ColaGroupsLayout extends DagreGroupsLayout {}
+export class GridLayout extends DagreGroupsLayout {}
+export class ConcentricLayout extends DagreGroupsLayout {}
+export class BreadthFirstLayout extends DagreGroupsLayout {}
+export const GRAPH_LAYOUT_END_EVENT = 'graph-layout-end';
+export const action = <T,>(fn: T): T => fn;
 
 export enum ModelKind {
   graph = 'graph',
