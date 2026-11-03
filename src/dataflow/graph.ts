@@ -56,6 +56,8 @@ export type DataflowNode =
       kind: 'address';
       address: string;
       owner?: AppRef;
+      /** Namespace group the box sits in: the owner's namespace, when known. */
+      parent?: string;
       /** Owned by an app this graph does not draw. */
       foreign: boolean;
       /** The owner opened at least one role to other apps. */
@@ -199,7 +201,10 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     const id = addressNodeId(address);
     const existing = nodes.get(id);
     if (existing?.kind === 'address') {
-      if (!existing.owner && owner) existing.owner = owner;
+      if (!existing.owner && owner) {
+        existing.owner = owner;
+        existing.parent = ensureNamespace(owner.namespace);
+      }
       existing.pubSub = existing.pubSub || pubSub;
       return id;
     }
@@ -208,6 +213,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       kind: 'address',
       address,
       owner,
+      parent: owner ? ensureNamespace(owner.namespace) : undefined,
       foreign: false,
       gated: false,
       pubSub,
@@ -248,7 +254,16 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     principal?: GatePrincipal;
   }
   const gateEdges: GateEdge[] = [];
+  // An address box sits inside its owner's namespace, which therefore is a group;
+  // every app of a group needs a box of its own for its arrows to start from.
   const groupedNamespaces = new Set<string>();
+  for (const app of input.apps) {
+    const self = appRefOf(app);
+    for (const entry of hydrated(app)) {
+      if (entry.kind === 'owned') groupedNamespaces.add(self.namespace);
+      else if (entry.appName) groupedNamespaces.add(entry.appNamespace ?? self.namespace);
+    }
+  }
   const ensureAppBox = (ref: AppRef): string => {
     groupedNamespaces.add(ref.namespace);
     return ensureApp(ref);

@@ -17,6 +17,7 @@ import {
   DATAFLOW_CLASS,
   dataflowComponentFactory,
   dataflowLayoutFactory,
+  type DataflowEditing,
 } from './topologyComponents';
 import './dataflow.css';
 
@@ -28,6 +29,8 @@ export interface DataflowDiagramProps {
   onSelect?: (ids: string[]) => void;
   /** Side panel content, shown when provided (the editor's address form). */
   sideBar?: React.ReactNode;
+  /** Editing gestures (context menu, connector drag); absent on read-only pages. */
+  editing?: DataflowEditing;
   /** Shown instead of the canvas when the model has no nodes. */
   emptyState?: React.ReactNode;
   /** Height of the canvas; the topology surface fills its container and needs one. */
@@ -50,6 +53,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   selectedIds,
   onSelect,
   sideBar,
+  editing,
   emptyState,
   height = '32rem',
   dataTest = 'dataflow-diagram',
@@ -117,7 +121,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
         sideBarResizable
       >
         <VisualizationProvider controller={controller}>
-          <VisualizationSurface state={{ selectedIds: selectedIds ?? [] }} />
+          <VisualizationSurface state={{ selectedIds: selectedIds ?? [], editing }} />
         </VisualizationProvider>
       </TopologyView>
     </div>

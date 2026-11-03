@@ -25,6 +25,8 @@ import { DataflowDiagram } from '../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../dataflow/DataflowLegend';
 import { addressNodeId, buildDataflowGraph } from '../../../dataflow/graph';
+import type { ConnectorTarget, DataflowEditing } from '../../../dataflow/topologyComponents';
+import { connectionAction } from './dataflowConnections';
 import { toTopologyModel } from '../../../dataflow/topologyModel';
 import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { AddressEditForm } from './AddressEditForm';
@@ -64,8 +66,8 @@ export const AddressDataflowEditor: React.FC = () => {
     () => buildDataflowGraph({ apps: [state.cr], ownerApps: allApps, universe }),
     [state.cr, allApps, universe],
   );
-  const anyNamespace = t('Any namespace');
-  const model = useMemo(() => toTopologyModel(graph, { anyNamespace }), [graph, anyNamespace]);
+  const labels = useMemo(() => ({ anyNamespace: t('Any namespace'), anyApp: t('any app') }), [t]);
+  const model = useMemo(() => toTopologyModel(graph, labels), [graph, labels]);
 
   const editingEntry = editing ? state.addresses[editing.index] : undefined;
   const selectedIds = editingEntry?.address.trim()
@@ -105,6 +107,56 @@ export const AddressDataflowEditor: React.FC = () => {
     discardNewEntry();
     setEditing(null);
   };
+
+  const indexOfNode = useCallback(
+    (nodeId: string): number => {
+      if (!nodeId.startsWith(ADDRESS_NODE_PREFIX)) return -1;
+      const name = nodeId.slice(ADDRESS_NODE_PREFIX.length);
+      return state.addresses.findIndex((entry) => entry.address.trim() === name);
+    },
+    [state.addresses],
+  );
+
+  const editLabel = t('Edit address');
+  const removeLabel = t('Remove address');
+  const diagramEditing = useMemo<DataflowEditing>(
+    () => ({
+      labels: { edit: editLabel, remove: removeLabel },
+      onEdit: (nodeId) => {
+        handleSelect([nodeId]);
+      },
+      onRemove: (nodeId) => {
+        const index = indexOfNode(nodeId);
+        if (index < 0) return;
+        if (editing && (editing.index === index || editing.isNew)) setEditing(null);
+        dispatch({ type: 'REMOVE_ADDRESS', payload: { index } });
+      },
+      onConnect: (sourceId: string, target: ConnectorTarget) => {
+        const self = {
+          namespace: state.cr.metadata?.namespace ?? '',
+          name: state.cr.metadata?.name ?? '',
+        };
+        const action = connectionAction(state.addresses, self, sourceId, target);
+        if (!action) return;
+        if (action.type === 'ADD_ADDRESS') {
+          handleAdd();
+          return;
+        }
+        dispatch(action);
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleAdd only reads state captured by the other deps
+    [
+      editLabel,
+      removeLabel,
+      handleSelect,
+      indexOfNode,
+      editing,
+      dispatch,
+      state.cr.metadata,
+      state.addresses,
+    ],
+  );
 
   const sideBar =
     editing && editingEntry ? (
@@ -163,6 +215,7 @@ export const AddressDataflowEditor: React.FC = () => {
         selectedIds={selectedIds}
         onSelect={handleSelect}
         sideBar={sideBar}
+        editing={diagramEditing}
         dataTest="address-list"
         emptyState={
           <EmptyState

@@ -95,11 +95,11 @@ describe('AddressDataflowEditor — diagram and panel', () => {
     expect(screen.getByTestId('modal-done-btn')).not.toBeDisabled();
   });
 
-  it('draws a box for the saved address and the produce arrow from the namespace', () => {
+  it('draws a box for the saved address and the produce arrow from the app box in its namespace', () => {
     addNamed(0, 'orders.created');
     expect(nodeOf('orders.created')).toHaveTextContent('orders.created');
     expect(
-      screen.getByTestId('dataflow-edge-produce:ns:default->addr:orders.created'),
+      screen.getByTestId('dataflow-edge-produce:app:default/my-messaging-app->addr:orders.created'),
     ).toHaveAttribute('data-kind', 'declared');
     expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
   });
@@ -249,7 +249,7 @@ describe('AddressDataflowEditor — pubSub and subscriptions', () => {
     addSub('registry');
     savePanel();
     expect(
-      screen.getByTestId('dataflow-edge-consume:addr:events.topic->ns:default'),
+      screen.getByTestId('dataflow-edge-consume:addr:events.topic->app:default/my-messaging-app'),
     ).toBeInTheDocument();
     openEntry('events.topic');
     expect(screen.getByText('registry')).toBeInTheDocument();
@@ -274,7 +274,9 @@ describe('AddressDataflowEditor — direction', () => {
     savePanel();
     expect(nodeOf('orders.created')).toBeInTheDocument();
     expect(
-      screen.queryByTestId('dataflow-edge-produce:ns:default->addr:orders.created'),
+      screen.queryByTestId(
+        'dataflow-edge-produce:app:default/my-messaging-app->addr:orders.created',
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -292,7 +294,7 @@ describe('AddressDataflowEditor — direction', () => {
     fireEvent.click(screen.getByTestId('address-direction-consumes-0'));
     savePanel();
     expect(
-      screen.getByTestId('dataflow-edge-consume:addr:orders.created->ns:default'),
+      screen.getByTestId('dataflow-edge-consume:addr:orders.created->app:default/my-messaging-app'),
     ).toBeInTheDocument();
   });
 });

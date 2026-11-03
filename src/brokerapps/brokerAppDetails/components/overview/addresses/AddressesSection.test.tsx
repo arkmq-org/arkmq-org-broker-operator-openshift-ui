@@ -81,17 +81,17 @@ describe('AddressesSection', () => {
     expect(screen.getByTestId('address-list')).toBeInTheDocument();
   });
 
-  it('draws the declared flows from and to the app namespace', () => {
+  it('draws the declared flows from and to the app box inside its namespace', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
-    expect(edge('produce:ns:default->addr:orders.internal')).toHaveAttribute(
+    expect(edge('produce:app:default/test-app->addr:orders.internal')).toHaveAttribute(
       'data-kind',
       'declared',
     );
-    expect(edge('produce:ns:default->addr:external.queue')).toHaveAttribute(
+    expect(edge('produce:app:default/test-app->addr:external.queue')).toHaveAttribute(
       'data-kind',
       'declared',
     );
-    expect(edge('consume:addr:external.queue->ns:default')).toHaveAttribute(
+    expect(edge('consume:addr:external.queue->app:default/test-app')).toHaveAttribute(
       'data-kind',
       'declared',
     );
@@ -99,8 +99,13 @@ describe('AddressesSection', () => {
 
   it('draws the gate of an owned address as an allowed flow to the admitted namespace', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
+    // other-ns owns external.queue, so it is a group: the gate lands on its any-app box
     expect(node('ns:other-ns')).toHaveAttribute('data-kind', 'namespace');
-    expect(edge('consume:addr:events.shared->ns:other-ns')).toHaveAttribute('data-kind', 'allowed');
+    expect(node('app:other-ns/*')).toHaveAttribute('data-kind', 'app');
+    expect(edge('consume:addr:events.shared->app:other-ns/*')).toHaveAttribute(
+      'data-kind',
+      'allowed',
+    );
   });
 
   it('watches the owners of referenced addresses in their own namespaces', () => {
@@ -124,8 +129,11 @@ describe('AddressesSection', () => {
     });
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     // the owner admits `default` as a consumer but not as a producer
-    expect(edge('produce:ns:default->addr:external.queue')).toHaveAttribute('data-kind', 'broken');
-    expect(edge('consume:addr:external.queue->ns:default')).toHaveAttribute(
+    expect(edge('produce:app:default/test-app->addr:external.queue')).toHaveAttribute(
+      'data-kind',
+      'broken',
+    );
+    expect(edge('consume:addr:external.queue->app:default/test-app')).toHaveAttribute(
       'data-kind',
       'declared',
     );

@@ -682,11 +682,14 @@ spec:
         await expect(diagram.locator(`[data-test="dataflow-node-addr:${addr}"]`)).toBeVisible({
           timeout: 15000,
         });
-        // The app produces: the arrow leaves the namespace box and enters the address box.
+        // The app produces: the arrow leaves the app box inside its namespace group and
+        // enters the address box, which sits in the same group.
         await expect(
-          diagram.locator(`[data-test="dataflow-edge-produce:ns:${TEST_NAMESPACE}->addr:${addr}"]`),
+          diagram.locator(
+            `[data-test="dataflow-edge-produce:app:${TEST_NAMESPACE}/${appName}->addr:${addr}"]`,
+          ),
         ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
-        console.log(`✓ Address "${addr}" drawn with a produce arrow from ${TEST_NAMESPACE}`);
+        console.log(`✓ Address "${addr}" drawn with a produce arrow from ${appName}`);
       }
 
       // Producer-only addresses have no consume arrow.

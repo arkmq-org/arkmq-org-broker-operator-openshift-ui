@@ -1,6 +1,12 @@
-import { EdgeStyle, NodeShape, NodeStatus } from '@patternfly/react-topology';
+import { EdgeAnimationSpeed, EdgeStyle, NodeShape, NodeStatus } from '@patternfly/react-topology';
 import type { DataflowGraph } from './graph';
-import { DATAFLOW_LAYOUT, EDGE_TYPE, NODE_TYPES, toTopologyModel } from './topologyModel';
+import {
+  DATAFLOW_LAYOUT,
+  EDGE_TYPE,
+  NODE_SIZE,
+  NODE_TYPES,
+  toTopologyModel,
+} from './topologyModel';
 
 const graph: DataflowGraph = {
   nodes: [
@@ -19,6 +25,7 @@ const graph: DataflowGraph = {
       kind: 'address',
       address: 'ENROLL.IN',
       owner: { namespace: 'acme-enroll', name: 'capture' },
+      parent: 'ns:acme-enroll',
       foreign: false,
       gated: true,
       pubSub: false,
@@ -87,7 +94,7 @@ const graph: DataflowGraph = {
 };
 
 describe('toTopologyModel', () => {
-  const model = toTopologyModel(graph, { anyNamespace: 'Any namespace' });
+  const model = toTopologyModel(graph, { anyNamespace: 'Any namespace', anyApp: 'any app' });
   const node = (id: string) => model.nodes?.find((n) => n.id === id);
   const edge = (id: string) => model.edges?.find((e) => e.id === id);
 
@@ -95,29 +102,52 @@ describe('toTopologyModel', () => {
     expect(model.graph).toMatchObject({ type: 'graph', layout: DATAFLOW_LAYOUT });
   });
 
-  it('turns a namespace with app boxes into a group holding them', () => {
+  it('turns a namespace with app or address boxes into a group holding them', () => {
     expect(node('ns:acme-enroll')).toMatchObject({
       type: NODE_TYPES.namespace,
       group: true,
-      children: ['app:acme-enroll/scorer'],
+      children: ['app:acme-enroll/scorer', 'addr:ENROLL.IN'],
       label: 'acme-enroll',
     });
   });
 
-  it('draws a namespace without app boxes as a plain rectangle', () => {
+  it('labels the any-app box with the translated text', () => {
+    const withAny = toTopologyModel(
+      {
+        nodes: [
+          { id: 'ns:x', kind: 'namespace', namespace: 'x' },
+          { id: 'app:x/*', kind: 'app', namespace: 'x', name: '*', parent: 'ns:x' },
+        ],
+        edges: [],
+      },
+      { anyNamespace: 'Any namespace', anyApp: 'any app' },
+    );
+    expect(withAny.nodes?.find((n) => n.id === 'app:x/*')?.label).toBe('any app');
+  });
+
+  it('draws a namespace without boxes as a plain hexagon', () => {
     expect(node('ns:acme-ident')).toMatchObject({
       type: NODE_TYPES.namespace,
-      shape: NodeShape.rect,
+      shape: NodeShape.hexagon,
       label: 'acme-ident',
     });
     expect(node('ns:acme-ident')?.group).toBeUndefined();
   });
 
-  it('sizes a box from its label without touching the DOM', () => {
-    const short = node('addr:LOST')?.width ?? 0;
-    const long = node('gate:producer:ENROLL.IN')?.width ?? 0;
-    expect(long).toBeGreaterThan(short);
-    expect(short).toBe(150);
+  it('gives every box the same square and a shape that says what it is', () => {
+    expect(node('addr:LOST')).toMatchObject({
+      shape: NodeShape.rect,
+      width: NODE_SIZE,
+      height: NODE_SIZE,
+    });
+    expect(node('app:acme-enroll/scorer')).toMatchObject({
+      shape: NodeShape.ellipse,
+      width: NODE_SIZE,
+    });
+    expect(node('gate:producer:ENROLL.IN')).toMatchObject({
+      shape: NodeShape.rhombus,
+      width: NODE_SIZE,
+    });
   });
 
   it('labels the any-namespace box with the translated text', () => {
@@ -140,10 +170,12 @@ describe('toTopologyModel', () => {
     });
   });
 
-  it('dashes gate edges and keeps declared and broken ones solid', () => {
+  it('dashes and animates gate edges and keeps declared and broken ones solid and still', () => {
     expect(edge('e1')?.edgeStyle).toBe(EdgeStyle.default);
-    expect(edge('e2')?.edgeStyle).toBe(EdgeStyle.dashed);
-    expect(edge('e3')?.edgeStyle).toBe(EdgeStyle.dashed);
+    expect(edge('e1')?.animationSpeed).toBe(EdgeAnimationSpeed.none);
+    expect(edge('e2')?.edgeStyle).toBe(EdgeStyle.dashedMd);
+    expect(edge('e2')?.animationSpeed).toBe(EdgeAnimationSpeed.medium);
+    expect(edge('e3')?.edgeStyle).toBe(EdgeStyle.dashedMd);
     expect(edge('e4')?.edgeStyle).toBe(EdgeStyle.default);
     expect(edge('e4')).toMatchObject({
       type: EDGE_TYPE,

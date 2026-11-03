@@ -164,6 +164,30 @@ const identityHoc =
 export const withSelection = identityHoc;
 export const withDragNode = identityHoc;
 export const withPanZoom = identityHoc;
+export const withContextMenu = identityHoc;
+export const withCreateConnector = identityHoc;
+export const withDndDrop = identityHoc;
+export const CREATE_CONNECTOR_DROP_TYPE = '#createConnector#';
+export const ContextMenuItem: React.FC<{ children?: React.ReactNode; onClick?: () => void }> = ({
+  children,
+}) => <li>{children}</li>;
+export const Decorator = Null;
+export const DEFAULT_DECORATOR_RADIUS = 12;
+export const getDefaultShapeDecoratorCenter = (): { x: number; y: number } => ({ x: 0, y: 0 });
+export enum TopologyQuadrant {
+  upperLeft = 'upperLeft',
+  upperRight = 'upperRight',
+  lowerLeft = 'lowerLeft',
+  lowerRight = 'lowerRight',
+}
+export const isGraph = (element: { getType?: () => string }): boolean =>
+  element.getType?.() === 'graph';
+export const isNode = (element: { getType?: () => string }): boolean =>
+  element.getType?.() === 'node';
+export class RectAnchor {
+  constructor(public owner: unknown) {}
+}
+export const useAnchor = (): void => undefined;
 export const observer = <P,>(Component: React.ComponentType<P>): React.ComponentType<P> => Component;
 
 export class DagreGroupsLayout {
@@ -204,6 +228,14 @@ export enum EdgeStyle {
   dashedMd = 'dashedMd',
   dashedLg = 'dashedLg',
   dashedXl = 'dashedXl',
+}
+export enum EdgeAnimationSpeed {
+  none = 'none',
+  slow = 'slow',
+  mediumSlow = 'mediumSlow',
+  medium = 'medium',
+  mediumFast = 'mediumFast',
+  fast = 'fast',
 }
 export enum EdgeTerminalType {
   none = 'none',

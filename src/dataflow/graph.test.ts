@@ -82,7 +82,7 @@ const edgesOfKind = (edges: DataflowEdge[], kind: DataflowEdge['kind']): Dataflo
 const kinds = (nodes: DataflowNode[]): string[] => nodes.map((n) => n.kind);
 
 describe('buildDataflowGraph on a single app (form and app page)', () => {
-  it('draws an owned address produced by its namespace', () => {
+  it('puts an owned address inside its namespace group, produced from the app box', () => {
     const plain = app('acme-enroll', 'capture', {
       addresses: [{ address: 'ENROLL.IN' }],
       capabilities: [{ producerOf: [{ address: 'ENROLL.IN' }] }],
@@ -91,18 +91,30 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     expect(byId(nodes, addressNodeId('ENROLL.IN'))).toMatchObject({
       kind: 'address',
       owner: { namespace: 'acme-enroll', name: 'capture' },
+      parent: namespaceNodeId('acme-enroll'),
       foreign: false,
       gated: false,
     });
     expect(edges).toEqual([
       expect.objectContaining({
-        source: namespaceNodeId('acme-enroll'),
+        source: appNodeId({ namespace: 'acme-enroll', name: 'capture' }),
         target: addressNodeId('ENROLL.IN'),
         role: 'produce',
         kind: 'declared',
         apps: [{ namespace: 'acme-enroll', name: 'capture' }],
       }),
     ]);
+  });
+
+  it('leaves a namespace that owns nothing as a plain box at the arrow end', () => {
+    const { nodes, edges } = buildDataflowGraph({ apps: [matcher], ownerApps: [scorer], universe });
+    expect(byId(nodes, namespaceNodeId('acme-ident'))).toMatchObject({ kind: 'namespace' });
+    expect(nodes.some((n) => n.kind === 'app' && n.namespace === 'acme-ident')).toBe(false);
+    expect(byId(nodes, addressNodeId('IDENT.REQUEST'))).toMatchObject({
+      parent: namespaceNodeId('acme-enroll'),
+      foreign: true,
+    });
+    expect(edges[0]).toMatchObject({ target: namespaceNodeId('acme-ident') });
   });
 
   it('gives every app of a grouped namespace its own box, so no arrow touches the group', () => {
