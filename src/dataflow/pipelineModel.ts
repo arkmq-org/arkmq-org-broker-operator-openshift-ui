@@ -1,6 +1,9 @@
 import {
+  DEFAULT_SPACER_NODE_TYPE,
   EdgeAnimationSpeed,
   EdgeStyle,
+  getEdgesFromNodes,
+  getSpacerNodes,
   type EdgeModel,
   type Model,
   type PipelineNodeModel,
@@ -13,8 +16,6 @@ export const PIPELINE_TYPES = {
   task: 'dataflow-pipeline-task',
   group: 'dataflow-pipeline-group',
   edge: 'dataflow-pipeline-edge',
-  /** An invisible edge between two sibling boxes, so the pipeline layout orders them. */
-  hiddenEdge: 'dataflow-pipeline-hidden-edge',
 } as const;
 
 export const TASK_HEIGHT = 32;
@@ -48,52 +49,11 @@ const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
   (node.kind === 'namespace' && graph.nodes.some((n) => 'parent' in n && n.parent === node.id));
 
 /**
- * The pipeline layout lays each group out on its own and orders siblings only by the
- * edges between those siblings. Our arrows join a credential to an address in another
- * box, so without help the boxes would stack. For every arrow this yields the pair of
- * sibling boxes under the lowest common ancestor, to join with an invisible edge.
- */
-const siblingPairs = (graph: DataflowGraph): [string, string][] => {
-  const parentOf = new Map<string, string>();
-  for (const node of graph.nodes) {
-    if ('parent' in node && node.parent) parentOf.set(node.id, node.parent);
-  }
-  const chain = (id: string): string[] => {
-    const out = [id];
-    let current = parentOf.get(id);
-    while (current) {
-      out.push(current);
-      current = parentOf.get(current);
-    }
-    return out;
-  };
-  const pairs = new Map<string, [string, string]>();
-  for (const edge of graph.edges) {
-    const from = chain(edge.source);
-    const to = chain(edge.target);
-    let a = from[from.length - 1];
-    let b = to[to.length - 1];
-    // walk down from the roots while the ancestors coincide
-    let i = from.length - 1;
-    let j = to.length - 1;
-    while (i > 0 && j > 0 && from[i] === to[j]) {
-      i -= 1;
-      j -= 1;
-      a = from[i];
-      b = to[j];
-    }
-    if (a === b || (a === edge.source && b === edge.target)) continue;
-    pairs.set(`${a}->${b}`, [a, b]);
-  }
-  return Array.from(pairs.values());
-};
-
-/**
- * The same graph as a pipeline: every box becomes a task pill laid out left to right
- * by the pipeline layout, namespaces and apps become task groups, and each arrow a
- * task edge with the pipeline's right-angled routing. `runAfterTasks` repeats the
- * arrows so the pipeline element factory sees a pipeline; the edges are still ours,
- * so their kind (declared, allowed, broken, unused) survives.
+ * The same graph as a pipeline, built the way the pipelines example builds one: every
+ * box becomes a task pill, namespaces and apps become task groups, each arrow becomes
+ * a `runAfterTasks` entry, and the library derives the spacer nodes and task edges
+ * from those. Our edge data is then put back on the edges whose endpoints are ours,
+ * so their kind (declared, allowed, broken, unused) survives the trip.
  */
 export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): Model => {
   const runAfter = new Map<string, string[]>();
@@ -125,23 +85,25 @@ export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): M
       data: node,
     };
   });
-  const edges: EdgeModel[] = graph.edges.map((edge: DataflowEdge) => {
-    const gate = edge.kind === 'allowed' || edge.kind === 'unused';
+  const spacers = getSpacerNodes(nodes, DEFAULT_SPACER_NODE_TYPE);
+  const allNodes = [...nodes, ...spacers];
+  const ours = new Map<string, DataflowEdge>(
+    graph.edges.map((edge) => [`${edge.source}->${edge.target}`, edge]),
+  );
+  const edges: EdgeModel[] = getEdgesFromNodes(
+    allNodes,
+    DEFAULT_SPACER_NODE_TYPE,
+    PIPELINE_TYPES.edge,
+    PIPELINE_TYPES.edge,
+  ).map((edge) => {
+    const own = ours.get(`${edge.source ?? ''}->${edge.target ?? ''}`);
+    const gate = own?.kind === 'allowed' || own?.kind === 'unused';
     return {
-      id: edge.id,
-      type: PIPELINE_TYPES.edge,
-      source: edge.source,
-      target: edge.target,
+      ...edge,
       edgeStyle: gate ? EdgeStyle.dashedMd : EdgeStyle.default,
       animationSpeed: gate ? EdgeAnimationSpeed.medium : EdgeAnimationSpeed.none,
-      data: edge,
+      data: own,
     };
   });
-  const hidden: EdgeModel[] = siblingPairs(graph).map(([source, target]) => ({
-    id: `hidden:${source}->${target}`,
-    type: PIPELINE_TYPES.hiddenEdge,
-    source,
-    target,
-  }));
-  return { graph: { id: 'dataflow', type: 'graph' }, nodes, edges: [...edges, ...hidden] };
+  return { graph: { id: 'dataflow', type: 'graph' }, nodes: allNodes, edges };
 };

@@ -208,6 +208,26 @@ export class GridLayout extends DagreGroupsLayout {}
 export class ConcentricLayout extends DagreGroupsLayout {}
 export class BreadthFirstLayout extends DagreGroupsLayout {}
 export class PipelineDagreGroupsLayout extends DagreGroupsLayout {}
+export class PipelineDagreLayout extends DagreGroupsLayout {}
+interface MockPipelineNode {
+  id: string;
+  type: string;
+  runAfterTasks?: string[];
+}
+export const getSpacerNodes = (): MockPipelineNode[] => [];
+export const getEdgesFromNodes = (
+  nodes: MockPipelineNode[],
+  _spacerType: string,
+  edgeType: string,
+): { id: string; type: string; source: string; target: string }[] =>
+  nodes.flatMap((node) =>
+    (node.runAfterTasks ?? []).map((source) => ({
+      id: `${source}-${node.id}`,
+      type: edgeType,
+      source,
+      target: node.id,
+    })),
+  );
 export const pipelineElementFactory = (): undefined => undefined;
 export const DEFAULT_SPACER_NODE_TYPE = 'DEFAULT_SPACER_NODE';
 export const TaskNode = Null;

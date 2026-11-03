@@ -84,23 +84,17 @@ describe('toPipelineModel', () => {
     expect(node('cred:a/x')?.runAfterTasks).toEqual([]);
   });
 
-  it('joins sibling boxes with invisible edges so the layout orders them left to right', () => {
-    // cred:a/x -> addr:Q crosses into app:a/x inside ns:a; addr:Q -> ns:b leaves ns:a
-    expect(model.edges?.filter((e) => e.type === PIPELINE_TYPES.hiddenEdge)).toEqual([
-      expect.objectContaining({ source: 'cred:a/x', target: 'app:a/x' }),
-      expect.objectContaining({ source: 'ns:a', target: 'ns:b' }),
-    ]);
-  });
-
-  it('keeps the dataflow edges, dashed when they are gates', () => {
-    expect(
-      model.edges?.filter((e) => e.type !== PIPELINE_TYPES.hiddenEdge).map((e) => e.id),
-    ).toEqual(['e1', 'e2']);
-    expect(model.edges?.[1]).toMatchObject({
-      type: PIPELINE_TYPES.edge,
-      source: 'addr:Q',
-      target: 'ns:b',
-    });
-    expect(model.edges?.[1].edgeStyle).not.toBe(model.edges?.[0].edgeStyle);
+  it('derives the task edges from runAfterTasks and puts our edge data back on them', () => {
+    const edges = model.edges ?? [];
+    const byPair = (source: string, target: string) =>
+      edges.find((e) => e.source === source && e.target === target);
+    expect(edges).toHaveLength(2);
+    expect(edges.every((e) => e.type === PIPELINE_TYPES.edge)).toBe(true);
+    const declared = byPair('cred:a/x', 'addr:Q');
+    const allowed = byPair('addr:Q', 'ns:b');
+    expect(declared?.data).toBe(graph.edges[0]);
+    expect(allowed?.data).toBe(graph.edges[1]);
+    // a gate edge is dashed, a declared one is not
+    expect(allowed?.edgeStyle).not.toBe(declared?.edgeStyle);
   });
 });

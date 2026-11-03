@@ -22,7 +22,7 @@ import {
   GRAPH_LAYOUT_END_EVENT,
   GridLayout,
   LEFT_TO_RIGHT,
-  PipelineDagreGroupsLayout,
+  PipelineDagreLayout,
   pipelineElementFactory,
   SELECTION_EVENT,
   TopologyControlBar,
@@ -90,7 +90,7 @@ const layoutFactory: LayoutFactory = (type: string, graph: Graph): Layout | unde
     case 'ColaGroups':
       return new ColaGroupsLayout(graph, { ...spacing, layoutOnDrag: false });
     case 'Pipeline':
-      return new PipelineDagreGroupsLayout(graph, { rankdir: LEFT_TO_RIGHT });
+      return new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT });
     default:
       return new DagreLayout(graph, spacing);
   }

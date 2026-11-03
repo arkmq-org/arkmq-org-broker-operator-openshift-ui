@@ -529,9 +529,6 @@ const PipelineEdge: React.FC<{ element: GraphElement } & WithSelectionProps> = o
   },
 );
 
-/** An ordering-only edge of the pipeline rendering: laid out, never drawn. */
-const HiddenEdge: React.FC<{ element: GraphElement }> = () => null;
-
 const SelectablePipelineTask = withSelection()(PipelineTask);
 const SelectablePipelineGroup = withSelection()(PipelineGroup);
 const SelectablePipelineEdge = withSelection()(PipelineEdge);
@@ -557,8 +554,6 @@ export const dataflowComponentFactory: ComponentFactory = (kind, type) => {
       return SelectablePipelineGroup;
     case PIPELINE_TYPES.edge:
       return SelectablePipelineEdge;
-    case PIPELINE_TYPES.hiddenEdge:
-      return HiddenEdge;
     case DEFAULT_SPACER_NODE_TYPE:
       return SpacerNode;
     case NODE_TYPES.address:
