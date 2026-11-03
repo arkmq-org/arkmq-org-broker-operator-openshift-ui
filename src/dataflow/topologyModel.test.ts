@@ -99,7 +99,7 @@ describe('toTopologyModel', () => {
 
   it('turns a namespace with app or address boxes into a group holding them', () => {
     expect(node('ns:acme-enroll')).toMatchObject({
-      type: NODE_TYPES.namespace,
+      type: NODE_TYPES.namespaceGroup,
       group: true,
       children: ['app:acme-enroll/scorer', 'addr:ENROLL.IN'],
       label: 'acme-enroll',

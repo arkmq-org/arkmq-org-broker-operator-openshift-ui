@@ -260,9 +260,13 @@ const PartyNode: React.FC<NodeProps> = observer((props) => {
   );
 });
 
-/** A namespace holding app and address boxes; a rounded rectangle, not PatternFly's hull. */
-const NamespaceGroup: React.FC<NodeProps> = observer(
-  ({ element, selected, onSelect, dragNodeRef, droppable, hover, canDrop }) => {
+/**
+ * A namespace holding app and address boxes: PatternFly's group, which follows its
+ * children as they are dragged. It is deliberately not a drop target, because a
+ * group told it is `droppable` freezes its outline for the length of the drag.
+ */
+const NamespaceGroup: React.FC<{ element: GraphElement } & WithSelectionProps & WithDragNodeProps> =
+  observer(({ element, selected, onSelect, dragNodeRef }) => {
     const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
     return (
       <g
@@ -275,9 +279,6 @@ const NamespaceGroup: React.FC<NodeProps> = observer(
           selected={selected}
           onSelect={onSelect}
           dragNodeRef={dragNodeRef}
-          droppable={droppable}
-          hover={hover}
-          canDrop={canDrop}
           collapsible={false}
           hulledOutline={false}
           badge={t('namespace')}
@@ -285,13 +286,7 @@ const NamespaceGroup: React.FC<NodeProps> = observer(
         />
       </g>
     );
-  },
-);
-
-/** Picks the group or the plain box for a namespace, since the model decides per namespace. */
-const NamespaceNode: React.FC<NodeProps> = observer((props) =>
-  (props.element as Node).isGroup() ? <NamespaceGroup {...props} /> : <PartyNode {...props} />,
-);
+  });
 
 /** A gate the UI cannot read: the raw CEL, shown as it is. */
 const CustomGateNode: React.FC<NodeProps> = observer((props) => {
@@ -422,7 +417,7 @@ const editable = (component: React.ComponentType<NodeProps>) => {
 
 const SelectableAddress = editable(AddressNode);
 const SelectableParty = editable(PartyNode);
-const SelectableNamespace = editable(NamespaceNode);
+const SelectableGroup = withSelection()(withDragNode()(NamespaceGroup));
 const SelectableCustomGate = withSelection()(withDragNode()(CustomGateNode));
 const SelectableEdge = withSelection()(FlowEdge);
 const DropGraph = withDndDrop({ accept: CREATE_CONNECTOR_DROP_TYPE, dropHint: 'create' })(
@@ -436,8 +431,9 @@ export const dataflowComponentFactory: ComponentFactory = (kind, type) => {
   switch (type) {
     case NODE_TYPES.address:
       return SelectableAddress;
+    case NODE_TYPES.namespaceGroup:
+      return SelectableGroup;
     case NODE_TYPES.namespace:
-      return SelectableNamespace;
     case NODE_TYPES.app:
     case NODE_TYPES.anyNamespace:
       return SelectableParty;

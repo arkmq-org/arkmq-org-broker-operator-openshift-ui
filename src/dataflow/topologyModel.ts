@@ -15,6 +15,8 @@ export const DATAFLOW_GRAPH_ID = 'dataflow';
 /** Topology node types, one per dataflow node kind, so the component factory can pick a renderer. */
 export const NODE_TYPES = {
   namespace: 'dataflow-namespace',
+  /** A namespace drawn as a group around the boxes it owns; a different type so it gets the plain group renderer. */
+  namespaceGroup: 'dataflow-namespace-group',
   app: 'dataflow-app',
   anyNamespace: 'dataflow-any-namespace',
   address: 'dataflow-address',
@@ -45,7 +47,7 @@ const toNodeModel = (
       if (children.length) {
         return {
           id: node.id,
-          type: NODE_TYPES.namespace,
+          type: NODE_TYPES.namespaceGroup,
           label,
           group: true,
           children,
