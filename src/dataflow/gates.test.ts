@@ -177,6 +177,29 @@ describe('interpretGate', () => {
   });
 });
 
+describe('interpretGate caching', () => {
+  it('returns the same view object for the same gate and universe', () => {
+    const a = interpretGate("app.metadata.namespace == 'acme-ident'", universe);
+    const b = interpretGate("app.metadata.namespace == 'acme-ident'", universe);
+    expect(b).toBe(a);
+  });
+
+  it('re-evaluates when the universe changes', () => {
+    const before = interpretGate('app.metadata.name == "scorer" || false', universe);
+    const bigger: GateUniverse = {
+      ...universe,
+      namespaces: [...universe.namespaces, 'acme-new'],
+      appsByNamespace: { ...universe.appsByNamespace, 'acme-new': ['scorer'] },
+    };
+    const after = interpretGate('app.metadata.name == "scorer" || false', bigger);
+    expect(after).not.toBe(before);
+    // a name-only gate still collapses to "scorer anywhere", whatever the universe
+    expect(after.kind === 'principals' && after.principals).toEqual([
+      { namespace: ANY_NAMESPACE, appName: 'scorer' },
+    ]);
+  });
+});
+
 describe('evaluateGateFor', () => {
   const scorer = { namespace: 'acme-enroll', name: 'scorer' };
 

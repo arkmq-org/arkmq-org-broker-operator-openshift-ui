@@ -114,6 +114,22 @@ const quotedLiterals = (expression: string): string[] => {
   return literals;
 };
 
+// Interpreting a gate evaluates it once per candidate party; a service with a thousand
+// addresses would redo that on every render. Results are cached per expression and
+// universe, with the oldest entries dropped once the cache grows past this size.
+const INTERPRET_CACHE_LIMIT = 4096;
+const interpretCache = new Map<string, GateView>();
+let cachedUniverse: GateUniverse | undefined;
+let cachedUniverseKey = '';
+
+const universeKey = (universe: GateUniverse): string => {
+  if (universe !== cachedUniverse) {
+    cachedUniverse = universe;
+    cachedUniverseKey = JSON.stringify([universe.namespaces, universe.appsByNamespace]);
+  }
+  return cachedUniverseKey;
+};
+
 /**
  * Recovers the parties a gate admits by evaluating it against every namespace and
  * app the viewer can see, plus the string literals the expression itself mentions,
@@ -130,6 +146,19 @@ const quotedLiterals = (expression: string): string[] => {
 export const interpretGate = (expression: string | undefined, universe: GateUniverse): GateView => {
   const expr = expression?.trim() ?? '';
   if (!expr) return { kind: 'closed' };
+  const cacheKey = `${universeKey(universe)}\u0000${expr}`;
+  const cached = interpretCache.get(cacheKey);
+  if (cached) return cached;
+  const view = interpretGateUncached(expr, universe);
+  if (interpretCache.size >= INTERPRET_CACHE_LIMIT) {
+    const oldest = interpretCache.keys().next().value;
+    if (oldest !== undefined) interpretCache.delete(oldest);
+  }
+  interpretCache.set(cacheKey, view);
+  return view;
+};
+
+const interpretGateUncached = (expr: string, universe: GateUniverse): GateView => {
   try {
     if (admits(expr, SENTINEL_NAMESPACE, SENTINEL_APP)) {
       return { kind: 'principals', principals: [{ namespace: ANY_NAMESPACE }], expression: expr };
