@@ -1,36 +1,14 @@
-import { useMemo } from 'react';
-import type { FC } from 'react';
-import {
-  Card,
-  CardBody,
-  CardTitle,
-  Content,
-  EmptyState,
-  EmptyStateBody,
-  Label,
-  LabelGroup,
-  Stack,
-  StackItem,
-  Title,
-  Tooltip,
-} from '@patternfly/react-core';
+import { useMemo, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Alert, Content, EmptyState, EmptyStateBody, Title } from '@patternfly/react-core';
 import type { BrokerAppCR } from '../../../../../k8s/types';
-import type { AddressKind } from '../../../../../reducers/brokerapp/reducer';
-import { hydrateAddresses } from '../../../../../reducers/brokerapp/reducer';
-import './AddressesSection.css';
-
-const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__addresses-section';
-
-const KIND_COLORS: Record<AddressKind, 'blue' | 'grey'> = {
-  owned: 'blue',
-  referenced: 'grey',
-};
-
-const KIND_LABELS: Record<AddressKind, string> = {
-  owned: 'Owned',
-  referenced: 'Referenced',
-};
+import { useBrokerAppsByRef } from '../../../../../k8s/useBrokerAppsByRef';
+import { DataflowDiagram } from '../../../../../dataflow/DataflowDiagram';
+import { DataflowIssues } from '../../../../../dataflow/DataflowIssues';
+import { DataflowLegend } from '../../../../../dataflow/DataflowLegend';
+import { buildDataflowGraph, referencedOwnerRefs } from '../../../../../dataflow/graph';
+import { toTopologyModel } from '../../../../../dataflow/topologyModel';
+import { useGateUniverse } from '../../../../../dataflow/useGateUniverse';
 
 export interface AddressesSectionProps {
   /** Watched BrokerApp CR from the Details page — kept in sync with the API server. */
@@ -38,93 +16,55 @@ export interface AddressesSectionProps {
 }
 
 /**
- * Read-only address display for the BrokerApp Details page.
- * Hydrates the CRD address fields (addresses, capabilities) into a unified list and
- * renders them as labelled cards.
+ * Read-only data flow of one BrokerApp: its own addresses, the parties its gates
+ * admit, and the addresses it references, drawn as boxes and arrows. The owners of
+ * referenced addresses are read one by one so the picture can show their tuple and
+ * whether their gate admits this app.
  */
 export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const addresses = useMemo(() => hydrateAddresses(brokerApp), [brokerApp]);
+  const { universe } = useGateUniverse();
+  const ownerRefs = useMemo(() => referencedOwnerRefs(brokerApp), [brokerApp]);
+  const [ownerApps, , ownersError] = useBrokerAppsByRef(ownerRefs);
+
+  const graph = useMemo(
+    () => buildDataflowGraph({ apps: [brokerApp], ownerApps, universe }),
+    [brokerApp, ownerApps, universe],
+  );
+  const anyNamespace = t('Any namespace');
+  const model = useMemo(() => toTopologyModel(graph, { anyNamespace }), [graph, anyNamespace]);
+  const hasAddresses = graph.nodes.some((node) => node.kind === 'address');
 
   return (
     <div data-test="broker-app-addresses-section">
       <Title headingLevel="h2" className="pf-v6-u-mb-md">
-        {t('Addresses')}
+        {t('Data flows')}
       </Title>
       <Content component="p" className="pf-v6-u-mb-md">
         {t(
-          'Addresses configured for this app. Owned addresses are provisioned on the broker and opened to other apps through gates. Referenced addresses belong to another app.',
+          'Addresses are the boxes; arrows show which namespace sends to or receives from each one. Dashed arrows are what the gates allow, solid arrows what this app declares.',
         )}
       </Content>
-
-      {addresses.length === 0 ? (
+      {ownersError ? (
+        <Alert
+          variant="warning"
+          isInline
+          isPlain
+          title={t('Some owner apps could not be read; their gates are not checked.')}
+          className="pf-v6-u-mb-md"
+          data-test="dataflow-owners-warning"
+        />
+      ) : null}
+      {hasAddresses ? (
+        <>
+          <DataflowDiagram model={model} dataTest="address-list" />
+          <DataflowLegend />
+          <DataflowIssues graph={graph} />
+        </>
+      ) : (
         <EmptyState headingLevel="h3" titleText={t('No addresses')} data-test="address-list-empty">
           <EmptyStateBody>{t('No addresses have been configured for this app.')}</EmptyStateBody>
         </EmptyState>
-      ) : (
-        <div className={`${PREFIX}-grid`} data-test="address-list">
-          {addresses.map((entry, index) => (
-            <Card key={index} data-test={`address-list-item-${String(index)}`}>
-              <CardTitle>{entry.address}</CardTitle>
-              <CardBody>
-                <Stack hasGutter>
-                  <StackItem>
-                    <LabelGroup numLabels={5}>
-                      <Label color={KIND_COLORS[entry.kind]} isCompact>
-                        {t(KIND_LABELS[entry.kind])}
-                      </Label>
-                      {(entry.direction === 'produces' || entry.direction === 'both') && (
-                        <Label color="green" isCompact>
-                          {t('Produces')}
-                        </Label>
-                      )}
-                      {(entry.direction === 'consumes' || entry.direction === 'both') && (
-                        <Label color="orange" isCompact>
-                          {t('Consumes')}
-                        </Label>
-                      )}
-                      {!!entry.pubSub && (
-                        <Label color="teal" isCompact>
-                          {t('Pub/Sub')}
-                        </Label>
-                      )}
-                      {!!entry.producerGate && (
-                        <Tooltip content={entry.producerGate}>
-                          <Label color="yellow" isCompact>
-                            {t('Producers gated')}
-                          </Label>
-                        </Tooltip>
-                      )}
-                      {!!entry.consumerGate && (
-                        <Tooltip content={entry.consumerGate}>
-                          <Label color="yellow" isCompact>
-                            {t('Consumers gated')}
-                          </Label>
-                        </Tooltip>
-                      )}
-                      {!!(entry.appName && entry.appNamespace) && (
-                        <Label color="purple" isCompact>
-                          {entry.appNamespace}/{entry.appName}
-                        </Label>
-                      )}
-                    </LabelGroup>
-                  </StackItem>
-                  {entry.subscriptions && entry.subscriptions.length > 0 && (
-                    <StackItem>
-                      <LabelGroup numLabels={3}>
-                        {entry.subscriptions.map((sub) => (
-                          <Label key={sub} isCompact>
-                            {sub}
-                          </Label>
-                        ))}
-                      </LabelGroup>
-                    </StackItem>
-                  )}
-                </Stack>
-              </CardBody>
-            </Card>
-          ))}
-        </div>
       )}
     </div>
   );

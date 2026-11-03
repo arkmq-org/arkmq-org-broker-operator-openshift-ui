@@ -21,6 +21,8 @@ const config: Config = {
     '^.+\\.(css|sass|scss)$': '<rootDir>/__mocks__/styleMock.ts',
     '@openshift-console/(.*)': '<rootDir>/__mocks__/dynamic-plugin-sdk.ts',
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
+    // react-topology measures SVG text in the DOM, which jsdom cannot do.
+    '^@patternfly/react-topology$': '<rootDir>/__mocks__/react-topology.tsx',
     // chevrotain only declares an "import" export, which Jest's require resolution ignores.
     '^chevrotain$': '<rootDir>/node_modules/chevrotain/lib/src/api.js',
     '^@chevrotain/(.*)$': '<rootDir>/node_modules/@chevrotain/$1/lib/src/api.js',

@@ -70,11 +70,15 @@ describe('BrokerAppOverviewTab', () => {
     expect(screen.getByDisplayValue('ex-aao.default.svc.cluster.local')).toBeInTheDocument();
   });
 
-  it('displays hydrated addresses with kind and direction', () => {
+  it('draws the addresses and their flows in the data flow diagram', () => {
     render(<BrokerAppOverviewTab obj={brokerApp} />);
-    expect(screen.getByText('payment.transactions')).toBeInTheDocument();
-    expect(screen.getByText('payment.requests')).toBeInTheDocument();
-    expect(screen.getByText('Owned')).toBeInTheDocument();
-    expect(screen.getByText('Referenced')).toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-addr:payment.transactions')).toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-addr:payment.requests')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('dataflow-edge-produce:ns:default->addr:payment.transactions'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('dataflow-edge-consume:addr:payment.requests->ns:default'),
+    ).toBeInTheDocument();
   });
 });

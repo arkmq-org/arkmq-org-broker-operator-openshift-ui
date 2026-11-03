@@ -5,6 +5,7 @@ import type { BrokerService } from '../../../../k8s/types';
 import { ConditionsTable } from '../../../../shared-components/resourceDetails/ConditionsTable';
 import { ResourceLabelsAndAnnotations } from '../../../../shared-components/resourceDetails/ResourceLabelsAndAnnotations';
 import { BrokerServiceMetrics } from './Metrics/BrokerServiceMetrics';
+import { DataflowSection } from './dataflow/DataflowSection';
 import { LoadedAppsSection } from './loadedApps/LoadedAppsSection';
 import { boundAppNamespaces } from './loadedApps/useBoundBrokerApps';
 import { RejectedAppsSection } from './rejectedApps/RejectedAppsSection';
@@ -35,6 +36,7 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
             appNamespaces={appNamespaces}
           />
         </StackItem>
+        <StackItem>{obj ? <DataflowSection brokerService={obj} /> : null}</StackItem>
         <StackItem>{obj ? <LoadedAppsSection brokerService={obj} /> : null}</StackItem>
         <StackItem>{obj ? <RejectedAppsSection brokerService={obj} /> : null}</StackItem>
         <StackItem>

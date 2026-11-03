@@ -1,9 +1,0 @@
-.plugin__arkmq-org-broker-operator-openshift-ui__addresses-section-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  grid-auto-rows: min-content;
-  gap: var(--pf-v6-global--spacer--md, 1rem);
-  max-height: 42rem;
-  overflow-y: auto;
-  padding: var(--pf-v6-global--spacer--sm, 0.5rem);
-}

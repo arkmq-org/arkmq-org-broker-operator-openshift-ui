@@ -32,6 +32,7 @@
     "@patternfly/react-data-view": "^6.5.0",
     "@patternfly/react-icons": "^6.4.0",
     "@patternfly/react-table": "^6.6.0",
+    "@patternfly/react-topology": "~6.4.0",
     "@playwright/test": "^1.59.1",
     "@swc/core": "^1.15.32",
     "@swc/jest": "^0.2.37",
