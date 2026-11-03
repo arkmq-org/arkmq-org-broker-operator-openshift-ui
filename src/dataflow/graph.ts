@@ -48,9 +48,17 @@ export type DataflowIssue =
   | { kind: 'notDeployed'; app: AppRef; message: string };
 
 /**
- * The boxes. A namespace holds app boxes; an app box holds the addresses it owns and
- * its credential, the binding secret the producing or consuming process mounts,
- * which is where every arrow of that app starts or ends.
+ * Suffix the operator appends to an app's name for the secret holding its client
+ * certificate (`common.AppCertSecretSuffix` in the operator). The process that
+ * produces or consumes presents that certificate: it is the app's credential.
+ */
+export const APP_CERT_SECRET_SUFFIX = '-app-cert';
+
+/**
+ * The boxes. A namespace holds app boxes and credentials; an app box holds the
+ * addresses it owns; a credential is the certificate secret the producing or
+ * consuming process of an app presents, and every arrow of that app starts or ends
+ * there. The secret lives in the namespace, not in the app, so the box sits there.
  */
 export type DataflowNode =
   | { id: string; kind: 'namespace'; namespace: string }
@@ -60,8 +68,8 @@ export type DataflowNode =
       kind: 'credential';
       namespace: string;
       name: string;
-      /** Name of the binding secret, once the operator has bound the app. */
-      secret?: string;
+      /** Name of the certificate secret the operator expects for this app. */
+      secret: string;
       parent: string;
     }
   | { id: string; kind: 'anyApp'; namespace: string; parent: string }
@@ -149,8 +157,8 @@ const NODE_ORDER: Record<DataflowNode['kind'], number> = {
 /**
  * Builds the boxes-and-arrows model of the messaging flows a set of BrokerApps
  * declare. An address box sits in its owner's app box, inside the owner's namespace
- * box; arrows start and end at an app's credential, the binding secret its process
- * mounts, because that secret is what grants the messaging rights. A gate pairs with
+ * box; arrows start and end at an app's credential, the certificate secret its
+ * process presents, drawn in the namespace that holds it. A gate pairs with
  * a declared flow by meaning: a realised gate disappears behind the declared arrow,
  * an unrealised one stays dashed, and its party is only drawn then.
  *
@@ -209,21 +217,18 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     }
     return id;
   };
-  const ensureCredential = (ref: AppRef, secret?: string): string => {
+  const ensureCredential = (ref: AppRef): string => {
     const id = credentialNodeId(ref);
-    const existing = nodes.get(id);
-    if (existing?.kind === 'credential') {
-      if (secret && !existing.secret) existing.secret = secret;
-      return id;
+    if (!nodes.has(id)) {
+      nodes.set(id, {
+        id,
+        kind: 'credential',
+        namespace: ref.namespace,
+        name: ref.name,
+        secret: `${ref.name}${APP_CERT_SECRET_SUFFIX}`,
+        parent: ensureNamespace(ref.namespace),
+      });
     }
-    nodes.set(id, {
-      id,
-      kind: 'credential',
-      namespace: ref.namespace,
-      name: ref.name,
-      secret,
-      parent: ensureAppBox(ref),
-    });
     return id;
   };
   const ensureAnyApp = (namespace: string): string => {
@@ -378,7 +383,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
   const declared: { address: string; role: DataflowRole; app: AppRef }[] = [];
   for (const app of input.apps) {
     const ref = appRefOf(app);
-    const credentialId = (): string => ensureCredential(ref, app.status?.service?.secret);
+    const credentialId = (): string => ensureCredential(ref);
     const failure = app.status?.conditions?.find(
       (c) => c.type === 'Deployed' && c.status === K8sResourceConditionStatus.False,
     )?.message;

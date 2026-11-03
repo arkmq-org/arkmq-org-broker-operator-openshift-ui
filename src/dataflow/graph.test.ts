@@ -110,7 +110,7 @@ describe('referencedOwnerRefs', () => {
 });
 
 describe('buildDataflowGraph on a single app (form and app page)', () => {
-  it('nests the boxes: namespace, app, then credential and owned address', () => {
+  it('nests the boxes: namespace holds the app box and the credential, the app box its address', () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
     expect(byId(nodes, appNodeId(CAPTURE))).toMatchObject({
       kind: 'app',
@@ -118,8 +118,8 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     });
     expect(byId(nodes, credentialNodeId(CAPTURE))).toMatchObject({
       kind: 'credential',
-      secret: 'capture-binding-secret',
-      parent: appNodeId(CAPTURE),
+      secret: 'capture-app-cert',
+      parent: namespaceNodeId('acme-enroll'),
     });
     expect(byId(nodes, addressNodeId('ENROLL.IN'))).toMatchObject({
       kind: 'address',
@@ -139,21 +139,22 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     );
   });
 
-  it('leaves the secret undefined until the operator has bound the app', () => {
+  it('names the certificate secret the operator expects for the app', () => {
     const { nodes } = buildDataflowGraph({ apps: [scorer], universe });
-    expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({ kind: 'credential' });
-    expect((byId(nodes, credentialNodeId(SCORER)) as { secret?: string }).secret).toBeUndefined();
+    expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({
+      kind: 'credential',
+      secret: 'scorer-app-cert',
+    });
   });
 
-  it("draws an app-level gate as a dashed arrow to that app's credential, inside its own box", () => {
+  it("draws an app-level gate as a dashed arrow to that app's credential, in its namespace", () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
     expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({
       kind: 'credential',
-      parent: appNodeId(SCORER),
-    });
-    expect(byId(nodes, appNodeId(SCORER))).toMatchObject({
       parent: namespaceNodeId('acme-enroll'),
     });
+    // scorer owns nothing here, so it has no app box of its own
+    expect(byId(nodes, appNodeId(SCORER))).toBeUndefined();
     expect(edgesOfKind(edges, 'allowed')).toEqual([
       expect.objectContaining({
         source: addressNodeId('ENROLL.IN'),

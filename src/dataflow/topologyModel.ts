@@ -31,8 +31,6 @@ export const EDGE_TYPE = 'dataflow-edge';
 export interface TopologyLabels {
   anyNamespace: string;
   anyApp: string;
-  /** Shown as a credential's secret name before the operator has bound the app. */
-  unbound: string;
 }
 
 /** Side of the square every box is drawn on; labels hang below, so names never size a box. */
@@ -85,7 +83,7 @@ const toNodeModel = (
       return {
         id: node.id,
         type: NODE_TYPES.credential,
-        label: node.secret ?? labels.unbound,
+        label: node.secret,
         shape: NodeShape.ellipse,
         width: NODE_SIZE,
         height: NODE_SIZE,
@@ -153,8 +151,9 @@ const toEdgeModel = (edge: DataflowEdge): EdgeModel => {
 /**
  * Converts the dataflow graph into the model react-topology lays out and draws.
  * Namespaces and apps are groups, nested; every other node is a square whose shape
- * says what it is: a rectangle for an address, a circle for a credential, a hexagon
- * for a namespace, a rhombus for a gate. Gate edges are dashed and animated,
+ * says what it is: a rectangle for an address, a circle for a credential (the app's
+ * certificate secret, in its namespace), a hexagon for a namespace, a rhombus for
+ * a gate. Gate edges are dashed and animated,
  * declared ones solid.
  */
 export const toTopologyModel = (graph: DataflowGraph, labels: TopologyLabels): Model => ({

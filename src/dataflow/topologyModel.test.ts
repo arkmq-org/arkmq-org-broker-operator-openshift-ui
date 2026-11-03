@@ -2,7 +2,7 @@ import { EdgeAnimationSpeed, EdgeStyle, NodeShape, NodeStatus } from '@patternfl
 import type { DataflowGraph } from './graph';
 import { EDGE_TYPE, NODE_SIZE, NODE_TYPES, toTopologyModel } from './topologyModel';
 
-const labels = { anyNamespace: 'Any namespace', anyApp: 'any app', unbound: 'not bound yet' };
+const labels = { anyNamespace: 'Any namespace', anyApp: 'any app' };
 
 const graph: DataflowGraph = {
   nodes: [
@@ -28,15 +28,16 @@ const graph: DataflowGraph = {
       kind: 'credential',
       namespace: 'acme-enroll',
       name: 'scorer',
-      secret: 'scorer-binding-secret',
-      parent: 'app:acme-enroll/scorer',
+      secret: 'scorer-app-cert',
+      parent: 'ns:acme-enroll',
     },
     {
       id: 'cred:acme-ident/matcher',
       kind: 'credential',
       namespace: 'acme-ident',
       name: 'matcher',
-      parent: 'app:acme-ident/matcher',
+      secret: 'matcher-app-cert',
+      parent: 'ns:acme-ident',
     },
     { id: 'any-app:acme-ident', kind: 'anyApp', namespace: 'acme-ident', parent: 'ns:acme-ident' },
     { id: 'any-namespace', kind: 'anyNamespace' },
@@ -123,21 +124,22 @@ describe('toTopologyModel', () => {
     expect(model.graph?.layout).toBeUndefined();
   });
 
-  it('nests groups: a namespace holds app boxes, an app box holds its credential and addresses', () => {
+  it('nests groups: a namespace holds app boxes and credentials, an app box its addresses', () => {
     expect(node('ns:acme-enroll')).toMatchObject({
       type: NODE_TYPES.namespaceGroup,
       group: true,
-      children: ['app:acme-enroll/scorer'],
+      children: ['app:acme-enroll/scorer', 'cred:acme-enroll/scorer'],
       label: 'acme-enroll',
     });
     expect(node('app:acme-enroll/scorer')).toMatchObject({
       type: NODE_TYPES.app,
       group: true,
-      children: ['cred:acme-enroll/scorer', 'addr:ENROLL.IN'],
+      children: ['addr:ENROLL.IN'],
       label: 'scorer',
     });
     expect(node('ns:acme-ident')?.children).toEqual([
       'app:acme-ident/matcher',
+      'cred:acme-ident/matcher',
       'any-app:acme-ident',
     ]);
   });
@@ -151,13 +153,12 @@ describe('toTopologyModel', () => {
     expect(node('ns:lonely')?.group).toBeUndefined();
   });
 
-  it('labels a credential with its secret name, or says the app is not bound yet', () => {
+  it('labels a credential with its certificate secret name', () => {
     expect(node('cred:acme-enroll/scorer')).toMatchObject({
       type: NODE_TYPES.credential,
       shape: NodeShape.ellipse,
-      label: 'scorer-binding-secret',
+      label: 'scorer-app-cert',
     });
-    expect(node('cred:acme-ident/matcher')?.label).toBe('not bound yet');
   });
 
   it('gives every box the same square and a shape that says what it is', () => {

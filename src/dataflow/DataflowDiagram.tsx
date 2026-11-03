@@ -30,6 +30,7 @@ import {
   type Graph,
   type Layout,
   type LayoutFactory,
+  type LayoutOptions,
   type Model,
   type SelectionEventListener,
 } from '@patternfly/react-topology';
@@ -54,26 +55,32 @@ export const LAYOUTS = [
 export type LayoutName = (typeof LAYOUTS)[number];
 export const DEFAULT_LAYOUT: LayoutName = 'Dagre';
 
+/**
+ * Minimum room the layouts keep between nodes, between groups and along edges, in
+ * the library's own terms; labels hang below the boxes and need it.
+ */
+const spacing: Partial<LayoutOptions> = { nodeDistance: 90, groupDistance: 90, linkDistance: 90 };
+
 const layoutFactory: LayoutFactory = (type: string, graph: Graph): Layout | undefined => {
   switch (type) {
     case 'BreadthFirst':
-      return new BreadthFirstLayout(graph);
+      return new BreadthFirstLayout(graph, spacing);
     case 'Cola':
-      return new ColaLayout(graph);
+      return new ColaLayout(graph, spacing);
     case 'ColaNoForce':
-      return new ColaLayout(graph, { layoutOnDrag: false });
+      return new ColaLayout(graph, { ...spacing, layoutOnDrag: false });
     case 'Concentric':
-      return new ConcentricLayout(graph);
+      return new ConcentricLayout(graph, spacing);
     case 'Dagre':
-      return new DagreLayout(graph);
+      return new DagreLayout(graph, spacing);
     case 'Force':
-      return new ForceLayout(graph);
+      return new ForceLayout(graph, spacing);
     case 'Grid':
-      return new GridLayout(graph);
+      return new GridLayout(graph, spacing);
     case 'ColaGroups':
-      return new ColaGroupsLayout(graph, { layoutOnDrag: false });
+      return new ColaGroupsLayout(graph, { ...spacing, layoutOnDrag: false });
     default:
-      return new DagreLayout(graph);
+      return new DagreLayout(graph, spacing);
   }
 };
 
