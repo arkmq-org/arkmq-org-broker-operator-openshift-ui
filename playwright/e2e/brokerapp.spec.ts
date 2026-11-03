@@ -773,9 +773,12 @@ spec:
       ).toHaveAttribute('data-kind', 'declared', { timeout: 15000 });
       console.log('✓ Reader flow attached to its own box, realised');
 
-      // The intruder has no box: its refused flow ends at the namespace, broken.
+      // The namespace is a group (the reader has a box), so the intruder gets a box
+      // too and its refused flow ends there, broken.
       await expect(
-        diagram.locator(`[data-test="dataflow-edge-consume:addr:GATED.Q->ns:${TEST_NAMESPACE}"]`),
+        diagram.locator(
+          `[data-test="dataflow-edge-consume:addr:GATED.Q->app:${TEST_NAMESPACE}/${intruder}"]`,
+        ),
       ).toHaveAttribute('data-kind', 'broken', { timeout: 15000 });
       await expect(page.locator('[data-test="dataflow-issue-refused"]')).toBeVisible({
         timeout: 15000,

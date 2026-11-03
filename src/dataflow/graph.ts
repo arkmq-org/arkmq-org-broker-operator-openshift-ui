@@ -1,7 +1,13 @@
 import type { AddressSpec, BrokerAppCR } from '../k8s/types';
 import { K8sResourceConditionStatus } from '../k8s/types';
 import { hydrateAddresses, type Address, type GateRole } from '../reducers/brokerapp/reducer';
-import { ANY_NAMESPACE, evaluateGateFor, interpretGate, type GateUniverse } from './gates';
+import {
+  ANY_NAMESPACE,
+  evaluateGateFor,
+  interpretGate,
+  type GatePrincipal,
+  type GateUniverse,
+} from './gates';
 
 /** Namespace and name of a BrokerApp, the credential that declares a flow. */
 export interface AppRef {
@@ -77,6 +83,8 @@ export interface DataflowGraph {
 }
 
 export const ANY_NAMESPACE_NODE_ID = 'any-namespace';
+/** App name of the box standing for "any app of this namespace" inside a namespace group. */
+export const ANY_APP = '*';
 export const namespaceNodeId = (namespace: string): string => `ns:${namespace}`;
 export const appNodeId = (ref: AppRef): string => `app:${ref.namespace}/${ref.name}`;
 export const addressNodeId = (address: string): string => `addr:${address}`;
@@ -228,9 +236,23 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     existing.issues.push(...edge.issues);
   };
 
-  // Pass 1: gates of the drawn apps' owned addresses create the parties they admit,
-  // so declared flows can later attach to an app box when one exists.
-  const gateEdges: { source: string; target: string; role: DataflowRole; address: string }[] = [];
+  // Pass 1: gates of the drawn apps' owned addresses create the parties they admit.
+  // A namespace that gets an app box becomes a group, and react-topology cannot
+  // anchor an edge on a group: every later flow in that namespace lands on a box.
+  interface GateEdge {
+    source: string;
+    target: string;
+    role: DataflowRole;
+    address: string;
+    owner: AppRef;
+    principal?: GatePrincipal;
+  }
+  const gateEdges: GateEdge[] = [];
+  const groupedNamespaces = new Set<string>();
+  const ensureAppBox = (ref: AppRef): string => {
+    groupedNamespaces.add(ref.namespace);
+    return ensureApp(ref);
+  };
   for (const app of input.apps) {
     const owner = appRefOf(app);
     for (const entry of hydrated(app)) {
@@ -257,31 +279,50 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
           });
           gateEdges.push(
             role === 'produce'
-              ? { source: id, target: addressId, role, address: entry.address }
-              : { source: addressId, target: id, role, address: entry.address },
+              ? { source: id, target: addressId, role, address: entry.address, owner }
+              : { source: addressId, target: id, role, address: entry.address, owner },
           );
           continue;
         }
         for (const principal of view.principals) {
-          const partyId =
-            principal.namespace === ANY_NAMESPACE
-              ? principal.appName
-                ? ensureApp({ namespace: ANY_NAMESPACE, name: principal.appName })
-                : ensureAny()
-              : principal.appName
-                ? ensureApp({ namespace: principal.namespace, name: principal.appName })
-                : ensureNamespace(principal.namespace);
-          gateEdges.push(
-            role === 'produce'
-              ? { source: partyId, target: addressId, role, address: entry.address }
-              : { source: addressId, target: partyId, role, address: entry.address },
-          );
+          gateEdges.push({
+            source: '',
+            target: '',
+            role,
+            address: entry.address,
+            owner,
+            principal,
+          });
+          if (principal.appName) {
+            ensureAppBox({ namespace: principal.namespace, name: principal.appName });
+          }
         }
       }
     }
   }
+  // Whole-namespace principals resolve once every grouped namespace is known.
+  for (const gate of gateEdges) {
+    if (!gate.principal) continue;
+    const { principal } = gate;
+    const partyId = principal.appName
+      ? appNodeId({ namespace: principal.namespace, name: principal.appName })
+      : principal.namespace === ANY_NAMESPACE
+        ? ensureAny()
+        : groupedNamespaces.has(principal.namespace)
+          ? ensureApp({ namespace: principal.namespace, name: ANY_APP })
+          : ensureNamespace(principal.namespace);
+    const addressId = addressNodeId(gate.address);
+    if (gate.role === 'produce') {
+      gate.source = partyId;
+      gate.target = addressId;
+    } else {
+      gate.source = addressId;
+      gate.target = partyId;
+    }
+  }
 
   // Pass 2: declared flows, checked against the owner's gate when the address is referenced.
+  const declared: { address: string; role: DataflowRole; app: AppRef }[] = [];
   for (const app of input.apps) {
     const ref = appRefOf(app);
     const failure = app.status?.conditions?.find(
@@ -297,7 +338,10 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
             : undefined;
       const spec = owner ? ownedSpec(owner, entry.address) : undefined;
       const addressId = ensureAddress(entry.address, owner, !!entry.pubSub || !!spec?.pubSub);
-      const partyId = nodes.has(appNodeId(ref)) ? appNodeId(ref) : ensureNamespace(ref.namespace);
+      const partyId =
+        nodes.has(appNodeId(ref)) || groupedNamespaces.has(ref.namespace)
+          ? ensureApp(ref)
+          : ensureNamespace(ref.namespace);
 
       const roles: DataflowRole[] = [];
       if (entry.direction === 'produces' || entry.direction === 'both') roles.push('produce');
@@ -312,6 +356,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       if (ownerIssue) addressIssue(entry.address, ownerIssue);
 
       for (const role of roles) {
+        declared.push({ address: entry.address, role, app: ref });
         const [source, target] = role === 'produce' ? [partyId, addressId] : [addressId, partyId];
         const issues: DataflowIssue[] = [];
         let kind: DataflowEdgeKind = 'declared';
@@ -345,31 +390,32 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
     }
   }
 
-  // Pass 3: a gate edge whose endpoints already carry a declared flow is realised and
-  // disappears; the others stay dashed, as open doors when the graph is complete.
+  // Pass 3: a gate is realised when some other app declares the flow it allows; the
+  // declared arrow then tells the story and the gate disappears. The others stay
+  // dashed, as open doors when the graph is complete.
+  const covers = (principal: GatePrincipal, app: AppRef): boolean =>
+    (principal.namespace === ANY_NAMESPACE || principal.namespace === app.namespace) &&
+    (!principal.appName || principal.appName === app.name);
   for (const gate of gateEdges) {
     const id = edgeId(gate.source, gate.target, gate.role);
     if (edges.has(id)) continue;
-    if (gate.source === ANY_NAMESPACE_NODE_ID || gate.target === ANY_NAMESPACE_NODE_ID) {
-      const addressId = addressNodeId(gate.address);
-      const owner = (() => {
-        const node = nodes.get(addressId);
-        return node?.kind === 'address' ? node.owner : undefined;
-      })();
-      const realised = Array.from(edges.values()).some(
-        (e) =>
-          e.role === gate.role &&
-          (gate.role === 'produce' ? e.target : e.source) === addressId &&
-          e.apps.some((a) => !owner || !sameRef(a, owner)),
+    const { principal } = gate;
+    const realised =
+      !!principal &&
+      declared.some(
+        (flow) =>
+          flow.address === gate.address &&
+          flow.role === gate.role &&
+          !sameRef(flow.app, gate.owner) &&
+          covers(principal, flow.app),
       );
-      if (realised) continue;
-    }
+    if (realised) continue;
     edges.set(id, {
       id,
       source: gate.source,
       target: gate.target,
       role: gate.role,
-      kind: input.complete ? 'unused' : 'allowed',
+      kind: input.complete && principal ? 'unused' : 'allowed',
       apps: [],
       subscriptions: [],
       issues: [],

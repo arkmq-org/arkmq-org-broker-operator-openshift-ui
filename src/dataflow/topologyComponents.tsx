@@ -1,17 +1,17 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  BadgeLocation,
   DagreGroupsLayout,
   DefaultEdge,
   DefaultGroup,
-  DefaultNode,
   EdgeTerminalType,
   GraphComponent,
   LEFT_TO_RIGHT,
   ModelKind,
   NodeStatus,
+  RectAnchor,
   observer,
+  useAnchor,
   withDragNode,
   withPanZoom,
   withSelection,
@@ -36,70 +36,142 @@ type NodeProps = { element: GraphElement } & WithSelectionProps & WithDragNodePr
 const nodeData = (element: GraphElement): DataflowNode | undefined =>
   element.getData() as DataflowNode | undefined;
 
+const truncate = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+
+interface BoxProps extends NodeProps {
+  kind: string;
+  className?: string;
+  label: string;
+  secondaryLabel?: string;
+  badge?: string;
+  status?: NodeStatus;
+  tooltip?: string;
+}
+
 /**
- * An address box: the first-class element of the diagram. Foreign addresses (owned
- * by an app the page does not draw) get their own background, pub/sub ones a badge,
- * and the owner tuple sits under the name so a reader knows where it is defined.
+ * A rectangle with its text inside, the way a box in a flowchart reads. PatternFly's
+ * default node draws a shape with the label underneath, which is right for icons and
+ * wrong for named boxes; the anchor stays PatternFly's so arrows meet the border.
  */
-const AddressNode: React.FC<NodeProps> = observer(
-  ({ element, selected, onSelect, dragNodeRef }) => {
-    const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-    const data = nodeData(element);
-    const address = data?.kind === 'address' ? data : undefined;
+const Box: React.FC<BoxProps> = observer(
+  ({
+    element,
+    selected,
+    onSelect,
+    dragNodeRef,
+    kind,
+    className,
+    label,
+    secondaryLabel,
+    badge,
+    status,
+    tooltip,
+  }) => {
+    useAnchor(React.useCallback((node: Node) => new RectAnchor(node), []));
+    const node = element as Node;
+    const { width, height } = node.getDimensions();
+    const centreY = height / 2;
     return (
       <g
-        data-test={`dataflow-node-${element.getId()}`}
-        data-kind="address"
+        ref={dragNodeRef}
+        onClick={onSelect}
         className={classes(
-          `${DATAFLOW_CLASS}-address`,
-          address?.foreign && `${DATAFLOW_CLASS}-address--foreign`,
-          address?.gated && `${DATAFLOW_CLASS}-address--gated`,
+          `${DATAFLOW_CLASS}-box`,
+          className,
+          selected && `${DATAFLOW_CLASS}-box--selected`,
+          status && `${DATAFLOW_CLASS}-box--${status}`,
         )}
+        data-test={`dataflow-node-${element.getId()}`}
+        data-kind={kind}
       >
-        <DefaultNode
-          element={element as Node}
-          selected={selected}
-          onSelect={onSelect}
-          dragNodeRef={dragNodeRef}
-          truncateLength={28}
-          secondaryLabel={
-            address?.owner ? `${address.owner.namespace}/${address.owner.name}` : undefined
-          }
-          badge={address?.pubSub ? t('pub/sub') : undefined}
-          badgeLocation={BadgeLocation.inner}
-          nodeStatus={address?.issues.length ? NodeStatus.warning : undefined}
-          showStatusDecorator={!!address?.issues.length}
-        />
+        {tooltip ? <title>{tooltip}</title> : null}
+        <rect className={`${DATAFLOW_CLASS}-box-shape`} width={width} height={height} rx={8} />
+        <text
+          className={`${DATAFLOW_CLASS}-box-label`}
+          x={width / 2}
+          y={secondaryLabel ? centreY - 7 : centreY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          {truncate(label, 36)}
+        </text>
+        {secondaryLabel ? (
+          <text
+            className={`${DATAFLOW_CLASS}-box-secondary`}
+            x={width / 2}
+            y={centreY + 11}
+            textAnchor="middle"
+            dominantBaseline="middle"
+          >
+            {truncate(secondaryLabel, 40)}
+          </text>
+        ) : null}
+        {badge ? (
+          <text
+            className={`${DATAFLOW_CLASS}-box-badge`}
+            x={width - 6}
+            y={6}
+            textAnchor="end"
+            dominantBaseline="hanging"
+          >
+            {badge}
+          </text>
+        ) : null}
+        {status ? (
+          <circle className={`${DATAFLOW_CLASS}-box-status`} cx={10} cy={10} r={5} />
+        ) : null}
       </g>
     );
   },
 );
 
-/** A party at the end of an arrow: a namespace, an app named by a gate, or everyone. */
-const PartyNode: React.FC<NodeProps> = observer(({ element, selected, onSelect, dragNodeRef }) => {
-  const data = nodeData(element);
+/**
+ * An address box: the first-class element of the diagram. Foreign addresses (owned
+ * by an app the page does not draw) get their own background, pub/sub ones a badge,
+ * and the owner tuple sits under the name so a reader knows where it is defined.
+ */
+const AddressNode: React.FC<NodeProps> = observer((props) => {
+  const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const data = nodeData(props.element);
+  const address = data?.kind === 'address' ? data : undefined;
   return (
-    <g
-      data-test={`dataflow-node-${element.getId()}`}
-      data-kind={data?.kind}
+    <Box
+      {...props}
+      kind="address"
+      className={classes(
+        `${DATAFLOW_CLASS}-address`,
+        address?.foreign && `${DATAFLOW_CLASS}-address--foreign`,
+        address?.gated && `${DATAFLOW_CLASS}-address--gated`,
+      )}
+      label={props.element.getLabel()}
+      secondaryLabel={
+        address?.owner ? `${address.owner.namespace}/${address.owner.name}` : undefined
+      }
+      badge={address?.pubSub ? t('pub/sub') : undefined}
+      status={address?.issues.length ? NodeStatus.warning : undefined}
+    />
+  );
+});
+
+/** A party at the end of an arrow: a namespace, an app box inside one, or everyone. */
+const PartyNode: React.FC<NodeProps> = observer((props) => {
+  const data = nodeData(props.element);
+  return (
+    <Box
+      {...props}
+      kind={data?.kind ?? 'namespace'}
       className={classes(
         `${DATAFLOW_CLASS}-party`,
         data?.kind === 'anyNamespace' && `${DATAFLOW_CLASS}-party--any`,
         data?.kind === 'app' && `${DATAFLOW_CLASS}-party--app`,
       )}
-    >
-      <DefaultNode
-        element={element as Node}
-        selected={selected}
-        onSelect={onSelect}
-        dragNodeRef={dragNodeRef}
-        truncateLength={28}
-      />
-    </g>
+      label={props.element.getLabel()}
+    />
   );
 });
 
-/** A namespace holding the app boxes a gate named; drawn as a group around them. */
+/** A namespace holding app boxes; drawn as a group around them. */
 const NamespaceGroup: React.FC<NodeProps> = observer(
   ({ element, selected, onSelect, dragNodeRef }) => (
     <g
@@ -125,29 +197,21 @@ const NamespaceNode: React.FC<NodeProps> = observer((props) =>
 );
 
 /** A gate the UI cannot read: the raw CEL, shown as it is. */
-const CustomGateNode: React.FC<NodeProps> = observer(
-  ({ element, selected, onSelect, dragNodeRef }) => {
-    const data = nodeData(element);
-    return (
-      <g
-        data-test={`dataflow-node-${element.getId()}`}
-        data-kind="customGate"
-        className={`${DATAFLOW_CLASS}-custom-gate`}
-      >
-        <DefaultNode
-          element={element as Node}
-          selected={selected}
-          onSelect={onSelect}
-          dragNodeRef={dragNodeRef}
-          truncateLength={40}
-          nodeStatus={NodeStatus.info}
-          showStatusDecorator
-          statusDecoratorTooltip={data?.kind === 'customGate' ? data.expression : undefined}
-        />
-      </g>
-    );
-  },
-);
+const CustomGateNode: React.FC<NodeProps> = observer((props) => {
+  const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+  const data = nodeData(props.element);
+  const expression = data?.kind === 'customGate' ? data.expression : props.element.getLabel();
+  return (
+    <Box
+      {...props}
+      kind="customGate"
+      className={`${DATAFLOW_CLASS}-custom-gate`}
+      label={expression}
+      secondaryLabel={t('custom gate')}
+      tooltip={expression}
+    />
+  );
+});
 
 const edgeData = (element: GraphElement): DataflowEdge | undefined =>
   element.getData() as DataflowEdge | undefined;

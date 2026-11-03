@@ -6,23 +6,71 @@
   overflow: hidden;
 }
 
-/* Foreign addresses: owned by an app the page does not draw. */
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-address--foreign rect {
+/* Boxes: a rectangle with its text inside. */
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box {
+  cursor: pointer;
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
+  fill: var(--pf-t--global--background--color--primary--default);
+  stroke: var(--pf-t--global--border--color--default);
+  stroke-width: 1;
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box--selected
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
+  stroke: var(--pf-t--global--color--brand--default);
+  stroke-width: 2;
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-label {
+  fill: var(--pf-t--global--text--color--regular);
+  font-size: var(--pf-t--global--font--size--sm, 0.875rem);
+  font-weight: var(--pf-t--global--font--weight--body--bold, 500);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-secondary,
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-badge {
+  fill: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--xs, 0.75rem);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-status {
+  fill: var(--pf-t--global--color--status--warning--default);
+}
+
+/* Address boxes: owned here, or foreign (owned by an app the page does not draw). */
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-address--gated
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
+  stroke: var(--pf-t--global--color--brand--default);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-address--foreign
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
   fill: var(--pf-t--global--background--color--secondary--default);
   stroke-dasharray: 6 3;
 }
 
-/* Gated addresses: the owner opened a role to other apps. */
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-address--gated rect {
-  stroke: var(--pf-t--global--color--brand--default);
+/* Parties: namespaces are solid, apps lighter, everyone dotted. */
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-party
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
+  fill: var(--pf-t--global--background--color--tertiary--default);
 }
 
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-party--any rect {
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-party--app
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
+  fill: var(--pf-t--global--background--color--primary--default);
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-party--any
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
   stroke-dasharray: 3 3;
 }
 
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-custom-gate rect {
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-custom-gate
+  .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-box-shape {
   fill: var(--pf-t--global--color--nonstatus--teal--default);
+  stroke-dasharray: 3 3;
 }
 
 .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--broken path {

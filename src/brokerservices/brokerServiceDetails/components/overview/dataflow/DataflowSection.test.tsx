@@ -114,7 +114,7 @@ describe('DataflowSection', () => {
       'data-kind',
       'app',
     );
-    expect(edge('produce:ns:acme-enroll->addr:ENROLL.IN')).toHaveAttribute('data-kind', 'declared');
+    expect(edge('produce:app:acme-enroll/capture->addr:ENROLL.IN')).toHaveAttribute('data-kind', 'declared');
     expect(edge('consume:addr:ENROLL.IN->app:acme-enroll/scorer')).toHaveAttribute(
       'data-kind',
       'declared',
