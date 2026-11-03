@@ -10,7 +10,7 @@ import {
   namespaceNodeId,
   type AppRef,
 } from '../../../dataflow/graph';
-import type { ConnectorTarget } from '../../../dataflow/topologyComponents';
+import type { ConnectorTarget } from '../../../dataflow/pipelineComponents';
 
 const withRole = (direction: AddressDirection, role: 'produces' | 'consumes'): AddressDirection => {
   if (direction === 'both' || direction === role) return direction;

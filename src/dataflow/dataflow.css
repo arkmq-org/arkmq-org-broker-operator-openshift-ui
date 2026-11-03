@@ -6,11 +6,6 @@
   overflow: hidden;
 }
 
-/* Icons inside the shapes follow the text colour so dark mode keeps them readable. */
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-node-icon {
-  color: var(--pf-t--global--icon--color--regular);
-}
-
 .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--broken path {
   stroke: var(--pf-t--global--color--status--danger--default);
 }

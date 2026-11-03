@@ -25,7 +25,7 @@ import { DataflowDiagram } from '../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../dataflow/DataflowLegend';
 import { addressNodeId, buildDataflowGraph } from '../../../dataflow/graph';
-import type { ConnectorTarget, DataflowEditing } from '../../../dataflow/topologyComponents';
+import type { ConnectorTarget, DataflowEditing } from '../../../dataflow/pipelineComponents';
 import { connectionAction } from './dataflowConnections';
 import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { AddressEditForm } from './AddressEditForm';

@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flex, FlexItem } from '@patternfly/react-core';
-import { DATAFLOW_CLASS } from './topologyComponents';
+import { DATAFLOW_CLASS } from './pipelineComponents';
 import './dataflow.css';
 
 /**

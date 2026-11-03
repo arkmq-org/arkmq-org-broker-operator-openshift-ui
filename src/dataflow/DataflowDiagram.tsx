@@ -1,26 +1,11 @@
 import * as React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Dropdown,
-  DropdownItem,
-  DropdownList,
-  MenuToggle,
-  ToolbarItem,
-  type MenuToggleElement,
-} from '@patternfly/react-core';
-import {
   action,
-  BreadthFirstLayout,
-  ColaGroupsLayout,
-  ColaLayout,
-  ConcentricLayout,
   createTopologyControlButtons,
-  DagreLayout,
   defaultControlButtonsOptions,
-  ForceLayout,
   GRAPH_LAYOUT_END_EVENT,
-  GridLayout,
   LEFT_TO_RIGHT,
   PipelineDagreLayout,
   pipelineElementFactory,
@@ -32,74 +17,27 @@ import {
   VisualizationSurface,
   type Graph,
   type Layout,
-  type LayoutFactory,
-  type LayoutOptions,
   type SelectionEventListener,
 } from '@patternfly/react-topology';
 import type { DataflowGraph } from './graph';
-import { toPipelineModel } from './pipelineModel';
 import {
   DATAFLOW_CLASS,
   dataflowComponentFactory,
   type DataflowEditing,
-} from './topologyComponents';
-import { toTopologyModel, type TopologyLabels } from './topologyModel';
+} from './pipelineComponents';
+import { toPipelineModel, type DataflowLabels } from './pipelineModel';
 import './dataflow.css';
 
-/**
- * The layouts react-topology ships, offered as they are; Dagre reads left to right,
- * which suits a flow. Pipeline is not a layout of the same graph but the pipelines
- * package drawing it: task pills, task groups and right-angled task edges.
- */
-export const LAYOUTS = [
-  'Dagre',
-  'Pipeline',
-  'Force',
-  'Cola',
-  'ColaGroups',
-  'ColaNoForce',
-  'Grid',
-  'Concentric',
-  'BreadthFirst',
-] as const;
-export type LayoutName = (typeof LAYOUTS)[number];
-export const DEFAULT_LAYOUT: LayoutName = 'Dagre';
+const PIPELINE_LAYOUT = 'pipeline';
 
-/**
- * Minimum room the layouts keep between nodes, between groups and along edges, in
- * the library's own terms; labels hang below the boxes and need it.
- */
-const spacing: Partial<LayoutOptions> = { nodeDistance: 90, groupDistance: 90, linkDistance: 90 };
-
-const layoutFactory: LayoutFactory = (type: string, graph: Graph): Layout | undefined => {
-  switch (type) {
-    case 'BreadthFirst':
-      return new BreadthFirstLayout(graph, spacing);
-    case 'Cola':
-      return new ColaLayout(graph, spacing);
-    case 'ColaNoForce':
-      return new ColaLayout(graph, { ...spacing, layoutOnDrag: false });
-    case 'Concentric':
-      return new ConcentricLayout(graph, spacing);
-    case 'Dagre':
-      return new DagreLayout(graph, spacing);
-    case 'Force':
-      return new ForceLayout(graph, spacing);
-    case 'Grid':
-      return new GridLayout(graph, spacing);
-    case 'ColaGroups':
-      return new ColaGroupsLayout(graph, { ...spacing, layoutOnDrag: false });
-    case 'Pipeline':
-      return new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT });
-    default:
-      return new DagreLayout(graph, spacing);
-  }
-};
+/** The pipelines example's layout: compound dagre, left to right, longest-path ranking. */
+const layoutFactory = (_type: string, graph: Graph): Layout =>
+  new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT });
 
 export interface DataflowDiagramProps {
   /** The graph to draw; a new object triggers a re-layout. */
   graph: DataflowGraph;
-  labels: TopologyLabels;
+  labels: DataflowLabels;
   /** Ids of the selected elements; selection is controlled by the caller. */
   selectedIds?: string[];
   onSelect?: (ids: string[]) => void;
@@ -116,11 +54,11 @@ export interface DataflowDiagramProps {
 }
 
 /**
- * The boxes-and-arrows view of messaging flows, shared by the BrokerApp form, the
- * BrokerApp details page and the BrokerService details page. It draws the model it
- * is given with the layout chosen in its toolbar and reports selections; what the
- * picture means is decided in `buildDataflowGraph`, what it looks like in
- * `topologyComponents`.
+ * The messaging flows as a pipeline, shared by the BrokerApp form, the BrokerApp
+ * details page and the BrokerService details page: react-topology's pipelines
+ * package drawing our graph. It draws the graph it is given and reports selections;
+ * what the picture means is decided in `buildDataflowGraph`, what it looks like in
+ * `pipelineComponents`.
  *
  * The topology controller is a mobx store outside React, so feeding it the model is a
  * side effect on an external system, which is what the effects below do.
@@ -137,8 +75,6 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   dataTest = 'dataflow-diagram',
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const [layoutDropdownOpen, setLayoutDropdownOpen] = useState(false);
-  const [layout, setLayout] = useState<LayoutName>(DEFAULT_LAYOUT);
 
   const controller = useMemo(() => {
     const visualization = new Visualization();
@@ -151,17 +87,14 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     return visualization;
   }, []);
 
-  const model = useMemo(
-    () => (layout === 'Pipeline' ? toPipelineModel(graph, labels) : toTopologyModel(graph, labels)),
-    [graph, labels, layout],
-  );
+  const model = useMemo(() => toPipelineModel(graph, labels), [graph, labels]);
 
   useEffect(() => {
     controller.fromModel(
-      { ...model, graph: { ...model.graph, id: 'g1', type: 'graph', layout } },
+      { ...model, graph: { id: 'g1', type: 'graph', layout: PIPELINE_LAYOUT } },
       false,
     );
-  }, [controller, model, layout]);
+  }, [controller, model]);
 
   useEffect(() => {
     if (!onSelect) return undefined;
@@ -178,48 +111,9 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     return <div data-test={dataTest}>{emptyState}</div>;
   }
 
-  const layoutDropdown = (
-    <>
-      <ToolbarItem variant="label">{t('Layout')}</ToolbarItem>
-      <ToolbarItem>
-        <Dropdown
-          toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
-            <MenuToggle
-              ref={toggleRef}
-              onClick={() => {
-                setLayoutDropdownOpen(!layoutDropdownOpen);
-              }}
-              data-test="dataflow-layout-toggle"
-            >
-              {layout}
-            </MenuToggle>
-          )}
-          isOpen={layoutDropdownOpen}
-          onOpenChange={setLayoutDropdownOpen}
-        >
-          <DropdownList>
-            {LAYOUTS.map((name) => (
-              <DropdownItem
-                key={name}
-                onClick={() => {
-                  setLayout(name);
-                  setLayoutDropdownOpen(false);
-                }}
-                data-test={`dataflow-layout-${name}`}
-              >
-                {name}
-              </DropdownItem>
-            ))}
-          </DropdownList>
-        </Dropdown>
-      </ToolbarItem>
-    </>
-  );
-
   return (
     <div className={`${DATAFLOW_CLASS}-container`} style={{ height }} data-test={dataTest}>
       <TopologyView
-        viewToolbar={<ToolbarItem>{layoutDropdown}</ToolbarItem>}
         controlBar={
           <TopologyControlBar
             controlButtons={createTopologyControlButtons({
@@ -238,6 +132,10 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
                 controller.getGraph().layout();
               }),
               legend: false,
+              zoomInAriaLabel: t('Zoom in'),
+              zoomOutAriaLabel: t('Zoom out'),
+              fitToScreenAriaLabel: t('Fit to screen'),
+              resetViewAriaLabel: t('Reset view'),
             })}
           />
         }

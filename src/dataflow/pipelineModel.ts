@@ -9,7 +9,12 @@ import {
   type PipelineNodeModel,
 } from '@patternfly/react-topology';
 import type { DataflowEdge, DataflowGraph, DataflowNode } from './graph';
-import type { TopologyLabels } from './topologyModel';
+
+/** Translated texts the model needs for labels it cannot derive from the CRs. */
+export interface DataflowLabels {
+  anyNamespace: string;
+  anyApp: string;
+}
 
 /** Node and edge types of the pipeline rendering, so the component factory can tell them apart. */
 export const PIPELINE_TYPES = {
@@ -25,7 +30,7 @@ const TASK_PADDING = 76;
 const taskWidth = (label: string): number =>
   Math.max(150, Math.round(Math.min(label.length, 40) * CHAR_WIDTH + TASK_PADDING));
 
-const labelOf = (node: DataflowNode, labels: TopologyLabels): string => {
+const labelOf = (node: DataflowNode, labels: DataflowLabels): string => {
   switch (node.kind) {
     case 'namespace':
       return node.namespace;
@@ -55,7 +60,7 @@ const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
  * from those. Our edge data is then put back on the edges whose endpoints are ours,
  * so their kind (declared, allowed, broken, unused) survives the trip.
  */
-export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): Model => {
+export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): Model => {
   const runAfter = new Map<string, string[]>();
   for (const edge of graph.edges) {
     runAfter.set(edge.target, [...(runAfter.get(edge.target) ?? []), edge.source]);
@@ -100,6 +105,8 @@ export const toPipelineModel = (graph: DataflowGraph, labels: TopologyLabels): M
     const gate = own?.kind === 'allowed' || own?.kind === 'unused';
     return {
       ...edge,
+      // keep our ids on the edges that are ours, so pages and tests can find them
+      id: own?.id ?? edge.id,
       edgeStyle: gate ? EdgeStyle.dashedMd : EdgeStyle.default,
       animationSpeed: gate ? EdgeAnimationSpeed.medium : EdgeAnimationSpeed.none,
       data: own,
