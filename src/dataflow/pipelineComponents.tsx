@@ -4,6 +4,7 @@ import {
   ContextMenuItem,
   CREATE_CONNECTOR_DROP_TYPE,
   DEFAULT_SPACER_NODE_TYPE,
+  DefaultConnectorTerminal,
   DefaultTaskGroup,
   EdgeTerminalType,
   GraphComponent,
@@ -12,11 +13,13 @@ import {
   ModelKind,
   NodeStatus,
   observer,
+  Point,
   RunStatus,
+  ScaleDetailsLevel,
   SpacerNode,
   TaskEdge,
   TaskNode,
-  ScaleDetailsLevel,
+  useCombineRefs,
   useHover,
   withContextMenu,
   withCreateConnector,
@@ -46,7 +49,7 @@ import {
 } from '@patternfly/react-icons';
 import type { SVGIconProps } from '@patternfly/react-icons/dist/esm/createIcon';
 import type { DataflowEdge, DataflowNode } from './graph';
-import { PIPELINE_TYPES } from './pipelineModel';
+import { PIPELINE_TYPES, type PipelineEdgeData } from './pipelineModel';
 
 export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__dataflow';
 
@@ -54,6 +57,17 @@ export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__d
 export type ConnectorTarget = { nodeId: string } | { graph: true; x: number; y: number };
 
 /** MIME type of a palette item being dragged onto the canvas with the browser's own drag and drop. */
+/**
+ * How far past the node's right edge the hover area reaches: the connector handle
+ * (32 units long) hangs off that edge, and the pointer must stay inside the node's
+ * hover area until it is over the handle, or the handle hides before it is reached.
+ */
+const CONNECTOR_REACH = 48;
+/** Hover area margin above and below the node. */
+const HOVER_MARGIN = 6;
+/** The library's class on the connector handle, the one element hover may leave for. */
+const CONNECTOR_HANDLE_CLASS = 'pf-topology-default-create-connector';
+
 export const PALETTE_TYPE = 'application/x-arkmq-dataflow';
 export type PaletteItem = 'address' | 'namespace';
 
@@ -75,6 +89,8 @@ export interface DataflowEditing {
 
 interface DataflowState {
   editing?: DataflowEditing;
+  /** Bumped when fonts load; keys the pills so they measure their text again. */
+  fontEpoch?: number;
 }
 
 const editingOf = (element: GraphElement): DataflowEditing | undefined =>
@@ -83,8 +99,8 @@ const editingOf = (element: GraphElement): DataflowEditing | undefined =>
 const nodeData = (element: GraphElement): DataflowNode | undefined =>
   element.getData() as DataflowNode | undefined;
 
-const edgeData = (element: GraphElement): DataflowEdge | undefined =>
-  element.getData() as DataflowEdge | undefined;
+const edgeData = (element: GraphElement): PipelineEdgeData | undefined =>
+  element.getData() as PipelineEdgeData | undefined;
 
 type TaskProps = { element: GraphElement } & WithSelectionProps &
   WithContextMenuProps &
@@ -95,7 +111,6 @@ interface Look {
   icon: React.ComponentType<SVGIconProps>;
   badge: string;
   /** Shown before the name: the address is owned by an app this page does not draw. */
-  leadIcon?: React.ReactNode;
   tooltip?: string;
   status?: RunStatus;
   /** Whether the editing gestures (menu, connector handle) apply to this node. */
@@ -104,8 +119,8 @@ interface Look {
 
 /**
  * A box of the diagram as a pipeline task pill: the icon and the badge say what it
- * is (queue, topic, secret, namespace, gate), the lead icon flags an address owned
- * elsewhere, the status flags an address with an issue. The pill itself is
+ * is (queue, topic, secret, namespace, gate), an external link icon marks an address
+ * owned elsewhere, the status flags an address with an issue. The pill itself is
  * PatternFly's; only the vocabulary is ours.
  */
 const DataflowTask: React.FC<TaskProps> = observer(
@@ -115,6 +130,8 @@ const DataflowTask: React.FC<TaskProps> = observer(
     contextMenuOpen,
     onShowCreateConnector,
     onHideCreateConnector,
+    dndDropRef,
+    droppable,
     ...rest
   }) => {
     const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -124,9 +141,14 @@ const DataflowTask: React.FC<TaskProps> = observer(
       switch (data?.kind) {
         case 'address':
           return {
-            icon: data.pubSub ? BroadcastTowerIcon : EnvelopeIcon,
+            // the badge already says queue or topic, so the icon can mark the ones owned
+            // elsewhere (as a lead icon would, but the pill misplaces one before it is measured)
+            icon: data.foreign
+              ? ExternalLinkAltIcon
+              : data.pubSub
+                ? BroadcastTowerIcon
+                : EnvelopeIcon,
             badge: `${data.pubSub ? t('topic') : t('queue')}${data.gated ? ` · ${t('open')}` : ''}`,
-            leadIcon: data.foreign ? <ExternalLinkAltIcon /> : undefined,
             tooltip: data.owner
               ? t('Owned by {{owner}}', { owner: `${data.owner.namespace}/${data.owner.name}` })
               : undefined,
@@ -153,16 +175,61 @@ const DataflowTask: React.FC<TaskProps> = observer(
     const Icon = look.icon;
     const edits = Boolean(editing) && look.editable;
     const [hover, hoverRef] = useHover<SVGGElement>();
+    const box = React.useRef<SVGGElement | null>(null);
+    // the drop target's hit test needs an element to measure: this box
+    const refs = useCombineRefs<SVGGElement>(hoverRef, dndDropRef ?? null, box);
     const detailsLevel = element.getGraph().getDetailsLevel();
+    const bounds = (element as Node).getBounds();
+    // Hiding the handle unmounts it, and with it the drag it may be the source of.
+    // So the handle stays while the pointer is on it, while it is being dragged
+    // (`droppable`: a connector drag is in progress), and goes when the pointer leaves
+    // it with no button down or, after a drag, when the pointer did not end up here.
+    const dragging = Boolean(droppable);
+    const wasDragging = React.useRef(false);
+    React.useEffect(() => {
+      // the browser's own hover: the library's is debounced and lags behind the drop
+      if (wasDragging.current && !dragging && !box.current?.matches(':hover')) {
+        onHideCreateConnector?.();
+      }
+      wasDragging.current = dragging;
+    }, [dragging, onHideCreateConnector]);
+    const leave = (event: React.MouseEvent) => {
+      if (dragging) return;
+      const handle = (event.relatedTarget as Element | null)?.closest(`.${CONNECTOR_HANDLE_CLASS}`);
+      if (!handle) {
+        onHideCreateConnector?.();
+        return;
+      }
+      handle.addEventListener(
+        'mouseleave',
+        (left) => {
+          if (!(left as MouseEvent).buttons) onHideCreateConnector?.();
+        },
+        { once: true },
+      );
+    };
     return (
       <g
-        ref={hoverRef}
+        ref={refs}
         data-test={`dataflow-node-${element.getId()}`}
         data-kind={data?.kind}
         onMouseEnter={edits ? onShowCreateConnector : undefined}
-        onMouseLeave={edits ? onHideCreateConnector : undefined}
+        onMouseLeave={edits ? leave : undefined}
       >
+        {edits && (
+          // The pill is drawn narrower than the node and the handle hangs off the node's
+          // edge, so this unseen strip under the pill keeps the pointer "inside" across
+          // that gap until it is over the handle, which then keeps itself alive.
+          <rect
+            x={0}
+            y={-HOVER_MARGIN}
+            width={bounds.width + CONNECTOR_REACH}
+            height={bounds.height + 2 * HOVER_MARGIN}
+            fill="transparent"
+          />
+        )}
         <TaskNode
+          key={element.getController().getState<DataflowState>().fontEpoch ?? 0}
           element={element}
           {...rest}
           hideDetailsAtMedium
@@ -170,7 +237,6 @@ const DataflowTask: React.FC<TaskProps> = observer(
           taskIcon={<Icon />}
           taskIconTooltip={look.tooltip}
           badge={look.badge}
-          leadIcon={look.leadIcon}
           status={look.status}
           showStatusState={Boolean(look.status)}
           truncateLength={40}
@@ -209,17 +275,28 @@ const DataflowGroup: React.FC<{ element: GraphElement } & WithSelectionProps> = 
   },
 );
 
+const terminalStatus = (kind: DataflowEdge['kind']): NodeStatus | undefined =>
+  kind === 'broken' ? NodeStatus.danger : kind === 'unused' ? NodeStatus.warning : undefined;
+
+/** Arrowhead size of the task edges (the library's default). */
+const TERMINAL_SIZE = 14;
+
 /**
  * A flow as a task edge, right-angled. Dashed and moving when only allowed, red
- * when the owner refuses it, orange when it is an open door.
+ * when the owner refuses it, orange when it is an open door. An arrow with a
+ * reverse (the same two boxes, the other way round) gets a second head.
  */
 const DataflowEdgeComponent: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
   ({ element, selected, onSelect }) => {
     const data = edgeData(element);
     const kind = data?.kind ?? 'declared';
-    const status =
-      kind === 'broken' ? NodeStatus.danger : kind === 'unused' ? NodeStatus.warning : undefined;
-    const toSpacer = (element as Edge).getTarget().getType() === DEFAULT_SPACER_NODE_TYPE;
+    const edge = element as Edge;
+    const toSpacer = edge.getTarget().getType() === DEFAULT_SPACER_NODE_TYPE;
+    // where the drawn line starts: the task edge begins it before the node's edge
+    const lineStart = new Point(
+      edge.getStartPoint().x - (data?.indent ?? 0),
+      edge.getStartPoint().y,
+    );
     return (
       <g
         data-test={`dataflow-edge-${element.getId()}`}
@@ -227,12 +304,26 @@ const DataflowEdgeComponent: React.FC<{ element: GraphElement } & WithSelectionP
         className={`${DATAFLOW_CLASS}-edge ${DATAFLOW_CLASS}-edge--${kind}`}
       >
         <TaskEdge
-          element={element as Edge}
+          element={edge}
           selected={selected}
           onSelect={onSelect}
           endTerminalType={toSpacer ? undefined : EdgeTerminalType.directional}
-          endTerminalStatus={status}
+          endTerminalStatus={terminalStatus(kind)}
         />
+        {data?.reverse && (
+          // The second head, for the arrow going the other way. The task edge's own start
+          // terminal takes its direction from the far end of the edge, which is not where
+          // the line goes; this one points back along the line's first stretch.
+          <DefaultConnectorTerminal
+            edge={edge}
+            isTarget={false}
+            terminalType={EdgeTerminalType.directional}
+            status={terminalStatus(data.reverse.kind)}
+            startPoint={new Point(lineStart.x + 2 * TERMINAL_SIZE, lineStart.y)}
+            endPoint={lineStart}
+            size={TERMINAL_SIZE}
+          />
+        )}
       </g>
     );
   },
@@ -297,9 +388,14 @@ const taskWithMenu = withContextMenu(nodeMenu)(selectableTask) as React.Componen
 const EditableTask = withCreateConnector(onCreateConnector)(taskWithMenu);
 const SelectableGroup = withSelection()(DataflowGroup);
 const SelectableEdge = withSelection()(DataflowEdgeComponent);
-const DropGraph = withDndDrop({ accept: CREATE_CONNECTOR_DROP_TYPE, dropHint: 'create' })(
-  withPanZoom()(GraphComponent),
-);
+// The canvas is under every pointer position (the library's default hit test only
+// covers the unzoomed viewport) and takes the drop when no box does.
+const DropGraph = withDndDrop({
+  accept: CREATE_CONNECTOR_DROP_TYPE,
+  hitTest: () => true,
+  canDrop: (_item, monitor) => monitor.isOver({ shallow: true }),
+  dropHint: 'create',
+})(withPanZoom()(GraphComponent));
 
 /** Maps dataflow node and edge types to their renderers. */
 export const dataflowComponentFactory: ComponentFactory = (kind, type) => {

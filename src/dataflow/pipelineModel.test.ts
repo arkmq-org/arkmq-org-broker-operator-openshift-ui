@@ -96,5 +96,59 @@ describe('toPipelineModel', () => {
     expect(allowed?.data).toBe(graph.edges[1]);
     // a gate edge is dashed, a declared one is not
     expect(allowed?.edgeStyle).not.toBe(declared?.edgeStyle);
+    expect(declared?.visible).not.toBe(false);
+    expect(allowed?.visible).not.toBe(false);
+  });
+
+  it('draws an app producing to and consuming from an address as one two-headed arrow', () => {
+    const consume = {
+      id: 'e3',
+      source: 'addr:Q',
+      target: 'cred:a/x',
+      role: 'consume' as const,
+      kind: 'declared' as const,
+      apps: [],
+      subscriptions: [],
+      issues: [],
+    };
+    const both = toPipelineModel({ ...graph, edges: [...graph.edges, consume] }, labels);
+    const edges = both.edges ?? [];
+    const produce = edges.find((e) => e.id === 'e1');
+    const back = edges.find((e) => e.id === 'e3');
+    expect(produce?.visible).not.toBe(false);
+    expect((produce?.data as { reverse?: unknown }).reverse).toBe(consume);
+    // the consume arrow stays in the model, for pages and tests, but is not drawn
+    expect(back?.visible).toBe(false);
+    expect(back?.source).toBe('addr:Q');
+    expect(back?.target).toBe('cred:a/x');
+    // and does not order the pipeline, which would be a cycle
+    const cred = both.nodes?.find((n) => n.id === 'cred:a/x') as PipelineNodeModel;
+    expect(cred.runAfterTasks).toEqual([]);
+  });
+
+  it('draws the consume arrow of a pair when the address is not in the box of the other end', () => {
+    const consume = {
+      id: 'e3',
+      source: 'addr:Q',
+      target: 'cred:a/x',
+      role: 'consume' as const,
+      kind: 'declared' as const,
+      apps: [],
+      subscriptions: [],
+      issues: [],
+    };
+    const elsewhere = {
+      ...graph,
+      nodes: graph.nodes.map((n) =>
+        n.id === 'addr:Q' ? { ...n, parent: 'ns:a', foreign: true } : n,
+      ),
+      edges: [...graph.edges, consume],
+    };
+    const edges = toPipelineModel(elsewhere, labels).edges ?? [];
+    expect(edges.find((e) => e.id === 'e3')?.visible).toBeUndefined();
+    expect(edges.find((e) => e.id === 'e1')?.visible).toBe(false);
+    expect((edges.find((e) => e.id === 'e3')?.data as { reverse?: unknown }).reverse).toBe(
+      graph.edges[0],
+    );
   });
 });

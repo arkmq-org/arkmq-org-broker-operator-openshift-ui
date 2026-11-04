@@ -1,13 +1,15 @@
 import * as React from 'react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   action,
   createTopologyControlButtons,
   defaultControlButtonsOptions,
+  GRAPH_LAYOUT_END_EVENT,
   LEFT_TO_RIGHT,
   PipelineDagreLayout,
   pipelineElementFactory,
+  Point,
   SELECTION_EVENT,
   TopologyControlBar,
   TopologyView,
@@ -15,6 +17,7 @@ import {
   VisualizationProvider,
   VisualizationSurface,
   type Graph,
+  type GraphLayoutEndEventListener,
   type Layout,
   type SelectionEventListener,
 } from '@patternfly/react-topology';
@@ -30,10 +33,32 @@ import { toPipelineModel, type DataflowLabels } from './pipelineModel';
 import './dataflow.css';
 
 const PIPELINE_LAYOUT = 'pipeline';
+/**
+ * Space between ranks. Dagre surrounds every nested group with hidden ranks and
+ * spaces each of them by this amount, so with apps inside namespaces the library's
+ * default (70) ends up putting boxes several pill widths apart.
+ */
+const RANK_SEPARATION = 20;
+const FIT_PADDING = 80;
+/** Zoom under which the pills drop their text; the first view never goes below it. */
+const MIN_FIT_SCALE = 0.6;
 
 /** The pipelines example's layout: compound dagre, left to right, longest-path ranking. */
 const layoutFactory = (_type: string, graph: Graph): Layout =>
-  new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT });
+  new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT, ranksep: RANK_SEPARATION });
+
+/**
+ * Fits the whole graph in the canvas, but never so small that the pills lose their
+ * text: a graph wider than that starts top left at the minimum zoom and the viewer
+ * pans. The library's own fit to screen has no such floor.
+ */
+const fitToView = (graph: Graph): void => {
+  graph.fit(FIT_PADDING);
+  if (graph.getScale() < MIN_FIT_SCALE) {
+    graph.setScale(MIN_FIT_SCALE);
+    graph.setPosition(new Point(FIT_PADDING / 2, FIT_PADDING / 2));
+  }
+};
 
 export interface DataflowDiagramProps {
   /** The graph to draw; a new object triggers a re-layout. */
@@ -85,7 +110,12 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     visualization.registerElementFactory(pipelineElementFactory);
     visualization.registerLayoutFactory(layoutFactory);
     visualization.registerComponentFactory(dataflowComponentFactory);
-    visualization.setFitToScreenOnLayout(true);
+    visualization.addEventListener<GraphLayoutEndEventListener>(
+      GRAPH_LAYOUT_END_EVENT,
+      ({ graph }) => {
+        fitToView(graph);
+      },
+    );
     return visualization;
   }, []);
 
@@ -102,6 +132,27 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     );
     controller.getGraph().layout();
   }, [controller, model]);
+
+  // A pill measures its text once, when it mounts, and on a cold page load that
+  // measurement comes out short (the console's web font is not in use yet), leaving
+  // the label and the badge drawn over each other. So the pills are mounted again
+  // once the browser's fonts are ready, and whenever more fonts arrive: the epoch
+  // travels through the controller state and keys each pill. (Mounting the whole
+  // surface again instead loses the library's layers, and the connector handles.)
+  const [fontEpoch, setFontEpoch] = useState(0);
+  useEffect(() => {
+    // jsdom has no font set; the browser always does
+    const fonts = (document as { fonts?: FontFaceSet }).fonts;
+    if (!fonts) return undefined;
+    const remeasure = () => {
+      setFontEpoch((epoch) => epoch + 1);
+    };
+    void fonts.ready.then(remeasure);
+    fonts.addEventListener('loadingdone', remeasure);
+    return () => {
+      fonts.removeEventListener('loadingdone', remeasure);
+    };
+  }, []);
 
   useEffect(() => {
     if (!onSelect) return undefined;
@@ -152,7 +203,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
                 controller.getGraph().scaleBy(0.75);
               }),
               fitToScreenCallback: action(() => {
-                controller.getGraph().fit(80);
+                fitToView(controller.getGraph());
               }),
               resetViewCallback: action(() => {
                 controller.getGraph().reset();
@@ -172,7 +223,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
         defaultSideBarSize={sideBarSize}
       >
         <VisualizationProvider controller={controller}>
-          <VisualizationSurface state={{ selectedIds: selectedIds ?? [], editing }} />
+          <VisualizationSurface state={{ selectedIds: selectedIds ?? [], editing, fontEpoch }} />
         </VisualizationProvider>
       </TopologyView>
     </div>

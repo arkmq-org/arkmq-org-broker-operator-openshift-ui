@@ -53,8 +53,27 @@ export class Visualization {
       setDetailsLevelThresholds: jest.fn(),
       getScale: () => 1,
       setScale: jest.fn(),
+      setPosition: jest.fn(),
     };
   }
+}
+
+export const useCombineRefs =
+  <T,>(...refs: (React.Ref<T> | undefined)[]) =>
+  (node: T | null) => {
+    refs.forEach((ref) => {
+      if (typeof ref === 'function') ref(node);
+      else if (ref) (ref as React.MutableRefObject<T | null>).current = node;
+    });
+  };
+
+export const DefaultConnectorTerminal: React.FC<Record<string, unknown>> = () => null;
+
+export class Point {
+  constructor(
+    public x: number,
+    public y: number,
+  ) {}
 }
 
 const ControllerContext = createContext<Visualization | undefined>(undefined);
@@ -201,7 +220,8 @@ export class RectAnchor {
   constructor(public owner: unknown) {}
 }
 export const useAnchor = (): void => undefined;
-export const observer = <P,>(Component: React.ComponentType<P>): React.ComponentType<P> => Component;
+export const observer = <P,>(Component: React.ComponentType<P>): React.ComponentType<P> =>
+  Component;
 
 export class DagreGroupsLayout {
   constructor(

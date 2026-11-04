@@ -16,6 +16,18 @@ export interface DataflowLabels {
   anyApp: string;
 }
 
+/**
+ * What a pipeline edge carries: our edge, plus the arrow going the other way between
+ * the same two boxes when there is one (an app producing to and consuming from an
+ * address). The pipeline draws both on the same line, so the pair is one edge with
+ * an arrowhead at each end and the reverse one is not drawn, only kept in the model.
+ */
+export type PipelineEdgeData = DataflowEdge & {
+  reverse?: DataflowEdge;
+  /** Set by the library's task node: how far the drawn line starts before the node's edge. */
+  indent?: number;
+};
+
 /** Node and edge types of the pipeline rendering, so the component factory can tell them apart. */
 export const PIPELINE_TYPES = {
   task: 'dataflow-pipeline-task',
@@ -60,8 +72,29 @@ const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
  * so their kind (declared, allowed, broken, unused) survives the trip.
  */
 export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): Model => {
+  const parentOf = (id: string): string | undefined => {
+    const node = graph.nodes.find((n) => n.id === id);
+    return node && 'parent' in node ? node.parent : undefined;
+  };
+  const ours = new Map<string, DataflowEdge>(
+    graph.edges.map((edge) => [`${edge.source}->${edge.target}`, edge]),
+  );
+  const reverseOf = (edge: DataflowEdge) => ours.get(`${edge.target}->${edge.source}`);
+  // Of two arrows between the same boxes only one is drawn, with a head at each end,
+  // and only that one orders the pipeline (the pair would be a cycle): produce when
+  // the address sits in the same box as the other end (an app's own address, which
+  // follows its certificate), consume otherwise (the address comes first).
+  const isDrawn = (edge: DataflowEdge): boolean => {
+    if (!reverseOf(edge)) return true;
+    const [address, other] =
+      edge.role === 'produce' ? [edge.target, edge.source] : [edge.source, edge.target];
+    const sameBox = parentOf(address) !== undefined && parentOf(address) === parentOf(other);
+    return (edge.role === 'produce') === sameBox;
+  };
+  const drawn = graph.edges.filter(isDrawn);
+  const hidden = graph.edges.filter((edge) => !isDrawn(edge));
   const runAfter = new Map<string, string[]>();
-  for (const edge of graph.edges) {
+  for (const edge of drawn) {
     runAfter.set(edge.target, [...(runAfter.get(edge.target) ?? []), edge.source]);
   }
   const nodes: PipelineNodeModel[] = graph.nodes.map((node) => {
@@ -91,9 +124,6 @@ export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): M
   });
   const spacers = getSpacerNodes(nodes, DEFAULT_SPACER_NODE_TYPE);
   const allNodes = [...nodes, ...spacers];
-  const ours = new Map<string, DataflowEdge>(
-    graph.edges.map((edge) => [`${edge.source}->${edge.target}`, edge]),
-  );
   const edges: EdgeModel[] = getEdgesFromNodes(
     allNodes,
     DEFAULT_SPACER_NODE_TYPE,
@@ -101,15 +131,30 @@ export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): M
     PIPELINE_TYPES.edge,
   ).map((edge) => {
     const own = ours.get(`${edge.source ?? ''}->${edge.target ?? ''}`);
+    const reverse = own && reverseOf(own);
     const gate = own?.kind === 'allowed' || own?.kind === 'unused';
+    const data: PipelineEdgeData | undefined = own && reverse ? { ...own, reverse } : own;
     return {
       ...edge,
       // keep our ids on the edges that are ours, so pages and tests can find them
       id: own?.id ?? edge.id,
       edgeStyle: gate ? EdgeStyle.dashedMd : EdgeStyle.default,
       animationSpeed: gate ? EdgeAnimationSpeed.medium : EdgeAnimationSpeed.none,
-      data: own,
+      data,
     };
   });
-  return { graph: { id: 'dataflow', type: 'graph' }, nodes: allNodes, edges };
+  // the arrows not drawn stay in the model, unseen, so pages and tests still find them
+  const unseen: EdgeModel[] = hidden.map((edge) => ({
+    id: edge.id,
+    type: PIPELINE_TYPES.edge,
+    source: edge.source,
+    target: edge.target,
+    visible: false,
+    data: edge,
+  }));
+  return {
+    graph: { id: 'dataflow', type: 'graph' },
+    nodes: allNodes,
+    edges: [...edges, ...unseen],
+  };
 };
