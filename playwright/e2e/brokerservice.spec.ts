@@ -418,6 +418,55 @@ test.describe('BrokerService List Page', () => {
   });
 });
 
+test.describe('BrokerService List Memory Usage', () => {
+  const METRICS_NAMESPACE = 'broker-service-list-memory-e2e';
+  /** No service cert → no StatefulSet/pod → Memory Usage must show N/A. */
+  const NO_POD_SERVICE_NAME = 'list-memory-nopod';
+
+  test.beforeAll(() => {
+    createNamespace(METRICS_NAMESPACE);
+    console.log('\nStarting BrokerService List Memory Usage tests\n');
+  });
+
+  test.afterAll(() => {
+    kubectl(`delete brokerservice --all -n ${METRICS_NAMESPACE}`, { ignoreError: true });
+    deleteNamespace(METRICS_NAMESPACE);
+    console.log('\nList Memory Usage cleanup complete\n');
+  });
+
+  test('shows N/A in Memory Usage when BrokerService has no running pods', async ({ page }) => {
+    // No cert exists in this namespace; the CR never gets a broker pod.
+    applyYaml(brokerServiceYaml(NO_POD_SERVICE_NAME, METRICS_NAMESPACE));
+    await waitForCondition(
+      'brokerservice',
+      NO_POD_SERVICE_NAME,
+      METRICS_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    const podPhase = kubectl(
+      `get pod ${NO_POD_SERVICE_NAME}-ss-0 -n ${METRICS_NAMESPACE} -o jsonpath='{.status.phase}'`,
+      { ignoreError: true },
+    );
+    expect(podPhase).toBe('');
+
+    await login(page, username, password);
+    await gotoBrokerServiceList(page, METRICS_NAMESPACE);
+
+    await expect(page.getByRole('columnheader', { name: 'Memory Usage' })).toBeVisible({
+      timeout: 30000,
+    });
+
+    const memoryCell = page.locator(
+      `[data-test="broker-service-memory-${METRICS_NAMESPACE}-${NO_POD_SERVICE_NAME}"]`,
+    );
+    await expect(memoryCell).toHaveAttribute('data-test-memory', 'na', { timeout: 60000 });
+    await expect(memoryCell).toHaveText('N/A');
+  });
+});
+
 test.describe('BrokerService Details Page', () => {
   const DETAILS_NAMESPACE = 'broker-service-details-e2e';
   const DETAILS_SERVICE_NAME = 'details-test-broker';

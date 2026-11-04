@@ -13,6 +13,7 @@ import {
   type ReadyConditionLabelKey,
 } from '../../../shared-components/resourceList/getReadyConditionDisplay';
 import { ResourceListRowActions } from '../../../shared-components/resourceList/ResourceListRowActions';
+import { BrokerServiceMemoryCell } from './BrokerServiceMemoryCell';
 
 const MAX_VISIBLE_LABELS = 3;
 
@@ -93,6 +94,9 @@ export const BrokerServiceListRow = (
             ))}
           </LabelGroup>
         ),
+    },
+    {
+      cell: <BrokerServiceMemoryCell name={name} namespace={namespace} />,
     },
     {
       cell: service.metadata?.creationTimestamp ? (

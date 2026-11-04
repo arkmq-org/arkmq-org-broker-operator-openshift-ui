@@ -30,6 +30,7 @@ describe('BrokerServiceListTable', () => {
     expect(screen.getByRole('columnheader', { name: 'Namespace' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Labels' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Memory Usage' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Created' })).toBeInTheDocument();
   });
 

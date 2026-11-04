@@ -24,6 +24,7 @@ export const BrokerServiceListTable: FC<BrokerServiceListTableProps> = ({
       t('Namespace'),
       t('Status'),
       t('Labels'),
+      t('Memory Usage'),
       t('Created'),
       { cell: '', props: { screenReaderText: t('Actions') } },
     ],

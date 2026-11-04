@@ -28,6 +28,7 @@ const TEST_COLUMNS = [
   'Namespace',
   'Status',
   'Labels',
+  'Memory Usage',
   'Created',
   { cell: '', props: { screenReaderText: 'Actions' } },
 ] as const;
