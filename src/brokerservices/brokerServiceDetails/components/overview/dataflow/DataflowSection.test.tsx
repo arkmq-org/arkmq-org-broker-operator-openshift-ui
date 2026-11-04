@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import { useK8sWatchResources } from '@openshift-console/dynamic-plugin-sdk';
+import { useK8sWatchResource, useK8sWatchResources } from '@openshift-console/dynamic-plugin-sdk';
 import type { BrokerAppCR, BrokerService } from '../../../../../k8s/types';
 import { K8sResourceConditionStatus } from '../../../../../k8s/types';
 import { DataflowSection } from './DataflowSection';
 
 const mockUseK8sWatchResources = useK8sWatchResources as jest.Mock;
+const mockUseK8sWatchResource = useK8sWatchResource as jest.Mock;
 
 const service = (...refs: { name: string; namespace: string }[]): BrokerService => ({
   apiVersion: 'broker.arkmq.org/v1beta2',
@@ -91,6 +92,8 @@ describe('DataflowSection', () => {
   afterEach(() => {
     mockUseK8sWatchResources.mockReset();
     mockUseK8sWatchResources.mockReturnValue({});
+    mockUseK8sWatchResource.mockReset();
+    mockUseK8sWatchResource.mockReturnValue([[], false, undefined]);
   });
 
   it('shows a spinner until the bound apps have loaded', () => {
@@ -145,8 +148,15 @@ describe('DataflowSection', () => {
   });
 
   it('draws a refused flow as broken and lists the operator message', () => {
-    const apps = [capture, scorer, matcher, intruder];
+    // the operator never binds the intruder: it is found among the listed apps
+    const apps = [capture, scorer, matcher];
     mockUseK8sWatchResources.mockReturnValue(watched(apps));
+    mockUseK8sWatchResource.mockImplementation(
+      (resource: { groupVersionKind?: { kind?: string } } | null) =>
+        resource?.groupVersionKind?.kind === 'BrokerApp'
+          ? [[...apps, intruder], true, undefined]
+          : [[], false, undefined],
+    );
     render(<DataflowSection brokerService={service(...refsOf(apps))} />);
     expect(edge('consume:addr:ENROLL.IN->cred:acme-ident/intruder')).toHaveAttribute(
       'data-kind',

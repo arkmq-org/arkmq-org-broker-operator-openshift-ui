@@ -121,6 +121,34 @@ export const appRefOf = (app: BrokerAppCR): AppRef => ({
 });
 
 /**
+ * Among `candidates`, the apps that reference an address one of `owners` owns. The
+ * operator refuses a reference the owner's gate rejects before it binds the app, so
+ * such an app never reaches a service's list of bound apps: a service page that
+ * wants to show refused flows must look for these claimants itself.
+ */
+export const claimantsOf = (owners: BrokerAppCR[], candidates: BrokerAppCR[]): BrokerAppCR[] => {
+  const ownerRefs = owners.map(appRefOf);
+  const owned = new Set<string>();
+  for (const owner of owners) {
+    for (const entry of hydrateAddresses(owner)) {
+      if (entry.kind === 'owned') owned.add(`${appNodeId(appRefOf(owner))}|${entry.address}`);
+    }
+  }
+  return candidates.filter((candidate) => {
+    const self = appRefOf(candidate);
+    if (ownerRefs.some((o) => sameRef(o, self))) return false;
+    return hydrateAddresses(candidate).some(
+      (entry) =>
+        entry.kind === 'referenced' &&
+        !!entry.appName &&
+        owned.has(
+          `${appNodeId({ namespace: entry.appNamespace ?? self.namespace, name: entry.appName })}|${entry.address}`,
+        ),
+    );
+  });
+};
+
+/**
  * The apps owning the addresses an app references, deduplicated, so a page can watch
  * exactly those owners and nothing else.
  */

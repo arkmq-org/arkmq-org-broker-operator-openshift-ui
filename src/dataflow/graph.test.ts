@@ -10,6 +10,7 @@ import {
   credentialNodeId,
   gateNodeId,
   namespaceNodeId,
+  claimantsOf,
   referencedOwnerRefs,
   type DataflowEdge,
   type DataflowNode,
@@ -101,6 +102,19 @@ const byId = <T extends { id: string }>(items: T[], id: string): T | undefined =
 const edgesOfKind = (edges: DataflowEdge[], kind: DataflowEdge['kind']): DataflowEdge[] =>
   edges.filter((e) => e.kind === kind);
 const kinds = (nodes: DataflowNode[]): string[] => nodes.map((n) => n.kind);
+
+describe('claimantsOf', () => {
+  it('finds the apps that reference an address one of the owners owns', () => {
+    const stranger = app('elsewhere', 'stranger', {
+      capabilities: [{ consumerOf: [{ address: 'OTHER', appNamespace: 'x', appName: 'y' }] }],
+    });
+    expect(claimantsOf([capture, scorer], [capture, scorer, matcher, stranger])).toEqual([matcher]);
+  });
+
+  it('never lists an owner as its own claimant', () => {
+    expect(claimantsOf([capture, scorer], [scorer])).toEqual([]);
+  });
+});
 
 describe('referencedOwnerRefs', () => {
   it('lists each owner of a referenced address once', () => {

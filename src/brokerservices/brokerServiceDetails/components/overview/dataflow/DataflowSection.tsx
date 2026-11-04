@@ -5,7 +5,7 @@ import type { BrokerService } from '../../../../../k8s/types';
 import { DataflowDiagram } from '../../../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../../../dataflow/DataflowLegend';
-import { buildDataflowGraph } from '../../../../../dataflow/graph';
+import { buildDataflowGraph, claimantsOf } from '../../../../../dataflow/graph';
 import { useGateUniverse } from '../../../../../dataflow/useGateUniverse';
 import { useBoundBrokerApps } from '../loadedApps/useBoundBrokerApps';
 
@@ -16,15 +16,18 @@ export interface DataflowSectionProps {
 
 /**
  * The whole world of one BrokerService: every bound app's addresses, flows and gates
- * in one picture. Because every app that can declare on these addresses is bound
- * here, the graph is complete: a gate nobody uses is an open door and a declared flow
- * the owner refuses is drawn broken.
+ * in one picture, plus the apps that claim a bound app's address and were refused,
+ * since the operator never binds those. The graph is complete: a gate nobody uses is
+ * an open door and a declared flow the owner refuses is drawn broken.
  */
 export const DataflowSection: FC<DataflowSectionProps> = ({ brokerService }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const [apps, loaded, loadError] = useBoundBrokerApps(brokerService);
-  const { universe } = useGateUniverse();
+  const [bound, loaded, loadError] = useBoundBrokerApps(brokerService);
+  const { universe, apps: allApps } = useGateUniverse();
 
+  // An app the owner's gate refuses is never bound, so it is not in the service's
+  // list; it is found among every app the viewer can list, by what it references.
+  const apps = useMemo(() => [...bound, ...claimantsOf(bound, allApps)], [bound, allApps]);
   const graph = useMemo(
     () => buildDataflowGraph({ apps, ownerApps: apps, universe, complete: true }),
     [apps, universe],
