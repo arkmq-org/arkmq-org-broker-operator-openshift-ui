@@ -39,7 +39,7 @@ export const DataflowSection: FC<DataflowSectionProps> = ({ brokerService }) => 
       </Title>
       <Content component="p" className="pf-v6-u-mb-md">
         {t(
-          'Every address the bound apps declare, and which namespace sends to or receives from it. Red arrows are flows the owner refuses; dashed orange arrows are gates nobody uses.',
+          'Every app bound to this service, with its certificate and the addresses it owns, and every flow between them. A red arrow is a flow the owner refuses; a dashed orange arrow is a gate nobody uses.',
         )}
       </Content>
       {!loaded ? (
@@ -67,7 +67,7 @@ export const DataflowSection: FC<DataflowSectionProps> = ({ brokerService }) => 
             dataTest="dataflow-diagram"
             height="40rem"
           />
-          <DataflowLegend />
+          <DataflowLegend scope="service" />
           <DataflowIssues graph={graph} />
         </>
       ) : null}

@@ -56,7 +56,7 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
       {hasAddresses ? (
         <>
           <DataflowDiagram graph={graph} labels={labels} dataTest="address-list" />
-          <DataflowLegend />
+          <DataflowLegend scope="app" />
           <DataflowIssues graph={graph} />
         </>
       ) : (

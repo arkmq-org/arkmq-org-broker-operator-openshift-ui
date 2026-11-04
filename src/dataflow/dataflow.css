@@ -6,12 +6,39 @@
   overflow: hidden;
 }
 
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--broken path {
+/* The task edge draws its line as the one path without a class; the classed path is
+   the wide transparent hit area and must keep its own stroke. */
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--broken path:not([class]) {
   stroke: var(--pf-t--global--color--status--danger--default);
 }
 
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--unused path {
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--unused path:not([class]) {
   stroke: var(--pf-t--global--color--status--warning--default);
+  stroke-dasharray: 6 4;
+  animation: dataflow-gate-flow 1s linear infinite;
+}
+
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-edge--allowed path:not([class]) {
+  stroke-dasharray: 6 4;
+  animation: dataflow-gate-flow 1s linear infinite;
+}
+
+/* A gate is a possibility, not traffic: its dashes drift along the arrow. */
+@keyframes dataflow-gate-flow {
+  from {
+    stroke-dashoffset: 20;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The side panel fills the canvas height and scrolls on its own. */
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-panel {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--pf-t--global--spacer--md, 1rem);
 }
 
 .plugin__arkmq-org-broker-operator-openshift-ui__dataflow-legend {
@@ -41,14 +68,11 @@
   border-bottom-color: var(--pf-t--global--color--status--danger--default);
 }
 
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-legend-swatch--owned {
-  height: 1rem;
+.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-legend-badge {
+  display: inline-block;
+  margin-right: var(--pf-t--global--spacer--xs, 0.25rem);
+  padding: 0 var(--pf-t--global--spacer--xs, 0.25rem);
   border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-}
-
-.plugin__arkmq-org-broker-operator-openshift-ui__dataflow-legend-swatch--foreign {
-  height: 1rem;
-  border: 1px dashed var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
+  border-radius: var(--pf-t--global--border--radius--pill, 999px);
+  font-size: var(--pf-t--global--font--size--xs, 0.75rem);
 }

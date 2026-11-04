@@ -25,7 +25,11 @@ import { DataflowDiagram } from '../../../dataflow/DataflowDiagram';
 import { DataflowIssues } from '../../../dataflow/DataflowIssues';
 import { DataflowLegend } from '../../../dataflow/DataflowLegend';
 import { addressNodeId, buildDataflowGraph } from '../../../dataflow/graph';
-import type { ConnectorTarget, DataflowEditing } from '../../../dataflow/pipelineComponents';
+import {
+  DATAFLOW_CLASS,
+  type ConnectorTarget,
+  type DataflowEditing,
+} from '../../../dataflow/pipelineComponents';
 import { connectionAction } from './dataflowConnections';
 import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { AddressEditForm } from './AddressEditForm';
@@ -159,7 +163,7 @@ export const AddressDataflowEditor: React.FC = () => {
   const sideBar =
     editing && editingEntry ? (
       <TopologySideBar show resizable onClose={closeEditor} data-test="address-edit-panel">
-        <div className="pf-v6-u-p-md">
+        <div className={`${DATAFLOW_CLASS}-panel`}>
           <Title headingLevel="h3" className="pf-v6-u-mb-md">
             {editingEntry.address.trim() || t('New address')}
           </Title>
@@ -235,7 +239,7 @@ export const AddressDataflowEditor: React.FC = () => {
           </EmptyState>
         }
       />
-      <DataflowLegend />
+      <DataflowLegend scope="app" />
       <DataflowIssues graph={graph} />
     </FormSection>
   );
