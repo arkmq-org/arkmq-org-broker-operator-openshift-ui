@@ -110,7 +110,7 @@ describe('referencedOwnerRefs', () => {
 });
 
 describe('buildDataflowGraph on a single app (form and app page)', () => {
-  it('nests the boxes: namespace holds the app box and the credential, the app box its address', () => {
+  it('nests the boxes: namespace holds the app box, the app box its credential and address', () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
     expect(byId(nodes, appNodeId(CAPTURE))).toMatchObject({
       kind: 'app',
@@ -119,7 +119,7 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     expect(byId(nodes, credentialNodeId(CAPTURE))).toMatchObject({
       kind: 'credential',
       secret: 'capture-app-cert',
-      parent: namespaceNodeId('acme-enroll'),
+      parent: appNodeId(CAPTURE),
     });
     expect(byId(nodes, addressNodeId('ENROLL.IN'))).toMatchObject({
       kind: 'address',
@@ -147,14 +147,16 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
     });
   });
 
-  it("draws an app-level gate as a dashed arrow to that app's credential, in its namespace", () => {
+  it("draws an app-level gate as a dashed arrow to that app's credential, in its own box", () => {
     const { nodes, edges } = buildDataflowGraph({ apps: [capture], universe });
     expect(byId(nodes, credentialNodeId(SCORER))).toMatchObject({
       kind: 'credential',
+      parent: appNodeId(SCORER),
+    });
+    // the credential sits in scorer's own box, inside its namespace
+    expect(byId(nodes, appNodeId(SCORER))).toMatchObject({
       parent: namespaceNodeId('acme-enroll'),
     });
-    // scorer owns nothing here, so it has no app box of its own
-    expect(byId(nodes, appNodeId(SCORER))).toBeUndefined();
     expect(edgesOfKind(edges, 'allowed')).toEqual([
       expect.objectContaining({
         source: addressNodeId('ENROLL.IN'),

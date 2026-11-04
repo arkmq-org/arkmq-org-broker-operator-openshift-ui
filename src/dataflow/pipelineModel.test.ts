@@ -15,7 +15,7 @@ const graph: DataflowGraph = {
       namespace: 'a',
       name: 'x',
       secret: 'x-app-cert',
-      parent: 'ns:a',
+      parent: 'app:a/x',
     },
     {
       id: 'addr:Q',
@@ -68,12 +68,12 @@ describe('toPipelineModel', () => {
     expect(node('ns:a')).toMatchObject({
       type: PIPELINE_TYPES.group,
       group: true,
-      children: ['app:a/x', 'cred:a/x'],
+      children: ['app:a/x'],
     });
     expect(node('app:a/x')).toMatchObject({
       type: PIPELINE_TYPES.group,
       group: true,
-      children: ['addr:Q'],
+      children: ['cred:a/x', 'addr:Q'],
     });
     expect(node('ns:b')).toMatchObject({ type: PIPELINE_TYPES.task, label: 'b' });
   });

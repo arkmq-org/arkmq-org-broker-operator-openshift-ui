@@ -55,10 +55,10 @@ export type DataflowIssue =
 export const APP_CERT_SECRET_SUFFIX = '-app-cert';
 
 /**
- * The boxes. A namespace holds app boxes and credentials; an app box holds the
- * addresses it owns; a credential is the certificate secret the producing or
- * consuming process of an app presents, and every arrow of that app starts or ends
- * there. The secret lives in the namespace, not in the app, so the box sits there.
+ * The boxes. A namespace holds app boxes; an app box holds the addresses the app
+ * owns and its credential, the certificate secret the producing or consuming
+ * process presents, where every arrow of that app starts or ends. The secret is a
+ * namespace object, but it belongs to the app, so it is drawn inside the app box.
  */
 export type DataflowNode =
   | { id: string; kind: 'namespace'; namespace: string }
@@ -158,7 +158,7 @@ const NODE_ORDER: Record<DataflowNode['kind'], number> = {
  * Builds the boxes-and-arrows model of the messaging flows a set of BrokerApps
  * declare. An address box sits in its owner's app box, inside the owner's namespace
  * box; arrows start and end at an app's credential, the certificate secret its
- * process presents, drawn in the namespace that holds it. A gate pairs with
+ * process presents, drawn inside the app box. A gate pairs with
  * a declared flow by meaning: a realised gate disappears behind the declared arrow,
  * an unrealised one stays dashed, and its party is only drawn then.
  *
@@ -226,7 +226,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
         namespace: ref.namespace,
         name: ref.name,
         secret: `${ref.name}${APP_CERT_SECRET_SUFFIX}`,
-        parent: ensureNamespace(ref.namespace),
+        parent: ensureAppBox(ref),
       });
     }
     return id;

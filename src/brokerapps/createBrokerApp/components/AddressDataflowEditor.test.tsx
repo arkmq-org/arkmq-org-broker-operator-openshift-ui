@@ -528,15 +528,16 @@ describe('AddressDataflowEditor — gates on an owned address', () => {
     ).toHaveAttribute('data-kind', 'allowed');
   });
 
-  it("draws an app-level gate as that app's certificate in its namespace", async () => {
+  it("draws an app-level gate as that app's certificate in its own box", async () => {
     await selectTypeaheadOption('Who may produce: namespace', 'service-project');
     await selectTypeaheadOption('Who may produce: app name', 'order-generator');
     fireEvent.click(screen.getByTestId('address-producer-gate-0-add'));
     savePanel();
-    // order-generator owns nothing in this form, so it has no app box: its certificate alone
-    expect(
-      screen.queryByTestId('dataflow-node-app:service-project/order-generator'),
-    ).not.toBeInTheDocument();
+    // the certificate sits in order-generator's own box, inside its namespace
+    expect(screen.getByTestId('dataflow-node-app:service-project/order-generator')).toHaveAttribute(
+      'data-kind',
+      'app',
+    );
     expect(screen.getByTestId('dataflow-node-ns:service-project')).toHaveAttribute(
       'data-kind',
       'namespace',
