@@ -50,6 +50,8 @@ export interface DataflowDiagramProps {
   emptyState?: React.ReactNode;
   /** Height of the canvas; the topology surface fills its container and needs one. */
   height?: string;
+  /** Width the side panel opens at; the viewer can resize it. */
+  sideBarSize?: string;
   /** Test id of the wrapping element. */
   dataTest?: string;
 }
@@ -73,6 +75,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   editing,
   emptyState,
   height = '32rem',
+  sideBarSize = '500px',
   dataTest = 'dataflow-diagram',
 }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
@@ -166,6 +169,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
         sideBar={sideBar}
         sideBarOpen={Boolean(sideBar)}
         sideBarResizable
+        defaultSideBarSize={sideBarSize}
       >
         <VisualizationProvider controller={controller}>
           <VisualizationSurface state={{ selectedIds: selectedIds ?? [], editing }} />

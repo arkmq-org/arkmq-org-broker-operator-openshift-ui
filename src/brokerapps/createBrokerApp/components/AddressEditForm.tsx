@@ -43,10 +43,7 @@ import './AddressEditForm.css';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
-const KIND_OPTIONS: { value: AddressKind; label: string }[] = [
-  { value: 'owned', label: 'Owned' },
-  { value: 'referenced', label: 'Referenced' },
-];
+const KIND_OPTIONS: AddressKind[] = ['owned', 'referenced'];
 
 /**
  * Renders a help icon wrapped in a Tooltip, sized for use in FormGroup labelHelp.
@@ -189,11 +186,13 @@ export const AddressEditForm: React.FC<{
   const noDirection = !localProduces && !localConsumes;
   const directionError =
     noDirection && isReferenced
-      ? 'At least one direction is required for referenced addresses'
+      ? t('At least one direction is required for referenced addresses')
       : undefined;
   const directionWarning =
     noDirection && !isReferenced
-      ? 'Without a direction this address only reserves the name on the broker for the apps its gates admit'
+      ? t(
+          'Without a direction this address only reserves the name on the broker for the apps its gates admit',
+        )
       : undefined;
   const subscriptionError =
     effectivePubSub && localConsumes && !localSubscriptions.length
@@ -328,15 +327,15 @@ export const AddressEditForm: React.FC<{
             }
           >
             <ToggleGroup data-test={`address-kind-${String(index)}`}>
-              {KIND_OPTIONS.map((opt) => (
+              {KIND_OPTIONS.map((kind) => (
                 <ToggleGroupItem
-                  key={opt.value}
-                  text={t(opt.label)}
-                  isSelected={localKind === opt.value}
+                  key={kind}
+                  text={kind === 'owned' ? t('Owned') : t('Referenced')}
+                  isSelected={localKind === kind}
                   onChange={() => {
-                    setLocalKind(opt.value);
+                    setLocalKind(kind);
                   }}
-                  data-test={`address-kind-${opt.value}-${String(index)}`}
+                  data-test={`address-kind-${kind}-${String(index)}`}
                 />
               ))}
             </ToggleGroup>
@@ -566,11 +565,11 @@ export const AddressEditForm: React.FC<{
             >
               <HelperText>
                 <HelperTextItem variant={directionError ? 'error' : 'warning'}>
-                  {t(
-                    directionError ??
-                      directionWarning ??
+                  {directionError ??
+                    directionWarning ??
+                    t(
                       'Without a direction this address only reserves the name on the broker for the apps its gates admit',
-                  )}
+                    )}
                 </HelperTextItem>
               </HelperText>
             </FormHelperText>

@@ -37,6 +37,8 @@ import { useGateUniverse } from '../../../dataflow/useGateUniverse';
 import { AddressEditForm } from './AddressEditForm';
 
 const ADDRESS_NODE_PREFIX = addressNodeId('');
+/** Tall enough for the address form beside the canvas; the panel scrolls past it. */
+const CANVAS_HEIGHT = '46rem';
 
 interface Editing {
   index: number;
@@ -174,7 +176,10 @@ export const AddressDataflowEditor: React.FC = () => {
   const sideBar =
     editing && editingEntry ? (
       <TopologySideBar show resizable onClose={closeEditor} data-test="address-edit-panel">
-        <div className={`${DATAFLOW_CLASS}-panel`}>
+        <div
+          className={`${DATAFLOW_CLASS}-panel`}
+          style={{ maxHeight: `calc(${CANVAS_HEIGHT} - 3.5rem)` }}
+        >
           <Title headingLevel="h3" className="pf-v6-u-mb-md">
             {editingEntry.address.trim() || t('New address')}
           </Title>
@@ -208,12 +213,15 @@ export const AddressDataflowEditor: React.FC = () => {
       {t('Add address')}
     </Button>
   );
-  // Palette items use the browser's drag and drop; a click is the keyboard-friendly way in.
+  // Palette items use the browser's drag and drop. They are plain elements, not
+  // buttons: Chromium never starts a drag from a form control, draggable or not.
+  // A click, or Enter on the focused item, is the keyboard-friendly way in.
   const paletteItem = (item: PaletteItem, icon: React.ReactNode, label: string) => (
-    <Button
-      variant="secondary"
-      icon={icon}
+    <span
+      role="button"
+      tabIndex={0}
       draggable
+      className={`${DATAFLOW_CLASS}-palette-item`}
       onDragStart={(event: React.DragEvent) => {
         event.dataTransfer.setData(PALETTE_TYPE, item);
         event.dataTransfer.effectAllowed = 'copy';
@@ -221,10 +229,13 @@ export const AddressDataflowEditor: React.FC = () => {
       onClick={() => {
         if (item === 'address') handleAdd();
       }}
+      onKeyDown={(event) => {
+        if (item === 'address' && (event.key === 'Enter' || event.key === ' ')) handleAdd();
+      }}
       data-test={`palette-${item}`}
     >
-      {label}
-    </Button>
+      {icon} {label}
+    </span>
   );
 
   return (
@@ -247,6 +258,8 @@ export const AddressDataflowEditor: React.FC = () => {
       <DataflowDiagram
         graph={graph}
         labels={labels}
+        height={CANVAS_HEIGHT}
+        sideBarSize="34rem"
         selectedIds={selectedIds}
         onSelect={handleSelect}
         sideBar={sideBar}
