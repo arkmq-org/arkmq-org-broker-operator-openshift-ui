@@ -5,7 +5,6 @@ import {
   action,
   createTopologyControlButtons,
   defaultControlButtonsOptions,
-  GRAPH_LAYOUT_END_EVENT,
   LEFT_TO_RIGHT,
   PipelineDagreLayout,
   pipelineElementFactory,
@@ -81,30 +80,19 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     visualization.registerElementFactory(pipelineElementFactory);
     visualization.registerLayoutFactory(layoutFactory);
     visualization.registerComponentFactory(dataflowComponentFactory);
-    // Fit the picture after each layout, but never zoom in past 1:1, which the
-    // library's fit would do for a small graph.
-    visualization.addEventListener(GRAPH_LAYOUT_END_EVENT, () => {
-      const graph = visualization.getGraph();
-      graph.fit(40);
-      if (graph.getScale() > 1) graph.setScale(1);
-    });
+    visualization.setFitToScreenOnLayout(true);
     return visualization;
   }, []);
 
   const model = useMemo(() => toPipelineModel(graph, labels), [graph, labels]);
 
-  // Merge, do not replace: a replaced model detaches every element while the pills
-  // that read `element.getGraph()` are still mounted, and they throw "has no parent".
-  // Merging updates the elements in place and drops only the stale ones.
+  // As the pipeline groups example does on every update: replace the model, do not
+  // merge it, so positions and parents are rebuilt from scratch by the layout.
   useEffect(() => {
     controller.fromModel(
       { ...model, graph: { id: 'g1', type: 'graph', layout: PIPELINE_LAYOUT } },
-      true,
+      false,
     );
-    // Below the "medium" zoom the pills and groups hide their labels, which fitting a
-    // whole service to the screen would otherwise trigger; keep the detailed picture
-    // down to a far smaller zoom than the library's default.
-    controller.getGraph().setDetailsLevelThresholds({ low: 0.1, medium: 0.2 });
   }, [controller, model]);
 
   useEffect(() => {
@@ -136,7 +124,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
                 controller.getGraph().scaleBy(0.75);
               }),
               fitToScreenCallback: action(() => {
-                controller.getGraph().fit(40);
+                controller.getGraph().fit(80);
               }),
               resetViewCallback: action(() => {
                 controller.getGraph().reset();

@@ -22,6 +22,7 @@ export class Visualization {
   registerLayoutFactory = jest.fn();
   registerComponentFactory = jest.fn();
   registerElementFactory = jest.fn();
+  setFitToScreenOnLayout = jest.fn();
   fromModel(model: MockModel): void {
     this.model = model;
     this.subscribers.forEach((notify) => {

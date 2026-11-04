@@ -23,13 +23,11 @@ export const PIPELINE_TYPES = {
   edge: 'dataflow-pipeline-edge',
 } as const;
 
+/** Pill and ring sizes of the pipeline groups example, used as they are. */
+export const TASK_WIDTH = 210;
 export const TASK_HEIGHT = 32;
-const CHAR_WIDTH = 7;
-/** Room for the icon, the badge and the pill's own padding beside the name. */
-const TASK_PADDING = 60;
-
-const taskWidth = (label: string): number =>
-  Math.max(120, Math.round(Math.min(label.length, 32) * CHAR_WIDTH + TASK_PADDING));
+const TASK_PADDING: [number, number] = [0, 15];
+const GROUP_PADDING: [number, number] = [40, 25];
 
 const labelOf = (node: DataflowNode, labels: DataflowLabels): string => {
   switch (node.kind) {
@@ -75,8 +73,7 @@ export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): M
         label,
         group: true,
         children: graph.nodes.filter((n) => 'parent' in n && n.parent === node.id).map((n) => n.id),
-        // groups nest twice (namespace, then app): keep each ring thin
-        style: { padding: [22, 14] },
+        style: { padding: GROUP_PADDING },
         runAfterTasks: [],
         data: node,
       };
@@ -85,9 +82,9 @@ export const toPipelineModel = (graph: DataflowGraph, labels: DataflowLabels): M
       id: node.id,
       type: PIPELINE_TYPES.task,
       label,
-      width: taskWidth(label),
+      width: TASK_WIDTH,
       height: TASK_HEIGHT,
-      style: { padding: [0, 15] },
+      style: { padding: TASK_PADDING },
       runAfterTasks: runAfter.get(node.id) ?? [],
       data: node,
     };
