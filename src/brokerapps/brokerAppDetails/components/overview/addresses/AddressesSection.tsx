@@ -21,15 +21,13 @@ import './AddressesSection.css';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__addresses-section';
 
-const OWNERSHIP_COLORS: Record<AddressOwnership, 'blue' | 'yellow' | 'grey'> = {
-  private: 'blue',
-  shared: 'yellow',
+const OWNERSHIP_COLORS: Record<AddressOwnership, 'blue' | 'grey'> = {
+  owned: 'blue',
   external: 'grey',
 };
 
 const OWNERSHIP_LABELS: Record<AddressOwnership, string> = {
-  private: 'Private',
-  shared: 'Shared',
+  owned: 'Owned',
   external: 'External',
 };
 
@@ -40,7 +38,7 @@ export interface AddressesSectionProps {
 
 /**
  * Read-only address display for the BrokerApp Details page.
- * Hydrates the three CRD address fields (addresses, sharedAddresses, capabilities)
+ * Hydrates the two CRD address fields (addresses, capabilities)
  * into a unified list and renders them as labelled cards.
  */
 export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
@@ -54,7 +52,7 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
       </Title>
       <Content component="p" className="pf-v6-u-mb-md">
         {t(
-          'Addresses configured for this app. Private and shared addresses are provisioned on the broker. External addresses reference addresses owned by other apps.',
+          'Addresses configured for this app. Owned addresses are provisioned on the broker. External addresses reference addresses from other apps.',
         )}
       </Content>
 
@@ -105,6 +103,24 @@ export const AddressesSection: FC<AddressesSectionProps> = ({ brokerApp }) => {
                           </Label>
                         ))}
                       </LabelGroup>
+                    </StackItem>
+                  )}
+                  {entry.producerOfAppSelector && (
+                    <StackItem>
+                      <Content component="small" data-test="producer-selector">
+                        <strong>{t('Producer selector:')}</strong>
+                        <br />
+                        {entry.producerOfAppSelector}
+                      </Content>
+                    </StackItem>
+                  )}
+                  {entry.consumerOfAppSelector && (
+                    <StackItem>
+                      <Content component="small" data-test="consumer-selector">
+                        <strong>{t('Consumer selector:')}</strong>
+                        <br />
+                        {entry.consumerOfAppSelector}
+                      </Content>
                     </StackItem>
                   )}
                 </Stack>

@@ -34,13 +34,16 @@ import type { AddressOwnership, AddressDirection } from '../../../reducers/broke
 import type { BrokerAppCR } from '../../../k8s/types';
 import { BrokerAppModel } from '../../../k8s/models';
 import { TypeaheadSelect } from '../../../shared-components/TypeaheadSelect';
-import { validateAddressEntries, validateDuplicateAddressEntries } from '../../../validation/k8s';
+import {
+  validateAddressEntries,
+  validateCelExpression,
+  validateDuplicateAddressEntries,
+} from '../../../validation/k8s';
 
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
 const OWNERSHIP_OPTIONS: { value: AddressOwnership; label: string }[] = [
-  { value: 'private', label: 'Private' },
-  { value: 'shared', label: 'Shared' },
+  { value: 'owned', label: 'Owned' },
   { value: 'external', label: 'External' },
 ];
 
@@ -97,10 +100,18 @@ export const AddressEditModal: React.FC<{
   const [localAppNamespace, setLocalAppNamespace] = useState(entry.appNamespace ?? '');
   const [confirmedNamespace, setConfirmedNamespace] = useState(entry.appNamespace ?? '');
   const [confirmedAppName, setConfirmedAppName] = useState(entry.appName ?? '');
+  const [localProducerSelector, setLocalProducerSelector] = useState(
+    entry.producerOfAppSelector ?? '',
+  );
+  const [localConsumerSelector, setLocalConsumerSelector] = useState(
+    entry.consumerOfAppSelector ?? '',
+  );
 
   const [nameTouched, setNameTouched] = useState(false);
   const [appNameTouched, setAppNameTouched] = useState(false);
   const [appNamespaceTouched, setAppNamespaceTouched] = useState(false);
+  const [producerSelectorTouched, setProducerSelectorTouched] = useState(false);
+  const [consumerSelectorTouched, setConsumerSelectorTouched] = useState(false);
 
   const isExternal = localOwnership === 'external';
 
@@ -149,9 +160,9 @@ export const AddressEditModal: React.FC<{
     );
   }, [allBrokerApps, appsLoaded, confirmedNamespace, confirmedAppName]);
 
-  const filteredSharedAddresses = React.useMemo(
+  const filteredTargetAddresses = React.useMemo(
     () =>
-      (targetApp?.spec.sharedAddresses ?? [])
+      (targetApp?.spec.addresses ?? [])
         .map((a) => a.address)
         .filter(Boolean)
         .filter((addr) => addr.toLowerCase().includes(localAddress.toLowerCase()))
@@ -159,9 +170,8 @@ export const AddressEditModal: React.FC<{
     [targetApp, localAddress],
   );
 
-  // The operator rejects mixed semantics; when the owner declares this address, lock to its routing.
   const ownerDeclared = isExternal
-    ? targetApp?.spec.sharedAddresses?.find((a) => a.address === localAddress)
+    ? targetApp?.spec.addresses?.find((a) => a.address === localAddress)
     : undefined;
   const effectivePubSub = ownerDeclared ? !!ownerDeclared.pubSub : localPubSub;
 
@@ -180,8 +190,8 @@ export const AddressEditModal: React.FC<{
       ? 'At least one direction is required for external addresses'
       : undefined;
   const directionWarning =
-    noDirection && !isExternal && localOwnership !== 'shared'
-      ? 'Without a direction this private address will only reserve the name on the broker'
+    noDirection && !isExternal
+      ? 'Without a direction this owned address will only reserve the name on the broker'
       : undefined;
   const subscriptionError =
     effectivePubSub && localConsumes && !localSubscriptions.length
@@ -199,9 +209,21 @@ export const AddressEditModal: React.FC<{
     appNamespaceTouched && hasPartialRef && !localAppNamespace.trim()
       ? 'App namespace is required when app name is set'
       : undefined;
+  const producerSelectorError = producerSelectorTouched
+    ? validateCelExpression(localProducerSelector)
+    : null;
+  const consumerSelectorError = consumerSelectorTouched
+    ? validateCelExpression(localConsumerSelector)
+    : null;
   const duplicateError = duplicateErrors[index];
   const isModalValid =
-    !requiredError && !duplicateError && !directionError && !subscriptionError && !hasPartialRef;
+    !requiredError &&
+    !duplicateError &&
+    !directionError &&
+    !subscriptionError &&
+    !hasPartialRef &&
+    !validateCelExpression(localProducerSelector) &&
+    !validateCelExpression(localConsumerSelector);
 
   const handleDone = () => {
     const resolvedDirection: AddressDirection =
@@ -224,6 +246,8 @@ export const AddressEditModal: React.FC<{
         subscriptions: localSubscriptions,
         appName: isExternal ? localAppName.trim() || undefined : undefined,
         appNamespace: isExternal ? localAppNamespace.trim() || undefined : undefined,
+        producerOfAppSelector: !isExternal ? localProducerSelector.trim() || undefined : undefined,
+        consumerOfAppSelector: !isExternal ? localConsumerSelector.trim() || undefined : undefined,
       },
     });
 
@@ -243,7 +267,7 @@ export const AddressEditModal: React.FC<{
                 <FieldLabelHelp
                   ariaLabel={t('More info for Ownership field')}
                   tooltip={t(
-                    'Private addresses can only be used by this app. Shared addresses can be referenced by other apps. External addresses reference addresses owned by another app.',
+                    'Owned addresses are provisioned by this app. External addresses reference addresses from another app.',
                   )}
                 />
               }
@@ -375,7 +399,7 @@ export const AddressEditModal: React.FC<{
                 <FieldLabelHelp
                   ariaLabel={t('More info for Address field')}
                   tooltip={t(
-                    'The name used to route messages on the broker. Private and shared addresses are provisioned with a lifecycle tied to this app.',
+                    'The name used to route messages on the broker. Owned addresses are provisioned with a lifecycle tied to this app.',
                   )}
                 />
               }
@@ -392,21 +416,17 @@ export const AddressEditModal: React.FC<{
                     setNameTouched(true);
                     // The owner decides the routing: referencing its address with the other
                     // semantics would get the app rejected by the operator.
-                    const declared = targetApp?.spec.sharedAddresses?.find(
-                      (a) => a.address === addr,
-                    );
+                    const declared = targetApp?.spec.addresses?.find((a) => a.address === addr);
                     if (declared) setLocalPubSub(!!declared.pubSub);
                   }}
                   onClose={() => {
                     setNameTouched(true);
                   }}
-                  options={filteredSharedAddresses}
+                  options={filteredTargetAddresses}
                   placeholder={t('e.g., orders.created')}
                   ariaLabel={t('Address')}
                   allowCreate
-                  emptyText={
-                    confirmedAppName ? t('No shared addresses found') : t('Select an app first')
-                  }
+                  emptyText={confirmedAppName ? t('No addresses found') : t('Select an app first')}
                   error={errorMessage}
                   dataTest={`address-name-input-${String(index)}`}
                 />
@@ -475,7 +495,7 @@ export const AddressEditModal: React.FC<{
                     {t(
                       directionError ??
                         directionWarning ??
-                        'Without a direction this private address will only reserve the name on the broker',
+                        'Without a direction this owned address will only reserve the name on the broker',
                     )}
                   </HelperTextItem>
                 </HelperText>
@@ -573,6 +593,81 @@ export const AddressEditModal: React.FC<{
                 )}
               </FormGroup>
             </StackItem>
+          )}
+
+          {!isExternal && (
+            <>
+              <StackItem>
+                <FormGroup
+                  label={t('Producer app selector')}
+                  fieldId={`address-producer-selector-${String(index)}`}
+                  labelHelp={
+                    <FieldLabelHelp
+                      ariaLabel={t('More info for Producer app selector field')}
+                      tooltip={t(
+                        'CEL expression that selects which other apps may produce to this address. When empty, no other apps may reference this address as a producer.',
+                      )}
+                    />
+                  }
+                >
+                  <TextInput
+                    id={`address-producer-selector-${String(index)}`}
+                    value={localProducerSelector}
+                    onChange={(_e, val) => {
+                      setLocalProducerSelector(val);
+                    }}
+                    onBlur={() => {
+                      setProducerSelectorTouched(true);
+                    }}
+                    placeholder={t("e.g., app.metadata.name == 'order-processor'")}
+                    validated={producerSelectorError ? 'error' : 'default'}
+                    data-test={`address-producer-selector-${String(index)}`}
+                  />
+                  {producerSelectorError && (
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem variant="error">{t(producerSelectorError)}</HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  )}
+                </FormGroup>
+              </StackItem>
+              <StackItem>
+                <FormGroup
+                  label={t('Consumer app selector')}
+                  fieldId={`address-consumer-selector-${String(index)}`}
+                  labelHelp={
+                    <FieldLabelHelp
+                      ariaLabel={t('More info for Consumer app selector field')}
+                      tooltip={t(
+                        'CEL expression that selects which other apps may consume from this address. When empty, no other apps may reference this address as a consumer.',
+                      )}
+                    />
+                  }
+                >
+                  <TextInput
+                    id={`address-consumer-selector-${String(index)}`}
+                    value={localConsumerSelector}
+                    onChange={(_e, val) => {
+                      setLocalConsumerSelector(val);
+                    }}
+                    onBlur={() => {
+                      setConsumerSelectorTouched(true);
+                    }}
+                    placeholder={t("e.g., app.metadata.namespace == 'team-b'")}
+                    validated={consumerSelectorError ? 'error' : 'default'}
+                    data-test={`address-consumer-selector-${String(index)}`}
+                  />
+                  {consumerSelectorError && (
+                    <FormHelperText>
+                      <HelperText>
+                        <HelperTextItem variant="error">{t(consumerSelectorError)}</HelperTextItem>
+                      </HelperText>
+                    </FormHelperText>
+                  )}
+                </FormGroup>
+              </StackItem>
+            </>
           )}
         </Stack>
       </ModalBody>

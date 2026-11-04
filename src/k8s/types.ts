@@ -30,19 +30,22 @@ export interface ResourceRequirements {
   limits?: ResourceList;
 }
 
-export interface PrivateAddress {
+export interface AddressSpec {
   address: string;
   pubSub?: boolean;
   subscriptions?: string[];
+  /** CEL expression selecting which apps may produce to this address. */
+  producerOfAppSelector?: string;
+  /** CEL expression selecting which apps may consume from this address. */
+  consumerOfAppSelector?: string;
 }
 
 export interface BrokerAppSpec {
   serviceSelector: { matchLabels?: Record<string, string> };
   capabilities?: BrokerAppCapability[];
   resources?: ResourceRequirements;
-  /** Private addresses whose lifecycle is tied to this app. */
-  addresses?: PrivateAddress[];
-  sharedAddresses?: PrivateAddress[];
+  /** Addresses whose lifecycle is tied to this app. */
+  addresses?: AddressSpec[];
 }
 
 export interface BrokerAppServiceBinding {

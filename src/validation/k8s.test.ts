@@ -11,7 +11,6 @@ import {
   validateCpuQuantity,
   validateMemoryQuantity,
   validateNoDuplicateAddresses,
-  validateNoAddressOverlap,
   validateAddressEntries,
   validateYamlDuplicateBrokerServiceLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
@@ -467,39 +466,6 @@ describe('validateNoDuplicateAddresses', () => {
   });
 });
 
-describe('validateNoAddressOverlap', () => {
-  it.each<[string[], string[]]>([
-    [['orders.private'], ['shared.topic']],
-    [[], ['shared.topic']],
-    [['orders.private'], []],
-    [[], []],
-  ])('returns null for non-overlapping lists %j / %j', (priv, shared) => {
-    expect(validateNoAddressOverlap(priv, shared)).toBeNull();
-  });
-
-  it('returns an error naming the overlapping address', () => {
-    expect(validateNoAddressOverlap(['chungus', 'other'], ['chungus'])).toBe(
-      'Address "chungus" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('returns the first overlapping address when multiple overlap', () => {
-    expect(validateNoAddressOverlap(['a', 'b', 'c'], ['b', 'c'])).toBe(
-      'Address "b" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('detects overlap when addresses differ only by surrounding whitespace', () => {
-    expect(validateNoAddressOverlap(['  orders  '], ['orders'])).toBe(
-      'Address "orders" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
-  it('ignores empty/whitespace-only entries when checking overlap', () => {
-    expect(validateNoAddressOverlap(['', '   '], ['', '   '])).toBeNull();
-  });
-});
-
 const validBrokerAppCR: BrokerAppCR = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
@@ -537,8 +503,7 @@ describe('validateBrokerAppCR', () => {
           requests: { cpu: '250m', memory: '256Mi' },
           limits: { cpu: '1', memory: '1Gi' },
         },
-        addresses: [{ address: 'orders' }],
-        sharedAddresses: [{ address: 'events' }],
+        addresses: [{ address: 'orders' }, { address: 'events' }],
       },
     };
     expect(validateBrokerAppCR(cr, dumpYaml(cr))).toBeNull();
@@ -616,33 +581,6 @@ describe('validateBrokerAppCR', () => {
     expect(error).toContain('spec.addresses: Duplicate address "orders"');
   });
 
-  it('rejects duplicate addresses in spec.sharedAddresses', () => {
-    const cr: BrokerAppCR = {
-      ...validBrokerAppCR,
-      spec: {
-        serviceSelector: {},
-        sharedAddresses: [{ address: 'events' }, { address: 'events' }],
-      },
-    };
-    const error = validateBrokerAppCR(cr, dumpYaml(cr));
-    expect(error).toContain('spec.sharedAddresses: Duplicate address "events"');
-  });
-
-  it('rejects overlapping addresses between spec.addresses and spec.sharedAddresses', () => {
-    const cr: BrokerAppCR = {
-      ...validBrokerAppCR,
-      spec: {
-        serviceSelector: {},
-        addresses: [{ address: 'overlap' }],
-        sharedAddresses: [{ address: 'overlap' }],
-      },
-    };
-    const error = validateBrokerAppCR(cr, dumpYaml(cr));
-    expect(error).toContain(
-      'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
   it('collects multiple errors separated by newlines', () => {
     const cr: BrokerAppCR = {
       ...validBrokerAppCR,
@@ -662,6 +600,47 @@ describe('validateBrokerAppCR', () => {
     expect(lines[0]).toContain('metadata.name:');
     expect(lines[1]).toContain('spec.resources.requests.cpu:');
     expect(lines[2]).toContain('spec.addresses:');
+  });
+
+  it('rejects invalid CEL in producerOfAppSelector', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        serviceSelector: {},
+        addresses: [{ address: 'orders', producerOfAppSelector: 'bad ===' }],
+      },
+    };
+    const error = validateBrokerAppCR(cr);
+    expect(error).toContain('spec.addresses[0].producerOfAppSelector');
+  });
+
+  it('rejects invalid CEL in consumerOfAppSelector', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        serviceSelector: {},
+        addresses: [{ address: 'orders', consumerOfAppSelector: '(((' }],
+      },
+    };
+    const error = validateBrokerAppCR(cr);
+    expect(error).toContain('spec.addresses[0].consumerOfAppSelector');
+  });
+
+  it('accepts valid CEL selectors on addresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        serviceSelector: {},
+        addresses: [
+          {
+            address: 'orders',
+            producerOfAppSelector: "app.metadata.name == 'x'",
+            consumerOfAppSelector: "app.metadata.namespace == 'y'",
+          },
+        ],
+      },
+    };
+    expect(validateBrokerAppCR(cr)).toBeNull();
   });
 
   it('includes line numbers from the YAML source', () => {
