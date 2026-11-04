@@ -27,6 +27,7 @@ import {
   dataflowComponentFactory,
   PALETTE_TYPE,
   type DataflowEditing,
+  type DropPoint,
   type PaletteItem,
 } from './pipelineComponents';
 import { toPipelineModel, type DataflowLabels } from './pipelineModel';
@@ -46,6 +47,8 @@ const MIN_FIT_SCALE = 0.6;
 /** The pipelines example's layout: compound dagre, left to right, longest-path ranking. */
 const layoutFactory = (_type: string, graph: Graph): Layout =>
   new PipelineDagreLayout(graph, { rankdir: LEFT_TO_RIGHT, ranksep: RANK_SEPARATION });
+
+type Pins = Record<string, { x: number; y: number }>;
 
 /**
  * Fits the whole graph in the canvas, but never so small that the pills lose their
@@ -71,6 +74,11 @@ export interface DataflowDiagramProps {
   sideBar?: React.ReactNode;
   /** Editing gestures (context menu, connector drag); absent on read-only pages. */
   editing?: DataflowEditing;
+  /**
+   * Nodes kept where the user dropped them (graph coordinates) instead of where the
+   * layout puts them: unfinished boxes float until an arrow connects them.
+   */
+  pinned?: Record<string, { x: number; y: number }>;
   /** Shown instead of the canvas when the model has no nodes. */
   emptyState?: React.ReactNode;
   /** Height of the canvas; the topology surface fills its container and needs one. */
@@ -98,6 +106,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   onSelect,
   sideBar,
   editing,
+  pinned,
   emptyState,
   height = '32rem',
   sideBarSize = '500px',
@@ -113,6 +122,12 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     visualization.addEventListener<GraphLayoutEndEventListener>(
       GRAPH_LAYOUT_END_EVENT,
       ({ graph }) => {
+        // every layout moves every node; pinned ones go back where they were dropped
+        // (the pins travel through the controller state, as the listener is registered once)
+        const pins = visualization.getState<{ pinned?: Pins }>().pinned ?? {};
+        for (const [id, at] of Object.entries(pins)) {
+          visualization.getNodeById(id)?.setPosition(new Point(at.x, at.y));
+        }
         fitToView(graph);
       },
     );
@@ -173,6 +188,30 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
   // that already live inside the canvas.
   const acceptsPalette = (event: React.DragEvent) =>
     Boolean(editing) && event.dataTransfer.types.includes(PALETTE_TYPE);
+  // The node a drop landed on. A pill is inside the element our renderer marks; a
+  // box's background is drawn in the library's groups layer, outside it, where only
+  // the library's own wrapper names the node.
+  const nodeUnder = (target: Element): string | undefined => {
+    const marked = target.closest('[data-test^="dataflow-node-"]');
+    if (marked) return marked.getAttribute('data-test')?.slice('dataflow-node-'.length);
+    return target.closest('[data-kind="node"][data-id]')?.getAttribute('data-id') ?? undefined;
+  };
+  // Where a drop landed, in the canvas element and, through the pan and zoom of the
+  // moment, in the graph.
+  const dropPoint = (event: React.DragEvent): DropPoint => {
+    const canvas = event.currentTarget.getBoundingClientRect();
+    const graph = controller.getGraph();
+    const surface = event.currentTarget.querySelector('svg')?.getBoundingClientRect() ?? canvas;
+    const { x, y } = graph.getPosition();
+    const scale = graph.getScale();
+    return {
+      graph: {
+        x: (event.clientX - surface.left - x) / scale,
+        y: (event.clientY - surface.top - y) / scale,
+      },
+      client: { x: event.clientX - canvas.left, y: event.clientY - canvas.top },
+    };
+  };
 
   return (
     <div
@@ -186,9 +225,7 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
         if (!editing || !acceptsPalette(event)) return;
         event.preventDefault();
         const item = event.dataTransfer.getData(PALETTE_TYPE) as PaletteItem;
-        const over = (event.target as Element).closest('[data-test^="dataflow-node-"]');
-        const nodeId = over?.getAttribute('data-test')?.slice('dataflow-node-'.length);
-        editing.onDropPalette(item, nodeId ?? undefined);
+        editing.onDropPalette(item, dropPoint(event), nodeUnder(event.target as Element));
       }}
     >
       <TopologyView
@@ -223,7 +260,9 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
         defaultSideBarSize={sideBarSize}
       >
         <VisualizationProvider controller={controller}>
-          <VisualizationSurface state={{ selectedIds: selectedIds ?? [], editing, fontEpoch }} />
+          <VisualizationSurface
+            state={{ selectedIds: selectedIds ?? [], editing, fontEpoch, pinned }}
+          />
         </VisualizationProvider>
       </TopologyView>
     </div>

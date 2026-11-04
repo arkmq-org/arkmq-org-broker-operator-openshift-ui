@@ -309,6 +309,81 @@ describe('buildDataflowGraph on a single app (form and app page)', () => {
   });
 });
 
+describe('buildDataflowGraph with what the editor holds', () => {
+  const empty = app('acme-enroll', 'newcomer', {});
+  const NEWCOMER = { namespace: 'acme-enroll', name: 'newcomer' };
+
+  it('draws an app with no address as its box and credential in its namespace box', () => {
+    const { nodes, edges } = buildDataflowGraph({ apps: [empty], universe });
+    expect(byId(nodes, namespaceNodeId('acme-enroll'))).toMatchObject({ kind: 'namespace' });
+    expect(byId(nodes, appNodeId(NEWCOMER))).toMatchObject({ kind: 'app' });
+    expect(byId(nodes, credentialNodeId(NEWCOMER))).toMatchObject({ kind: 'credential' });
+    expect(edges).toEqual([]);
+  });
+
+  it('draws draft boxes as drafts, and nothing twice', () => {
+    const { nodes } = buildDataflowGraph({
+      apps: [empty],
+      universe,
+      drafts: {
+        namespaces: ['acme-enroll', 'acme-audit'],
+        apps: [{ namespace: 'acme-ident', name: 'matcher' }],
+      },
+    });
+    // the app's own namespace is already drawn: no draft
+    expect(byId(nodes, namespaceNodeId('acme-enroll'))).not.toHaveProperty('draft');
+    expect(byId(nodes, namespaceNodeId('acme-audit'))).toMatchObject({
+      kind: 'namespace',
+      draft: true,
+    });
+    // a draft app brings the namespace box it needs, as a draft too
+    expect(byId(nodes, namespaceNodeId('acme-ident'))).toMatchObject({ draft: true });
+    expect(byId(nodes, appNodeId({ namespace: 'acme-ident', name: 'matcher' }))).toMatchObject({
+      kind: 'app',
+      draft: true,
+      parent: namespaceNodeId('acme-ident'),
+    });
+  });
+
+  it("draws a referenced address with no flow as a draft in its owner's box", () => {
+    const { nodes, edges } = buildDataflowGraph({
+      apps: [empty],
+      universe,
+      drafts: {
+        namespaces: [],
+        apps: [],
+        addresses: [
+          {
+            address: 'IDENT.RESULTS',
+            owner: { namespace: 'acme-ident', name: 'matcher' },
+            pubSub: true,
+          },
+        ],
+      },
+    });
+    expect(byId(nodes, addressNodeId('IDENT.RESULTS'))).toMatchObject({
+      kind: 'address',
+      draft: true,
+      foreign: true,
+      pubSub: true,
+      parent: appNodeId({ namespace: 'acme-ident', name: 'matcher' }),
+    });
+    expect(byId(nodes, appNodeId({ namespace: 'acme-ident', name: 'matcher' }))).toMatchObject({
+      draft: true,
+    });
+    expect(edges).toEqual([]);
+  });
+
+  it('draws a flow-less referenced address the CR carries no draft for only when drafts say so', () => {
+    const { nodes } = buildDataflowGraph({
+      apps: [empty],
+      universe,
+      drafts: { namespaces: [], apps: [] },
+    });
+    expect(nodes.filter((n) => n.kind === 'address')).toEqual([]);
+  });
+});
+
 describe('buildDataflowGraph on a complete service', () => {
   const service = { apps: [capture, scorer, matcher], universe, complete: true };
 

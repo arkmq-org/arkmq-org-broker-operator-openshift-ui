@@ -60,9 +60,11 @@ const labelOf = (node: DataflowNode, labels: DataflowLabels): string => {
   }
 };
 
+// A box with nothing in it has no size as a group; it is a pill until something is
+// dropped into it, so there is something to drop onto.
 const isGroup = (node: DataflowNode, graph: DataflowGraph): boolean =>
-  node.kind === 'app' ||
-  (node.kind === 'namespace' && graph.nodes.some((n) => 'parent' in n && n.parent === node.id));
+  (node.kind === 'app' || node.kind === 'namespace') &&
+  graph.nodes.some((n) => 'parent' in n && n.parent === node.id);
 
 /**
  * The same graph as a pipeline, built the way the pipelines example builds one: every

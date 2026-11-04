@@ -1373,3 +1373,86 @@ describe('appName/appNamespace on referenced addresses', () => {
     expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([{ address: 'remote.queue' }]);
   });
 });
+
+describe('drafts and dropped addresses', () => {
+  const ns = 'test-ns';
+
+  it('ADD_ADDRESS with a payload adds a named entry with no flow, once', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: { address: 'orders.created', kind: 'owned', pubSub: true },
+    });
+    expect(state.addresses).toEqual([
+      { address: 'orders.created', kind: 'owned', direction: 'none', pubSub: true },
+    ]);
+    // an owned address is in the CR from the start, with no capability
+    expect(state.cr.spec.addresses).toEqual([{ address: 'orders.created', pubSub: true }]);
+    expect(state.cr.spec.capabilities).toBeUndefined();
+    const again = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: { address: 'orders.created', kind: 'owned' },
+    });
+    expect(again).toBe(state);
+  });
+
+  it('ADD_ADDRESS with an owner adds a reference the CR does not carry until it has a flow', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: {
+        address: 'IDENT.RESULTS',
+        kind: 'referenced',
+        appName: 'matcher',
+        appNamespace: 'acme-ident',
+      },
+    });
+    expect(state.addresses[0]).toMatchObject({
+      kind: 'referenced',
+      direction: 'none',
+      appName: 'matcher',
+      appNamespace: 'acme-ident',
+    });
+    expect(state.cr.spec.capabilities).toBeUndefined();
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_ADDRESS',
+      payload: { index: 0, direction: 'consumes' },
+    });
+    expect(state.cr.spec.capabilities?.[0].consumerOf).toEqual([
+      { address: 'IDENT.RESULTS', appName: 'matcher', appNamespace: 'acme-ident' },
+    ]);
+  });
+
+  it('keeps drafts out of the CR and across a model switch', () => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_NAMESPACE',
+      payload: { name: ' acme-audit ' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_NAMESPACE',
+      payload: { name: 'acme-audit' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_APP',
+      payload: { namespace: 'acme-ident', name: 'matcher' },
+    });
+    expect(state.drafts).toEqual({
+      namespaces: ['acme-audit'],
+      apps: [{ namespace: 'acme-ident', name: 'matcher' }],
+    });
+    expect(state.hasChanges).toBe(false);
+    expect(JSON.stringify(state.cr)).not.toContain('acme-audit');
+    state = brokerAppReducer(state, { type: 'SET_MODEL', payload: state.cr });
+    expect(state.drafts.namespaces).toEqual(['acme-audit']);
+    state = brokerAppReducer(state, {
+      type: 'REMOVE_DRAFT_NAMESPACE',
+      payload: { name: 'acme-audit' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'REMOVE_DRAFT_APP',
+      payload: { namespace: 'acme-ident', name: 'matcher' },
+    });
+    expect(state.drafts).toEqual({ namespaces: [], apps: [] });
+  });
+});

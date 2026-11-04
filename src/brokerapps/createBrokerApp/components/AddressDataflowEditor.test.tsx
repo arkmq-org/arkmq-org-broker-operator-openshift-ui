@@ -73,8 +73,11 @@ const addSub = (name: string) => {
 describe('AddressDataflowEditor — diagram and panel', () => {
   beforeEach(() => render(<Wrapper />));
 
-  it('starts with an empty state and no panel', () => {
-    expect(screen.getByTestId('address-list-empty')).toBeInTheDocument();
+  it('starts with the app box and its certificate in the namespace box, no address, no panel', () => {
+    expect(screen.getByTestId('dataflow-node-ns:default')).toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-app:default/my-messaging-app')).toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-cred:default/my-messaging-app')).toBeInTheDocument();
+    expect(screen.queryByTestId(/^dataflow-node-addr:/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
   });
 
@@ -126,7 +129,7 @@ describe('AddressDataflowEditor — diagram and panel', () => {
     openEntry('orders.created');
     fireEvent.click(screen.getByTestId('remove-address-btn'));
     expect(screen.queryByTestId('dataflow-node-addr:orders.created')).not.toBeInTheDocument();
-    expect(screen.getByTestId('address-list-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-cred:default/my-messaging-app')).toBeInTheDocument();
   });
 
   it('offers no Remove button for a new entry', () => {
@@ -168,23 +171,72 @@ describe('AddressDataflowEditor — palette', () => {
       dataTransfer: { types: ['application/x-arkmq-dataflow'], getData: () => item },
     });
   };
+  const myBox = () => screen.getByTestId('dataflow-node-app:default/my-messaging-app');
+  const canvas = () => screen.getByTestId('address-list');
+  const nameDrop = async (name: string): Promise<void> => {
+    await waitForPopperUpdates();
+    fireEvent.change(screen.getByTestId('drop-name-input'), { target: { value: name } });
+    fireEvent.click(screen.getByTestId('drop-name-confirm'));
+    await waitForPopperUpdates();
+  };
 
-  it('offers draggable palette items', () => {
-    expect(screen.getByTestId('palette-address')).toHaveAttribute('draggable', 'true');
-    expect(screen.getByTestId('palette-namespace')).toHaveAttribute('draggable', 'true');
+  it('offers a namespace, an app, a queue and a topic to drag', () => {
+    for (const item of ['namespace', 'app', 'queue', 'topic']) {
+      expect(screen.getByTestId(`palette-${item}`)).toHaveAttribute('draggable', 'true');
+    }
   });
 
-  it('adds an address when the address item is dropped on the diagram', () => {
-    addNamed(0, 'orders.created');
-    dropItem('address', screen.getByTestId('address-list'));
+  it('asks only for a name when a queue is dropped into the app box, and owns it', async () => {
+    dropItem('queue', myBox());
+    expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
+    await nameDrop('orders.created');
+    expect(nodeOf('orders.created')).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('drop-name-input')).not.toBeInTheDocument();
+    // no flow yet: the arrow comes from the connector gesture
+    expect(screen.queryByTestId(/^dataflow-edge-/)).not.toBeInTheDocument();
+  });
+
+  it('adds nothing when the name is cancelled', async () => {
+    dropItem('topic', myBox());
+    await waitForPopperUpdates();
+    fireEvent.click(screen.getByTestId('drop-name-cancel'));
+    await waitForPopperUpdates();
+    expect(screen.queryByTestId(/^dataflow-node-addr:/)).not.toBeInTheDocument();
+  });
+
+  it('refuses an address dropped outside an app box and says where it goes', () => {
+    dropItem('queue', canvas());
+    expect(screen.getByTestId('palette-hint')).toBeInTheDocument();
+    expect(screen.queryByTestId('drop-name-input')).not.toBeInTheDocument();
+  });
+
+  it('refuses an app dropped outside a namespace box', () => {
+    dropItem('app', canvas());
+    expect(screen.getByTestId('palette-hint')).toBeInTheDocument();
+  });
+
+  it('builds a reference from a namespace, an app in it and an address in that', async () => {
+    dropItem('namespace', canvas());
+    await nameDrop('acme-ident');
+    expect(screen.getByTestId('dataflow-node-ns:acme-ident')).toBeInTheDocument();
+    dropItem('app', screen.getByTestId('dataflow-node-ns:acme-ident'));
+    await nameDrop('matcher');
+    expect(screen.getByTestId('dataflow-node-app:acme-ident/matcher')).toBeInTheDocument();
+    dropItem('topic', screen.getByTestId('dataflow-node-app:acme-ident/matcher'));
+    await nameDrop('IDENT.RESULTS');
+    expect(nodeOf('IDENT.RESULTS')).toBeInTheDocument();
+    // the entry references the owner: the panel says so
+    openEntry('IDENT.RESULTS');
     expect(panel()).toBeInTheDocument();
-    expect(screen.getByText('New address')).toBeInTheDocument();
+    expect(screen.getByLabelText('App namespace')).toHaveValue('acme-ident');
+    expect(screen.getByLabelText('App name')).toHaveValue('matcher');
   });
 
-  it('opens the address a namespace item is dropped on', () => {
-    addNamed(0, 'orders.created');
-    dropItem('namespace', nodeOf('orders.created'));
-    expect(screen.getByTestId('address-name-input-0')).toHaveValue('orders.created');
+  it('keeps a dropped namespace as a draft through a switch to YAML and back', async () => {
+    dropItem('namespace', canvas());
+    await nameDrop('acme-audit');
+    expect(screen.getByTestId('dataflow-node-ns:acme-audit')).toBeInTheDocument();
   });
 });
 

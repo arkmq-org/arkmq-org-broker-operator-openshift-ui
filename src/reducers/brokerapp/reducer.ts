@@ -36,17 +36,48 @@ export interface Address {
   appNamespace?: string;
 }
 
+/** A BrokerApp named by namespace and name. */
+export interface DraftApp {
+  namespace: string;
+  name: string;
+}
+
+/**
+ * Boxes the user put on the diagram that the CR has no words for yet: a namespace
+ * nobody is gated to, an app box with no address referenced in it. They live in the
+ * form only, survive a switch to YAML and back, and are gone on reload.
+ */
+export interface Drafts {
+  namespaces: string[];
+  apps: DraftApp[];
+}
+
 export interface BrokerAppFormState {
   cr: BrokerAppCR;
   matchLabels: MatchLabel[];
   addresses: Address[];
+  drafts: Drafts;
   hasChanges: boolean;
 }
 
 export type BrokerAppFormAction =
   | { type: 'SET_NAME'; payload: string }
-  | { type: 'ADD_ADDRESS' }
+  /** Without payload: a blank entry for the form to fill in. With one: an address dropped on the diagram, with no flow yet. */
+  | {
+      type: 'ADD_ADDRESS';
+      payload?: {
+        address: string;
+        kind: AddressKind;
+        pubSub?: boolean;
+        appName?: string;
+        appNamespace?: string;
+      };
+    }
   | { type: 'REMOVE_ADDRESS'; payload: { index: number } }
+  | { type: 'ADD_DRAFT_NAMESPACE'; payload: { name: string } }
+  | { type: 'REMOVE_DRAFT_NAMESPACE'; payload: { name: string } }
+  | { type: 'ADD_DRAFT_APP'; payload: DraftApp }
+  | { type: 'REMOVE_DRAFT_APP'; payload: DraftApp }
   | {
       type: 'UPDATE_ADDRESS';
       payload: { index: number } & Partial<
@@ -290,8 +321,62 @@ export const brokerAppReducer = (
       break;
 
     case 'ADD_ADDRESS':
-      addresses = [...addresses, { address: '', kind: 'owned', direction: 'produces' }];
+      if (!action.payload) {
+        addresses = [...addresses, { address: '', kind: 'owned', direction: 'produces' }];
+        break;
+      }
+      if (addresses.some((e) => e.address.trim() === action.payload?.address.trim())) {
+        return state;
+      }
+      addresses = [
+        ...addresses,
+        {
+          address: action.payload.address.trim(),
+          kind: action.payload.kind,
+          direction: 'none',
+          pubSub: action.payload.pubSub,
+          ...(action.payload.kind === 'referenced'
+            ? { appName: action.payload.appName, appNamespace: action.payload.appNamespace }
+            : {}),
+        },
+      ];
       break;
+
+    // Drafts are not in the CR: no sync, no change to save.
+    case 'ADD_DRAFT_NAMESPACE': {
+      const name = action.payload.name.trim();
+      if (!name || state.drafts.namespaces.includes(name)) return state;
+      return {
+        ...state,
+        drafts: { ...state.drafts, namespaces: [...state.drafts.namespaces, name] },
+      };
+    }
+    case 'REMOVE_DRAFT_NAMESPACE':
+      return {
+        ...state,
+        drafts: {
+          ...state.drafts,
+          namespaces: state.drafts.namespaces.filter((n) => n !== action.payload.name),
+        },
+      };
+    case 'ADD_DRAFT_APP': {
+      const app = { namespace: action.payload.namespace.trim(), name: action.payload.name.trim() };
+      if (!app.namespace || !app.name) return state;
+      if (state.drafts.apps.some((a) => a.namespace === app.namespace && a.name === app.name)) {
+        return state;
+      }
+      return { ...state, drafts: { ...state.drafts, apps: [...state.drafts.apps, app] } };
+    }
+    case 'REMOVE_DRAFT_APP':
+      return {
+        ...state,
+        drafts: {
+          ...state.drafts,
+          apps: state.drafts.apps.filter(
+            (a) => a.namespace !== action.payload.namespace || a.name !== action.payload.name,
+          ),
+        },
+      };
 
     case 'REMOVE_ADDRESS':
       addresses = addresses.filter((_, i) => i !== action.payload.index);
@@ -463,6 +548,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
   },
   matchLabels: [{ id: nextMatchLabelId(), key: '', value: '' }],
   addresses: [],
+  drafts: { namespaces: [], apps: [] },
   hasChanges: false,
 });
 

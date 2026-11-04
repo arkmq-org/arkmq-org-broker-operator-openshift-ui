@@ -37,6 +37,16 @@ export interface DataflowInput {
   universe: GateUniverse;
   /** True when `apps` is every app that can declare on these addresses, so an admitted party that declares nothing is an open door. */
   complete?: boolean;
+  /**
+   * What the editor holds that nothing in the CRs says yet, drawn as drafts: boxes,
+   * and referenced addresses with no flow (a reference only exists in the CR as a
+   * capability, so until an arrow is drawn the form alone knows it).
+   */
+  drafts?: {
+    namespaces: string[];
+    apps: AppRef[];
+    addresses?: { address: string; owner: AppRef; pubSub: boolean }[];
+  };
 }
 
 /** Why an edge or an address deserves attention; rendered with i18n by the view. */
@@ -61,8 +71,8 @@ export const APP_CERT_SECRET_SUFFIX = '-app-cert';
  * namespace object, but it belongs to the app, so it is drawn inside the app box.
  */
 export type DataflowNode =
-  | { id: string; kind: 'namespace'; namespace: string }
-  | { id: string; kind: 'app'; namespace: string; name: string; parent: string }
+  | { id: string; kind: 'namespace'; namespace: string; draft?: boolean }
+  | { id: string; kind: 'app'; namespace: string; name: string; parent: string; draft?: boolean }
   | {
       id: string;
       kind: 'credential';
@@ -87,6 +97,8 @@ export type DataflowNode =
       gated: boolean;
       pubSub: boolean;
       issues: DataflowIssue[];
+      /** Only the editor knows it yet: no flow refers to it. */
+      draft?: boolean;
     }
   | { id: string; kind: 'customGate'; expression: string; role: GateRole; address: string };
 
@@ -328,6 +340,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       }
     }
   }
+  for (const draft of input.drafts?.apps ?? []) groupedNamespaces.add(draft.namespace);
 
   // Pass 1: gates of the drawn apps' owned addresses. The party a gate admits is only
   // drawn in pass 3, if the gate arrow survives: a realised gate leaves no arrow, and
@@ -411,12 +424,15 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
   const declared: { address: string; role: DataflowRole; app: AppRef }[] = [];
   for (const app of input.apps) {
     const ref = appRefOf(app);
+    // An app is a box with its credential in it from the start, even with no flow:
+    // the editor's canvas begins with the user's own box to drop addresses into.
+    if (ref.name && ref.namespace) ensureCredential(ref);
     const credentialId = (): string => ensureCredential(ref);
     const failure = app.status?.conditions?.find(
       (c) => c.type === 'Deployed' && c.status === K8sResourceConditionStatus.False,
     )?.message;
     for (const entry of hydrated(app)) {
-      if (entry.direction === 'none') continue;
+      // a referenced address with no flow yet still sits in its owner's box
       const owner: AppRef | undefined =
         entry.kind === 'owned'
           ? ref
@@ -425,6 +441,7 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
             : undefined;
       const spec = owner ? ownedSpec(owner, entry.address) : undefined;
       const addressId = ensureAddress(entry.address, owner, !!entry.pubSub || !!spec?.pubSub);
+      if (entry.direction === 'none') continue;
 
       const roles: DataflowRole[] = [];
       if (entry.direction === 'produces' || entry.direction === 'both') roles.push('produce');
@@ -505,6 +522,49 @@ export const buildDataflowGraph = (input: DataflowInput): DataflowGraph => {
       subscriptions: [],
       issues: [],
     });
+  }
+
+  // Drafts: boxes only the editor knows. One the CRs already draw is no draft.
+  for (const namespace of input.drafts?.namespaces ?? []) {
+    const id = namespaceNodeId(namespace);
+    if (!nodes.has(id)) nodes.set(id, { id, kind: 'namespace', namespace, draft: true });
+  }
+  for (const ref of input.drafts?.apps ?? []) {
+    const id = appNodeId(ref);
+    if (nodes.has(id)) continue;
+    const parentId = namespaceNodeId(ref.namespace);
+    if (!nodes.has(parentId)) {
+      nodes.set(parentId, {
+        id: parentId,
+        kind: 'namespace',
+        namespace: ref.namespace,
+        draft: true,
+      });
+    }
+    nodes.set(id, {
+      id,
+      kind: 'app',
+      namespace: ref.namespace,
+      name: ref.name,
+      parent: parentId,
+      draft: true,
+    });
+  }
+
+  for (const entry of input.drafts?.addresses ?? []) {
+    const id = addressNodeId(entry.address);
+    if (nodes.has(id)) continue;
+    // the owner's boxes are drafts too when nothing else drew them
+    const newBoxes = [namespaceNodeId(entry.owner.namespace), appNodeId(entry.owner)].filter(
+      (box) => !nodes.has(box),
+    );
+    ensureAddress(entry.address, entry.owner, entry.pubSub);
+    const node = nodes.get(id);
+    if (node?.kind === 'address') node.draft = true;
+    for (const box of newBoxes) {
+      const created = nodes.get(box);
+      if (created && (created.kind === 'namespace' || created.kind === 'app')) created.draft = true;
+    }
   }
 
   for (const node of Array.from(nodes.values())) {

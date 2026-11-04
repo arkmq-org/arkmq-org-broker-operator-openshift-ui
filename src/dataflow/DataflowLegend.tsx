@@ -49,6 +49,10 @@ export const DataflowLegend: FC<DataflowLegendProps> = ({ scope }) => {
             <span className={`${DATAFLOW_CLASS}-legend-badge`}>{t('open')}</span>
             {t('Opened to other apps by a gate')}
           </FlexItem>
+          <FlexItem>
+            <span className={`${DATAFLOW_CLASS}-legend-draft`} />
+            {t('Draft, not in the YAML until connected')}
+          </FlexItem>
         </>
       ) : null}
     </Flex>

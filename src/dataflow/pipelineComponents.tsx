@@ -41,6 +41,7 @@ import {
   AsteriskIcon,
   BroadcastTowerIcon,
   CodeIcon,
+  CubeIcon,
   EnvelopeIcon,
   ExternalLinkAltIcon,
   FolderIcon,
@@ -56,7 +57,6 @@ export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__d
 /** Where a connector drawn from a node was dropped. */
 export type ConnectorTarget = { nodeId: string } | { graph: true; x: number; y: number };
 
-/** MIME type of a palette item being dragged onto the canvas with the browser's own drag and drop. */
 /**
  * How far past the node's right edge the hover area reaches: the connector handle
  * (32 units long) hangs off that edge, and the pointer must stay inside the node's
@@ -68,8 +68,15 @@ const HOVER_MARGIN = 6;
 /** The library's class on the connector handle, the one element hover may leave for. */
 const CONNECTOR_HANDLE_CLASS = 'pf-topology-default-create-connector';
 
+/** MIME type of a palette item being dragged onto the canvas with the browser's own drag and drop. */
 export const PALETTE_TYPE = 'application/x-arkmq-dataflow';
-export type PaletteItem = 'address' | 'namespace';
+/** What the palette offers: boxes to drop into other boxes, and two kinds of address. */
+export type PaletteItem = 'namespace' | 'app' | 'queue' | 'topic';
+/** Where a palette item landed: in the graph's coordinates, and in the canvas element's. */
+export interface DropPoint {
+  graph: { x: number; y: number };
+  client: { x: number; y: number };
+}
 
 /**
  * What the editor lets the diagram do. Stored on the topology controller state, so
@@ -82,7 +89,7 @@ export interface DataflowEditing {
   /** A connector dragged from a node and dropped on another node or on the canvas. */
   onConnect: (sourceId: string, target: ConnectorTarget) => void;
   /** A palette item dropped on the canvas, over the node `nodeId` when there is one. */
-  onDropPalette: (item: PaletteItem, nodeId?: string) => void;
+  onDropPalette: (item: PaletteItem, point: DropPoint, nodeId?: string) => void;
   /** Labels for the context menu, already translated. */
   labels: { edit: string; remove: string };
 }
@@ -168,10 +175,20 @@ const DataflowTask: React.FC<TaskProps> = observer(
           return { icon: GlobeIcon, badge: t('namespace'), editable: false };
         case 'customGate':
           return { icon: CodeIcon, badge: t('gate'), tooltip: data.expression, editable: false };
+        case 'app':
+          // an empty app box: a pill to drop addresses into
+          return { icon: CubeIcon, badge: data.draft ? t('draft app') : t('app'), editable: false };
         default:
-          return { icon: FolderIcon, badge: t('namespace'), editable: true };
+          return {
+            icon: FolderIcon,
+            badge: data?.kind === 'namespace' && data.draft ? t('draft namespace') : t('namespace'),
+            editable: true,
+          };
       }
     })();
+    const draft =
+      (data?.kind === 'namespace' || data?.kind === 'app' || data?.kind === 'address') &&
+      data.draft;
     const Icon = look.icon;
     const edits = Boolean(editing) && look.editable;
     const [hover, hoverRef] = useHover<SVGGElement>();
@@ -213,6 +230,7 @@ const DataflowTask: React.FC<TaskProps> = observer(
         ref={refs}
         data-test={`dataflow-node-${element.getId()}`}
         data-kind={data?.kind}
+        className={draft ? `${DATAFLOW_CLASS}-draft` : undefined}
         onMouseEnter={edits ? onShowCreateConnector : undefined}
         onMouseLeave={edits ? leave : undefined}
       >
@@ -253,27 +271,38 @@ const DataflowTask: React.FC<TaskProps> = observer(
  * as the pipeline groups example sets it: the label sits under the box, hides when
  * zoomed out (where the library misplaces it) and comes back on hover.
  */
-const DataflowGroup: React.FC<{ element: GraphElement } & WithSelectionProps> = observer(
-  ({ element, selected, onSelect }) => {
-    const data = nodeData(element);
-    const [hover, hoverRef] = useHover<SVGGElement>();
-    const detailsLevel = element.getGraph().getDetailsLevel();
-    return (
-      <g ref={hoverRef} data-test={`dataflow-node-${element.getId()}`} data-kind={data?.kind}>
-        <DefaultTaskGroup
-          element={element as Node}
-          selected={selected}
-          onSelect={onSelect}
-          collapsible={false}
-          labelPosition={LabelPosition.bottom}
-          hideDetailsAtMedium
-          showLabelOnHover
-          scaleNode={hover && detailsLevel !== ScaleDetailsLevel.high}
-        />
-      </g>
-    );
-  },
-);
+const DataflowGroup: React.FC<
+  { element: GraphElement } & WithSelectionProps & WithContextMenuProps
+> = observer(({ element, selected, onSelect, onContextMenu, contextMenuOpen }) => {
+  const data = nodeData(element);
+  const [hover, hoverRef] = useHover<SVGGElement>();
+  const detailsLevel = element.getGraph().getDetailsLevel();
+  const draft = (data?.kind === 'namespace' || data?.kind === 'app') && data.draft;
+  return (
+    <g
+      ref={hoverRef}
+      data-test={`dataflow-node-${element.getId()}`}
+      data-kind={data?.kind}
+      className={draft ? `${DATAFLOW_CLASS}-draft` : undefined}
+    >
+      <DefaultTaskGroup
+        element={element as Node}
+        // the box is drawn in the library's groups layer, outside this element: the
+        // class must travel with it for the draft outline to apply
+        className={draft ? `${DATAFLOW_CLASS}-draft` : undefined}
+        selected={selected}
+        onSelect={onSelect}
+        collapsible={false}
+        labelPosition={LabelPosition.bottom}
+        hideDetailsAtMedium
+        showLabelOnHover
+        scaleNode={hover && detailsLevel !== ScaleDetailsLevel.high}
+        onContextMenu={draft ? onContextMenu : undefined}
+        contextMenuOpen={contextMenuOpen}
+      />
+    </g>
+  );
+});
 
 const terminalStatus = (kind: DataflowEdge['kind']): NodeStatus | undefined =>
   kind === 'broken' ? NodeStatus.danger : kind === 'unused' ? NodeStatus.warning : undefined;
@@ -329,21 +358,27 @@ const DataflowEdgeComponent: React.FC<{ element: GraphElement } & WithSelectionP
   },
 );
 
-/** Context menu of a node: the editor's actions, when the page is an editor. */
+/** Context menu of a node: the editor's actions, when the page is an editor. An address is edited or removed; a draft box is removed. */
 const nodeMenu = (element: GraphElement): React.ReactElement[] => {
   const editing = editingOf(element);
   const data = nodeData(element);
-  if (!editing || data?.kind !== 'address') return [];
+  if (!editing) return [];
+  const draft = (data?.kind === 'namespace' || data?.kind === 'app') && data.draft;
+  if (data?.kind !== 'address' && !draft) return [];
   const id = element.getId();
   return [
-    <ContextMenuItem
-      key="edit"
-      onClick={() => {
-        editing.onEdit(id);
-      }}
-    >
-      {editing.labels.edit}
-    </ContextMenuItem>,
+    ...(data.kind === 'address'
+      ? [
+          <ContextMenuItem
+            key="edit"
+            onClick={() => {
+              editing.onEdit(id);
+            }}
+          >
+            {editing.labels.edit}
+          </ContextMenuItem>,
+        ]
+      : []),
     <ContextMenuItem
       key="remove"
       onClick={() => {
@@ -386,7 +421,7 @@ const droppableTask = acceptsConnector(DataflowTask) as React.ComponentType<Task
 const selectableTask = withSelection()(droppableTask) as React.ComponentType<TaskProps>;
 const taskWithMenu = withContextMenu(nodeMenu)(selectableTask) as React.ComponentType<TaskProps>;
 const EditableTask = withCreateConnector(onCreateConnector)(taskWithMenu);
-const SelectableGroup = withSelection()(DataflowGroup);
+const SelectableGroup = withContextMenu(nodeMenu)(withSelection()(DataflowGroup));
 const SelectableEdge = withSelection()(DataflowEdgeComponent);
 // The canvas is under every pointer position (the library's default hit test only
 // covers the unzoomed viewport) and takes the drop when no box does.

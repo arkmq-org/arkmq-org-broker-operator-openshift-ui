@@ -44,6 +44,9 @@ export class Visualization {
       listener(...args);
     });
   }
+  getNodeById(): undefined {
+    return undefined;
+  }
   getGraph() {
     return {
       scaleBy: jest.fn(),
@@ -53,6 +56,7 @@ export class Visualization {
       setDetailsLevelThresholds: jest.fn(),
       getScale: () => 1,
       setScale: jest.fn(),
+      getPosition: () => ({ x: 0, y: 0 }),
       setPosition: jest.fn(),
     };
   }
