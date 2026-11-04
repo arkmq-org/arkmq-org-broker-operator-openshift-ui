@@ -22,7 +22,9 @@ import type { DataflowGraph } from './graph';
 import {
   DATAFLOW_CLASS,
   dataflowComponentFactory,
+  PALETTE_TYPE,
   type DataflowEditing,
+  type PaletteItem,
 } from './pipelineComponents';
 import { toPipelineModel, type DataflowLabels } from './pipelineModel';
 import './dataflow.css';
@@ -113,8 +115,28 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
     return <div data-test={dataTest}>{emptyState}</div>;
   }
 
+  // The palette uses the browser's drag and drop: the library's own only moves things
+  // that already live inside the canvas.
+  const acceptsPalette = (event: React.DragEvent) =>
+    Boolean(editing) && event.dataTransfer.types.includes(PALETTE_TYPE);
+
   return (
-    <div className={`${DATAFLOW_CLASS}-container`} style={{ height }} data-test={dataTest}>
+    <div
+      className={`${DATAFLOW_CLASS}-container`}
+      style={{ height }}
+      data-test={dataTest}
+      onDragOver={(event) => {
+        if (acceptsPalette(event)) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (!editing || !acceptsPalette(event)) return;
+        event.preventDefault();
+        const item = event.dataTransfer.getData(PALETTE_TYPE) as PaletteItem;
+        const over = (event.target as Element).closest('[data-test^="dataflow-node-"]');
+        const nodeId = over?.getAttribute('data-test')?.slice('dataflow-node-'.length);
+        editing.onDropPalette(item, nodeId ?? undefined);
+      }}
+    >
       <TopologyView
         controlBar={
           <TopologyControlBar

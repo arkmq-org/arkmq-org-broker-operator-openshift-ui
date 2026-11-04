@@ -15,7 +15,7 @@ import {
   ToolbarContent,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { PlusCircleIcon } from '@patternfly/react-icons';
+import { EnvelopeIcon, FolderIcon, PlusCircleIcon } from '@patternfly/react-icons';
 import { TopologySideBar } from '@patternfly/react-topology';
 import {
   useBrokerAppFormDispatch,
@@ -27,8 +27,10 @@ import { DataflowLegend } from '../../../dataflow/DataflowLegend';
 import { addressNodeId, buildDataflowGraph } from '../../../dataflow/graph';
 import {
   DATAFLOW_CLASS,
+  PALETTE_TYPE,
   type ConnectorTarget,
   type DataflowEditing,
+  type PaletteItem,
 } from '../../../dataflow/pipelineComponents';
 import { connectionAction } from './dataflowConnections';
 import { useGateUniverse } from '../../../dataflow/useGateUniverse';
@@ -138,13 +140,21 @@ export const AddressDataflowEditor: React.FC = () => {
           namespace: state.cr.metadata?.namespace ?? '',
           name: state.cr.metadata?.name ?? '',
         };
-        const action = connectionAction(state.addresses, self, sourceId, target);
+        const action = connectionAction(state.addresses, self, sourceId, target, universe);
         if (!action) return;
         if (action.type === 'ADD_ADDRESS') {
           handleAdd();
           return;
         }
         dispatch(action);
+      },
+      onDropPalette: (item: PaletteItem, nodeId?: string) => {
+        if (item === 'address') {
+          handleAdd();
+          return;
+        }
+        // a namespace dropped on an address: open that address, its gates are there
+        if (nodeId) handleSelect([nodeId]);
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleAdd only reads state captured by the other deps
@@ -157,6 +167,7 @@ export const AddressDataflowEditor: React.FC = () => {
       dispatch,
       state.cr.metadata,
       state.addresses,
+      universe,
     ],
   );
 
@@ -197,19 +208,40 @@ export const AddressDataflowEditor: React.FC = () => {
       {t('Add address')}
     </Button>
   );
+  // Palette items use the browser's drag and drop; a click is the keyboard-friendly way in.
+  const paletteItem = (item: PaletteItem, icon: React.ReactNode, label: string) => (
+    <Button
+      variant="secondary"
+      icon={icon}
+      draggable
+      onDragStart={(event: React.DragEvent) => {
+        event.dataTransfer.setData(PALETTE_TYPE, item);
+        event.dataTransfer.effectAllowed = 'copy';
+      }}
+      onClick={() => {
+        if (item === 'address') handleAdd();
+      }}
+      data-test={`palette-${item}`}
+    >
+      {label}
+    </Button>
+  );
 
   return (
     <FormSection title={t('Addresses')}>
       <HelperText>
         <HelperTextItem>
           {t(
-            'Addresses are the boxes, your namespace the arrow end. Click a box to edit it: owned addresses are provisioned with this app and opened to other apps through gates, referenced addresses belong to another app that must admit this one.',
+            'Your certificate and your addresses sit in your box. Click an address to edit it, drag an arrow from your certificate to an address to produce, from an address to your certificate to consume, from an address to a namespace to let it consume, or drop a palette item on the diagram.',
           )}
         </HelperTextItem>
       </HelperText>
       <Toolbar inset={{ default: 'insetNone' }}>
         <ToolbarContent>
           <ToolbarItem>{addButton}</ToolbarItem>
+          <ToolbarItem variant="label">{t('Drag onto the diagram')}</ToolbarItem>
+          <ToolbarItem>{paletteItem('address', <EnvelopeIcon />, t('Address'))}</ToolbarItem>
+          <ToolbarItem>{paletteItem('namespace', <FolderIcon />, t('Namespace'))}</ToolbarItem>
         </ToolbarContent>
       </Toolbar>
       <DataflowDiagram

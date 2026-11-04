@@ -28,7 +28,6 @@
   "Address {{address}} is owned by {{owner}}, which could not be read from here": "Address {{address}} is owned by {{owner}}, which could not be read from here",
   "Address owned by another app": "Address owned by another app",
   "Addresses": "Addresses",
-  "Addresses are the boxes, your namespace the arrow end. Click a box to edit it: owned addresses are provisioned with this app and opened to other apps through gates, referenced addresses belong to another app that must admit this one.": "Addresses are the boxes, your namespace the arrow end. Click a box to edit it: owned addresses are provisioned with this app and opened to other apps through gates, referenced addresses belong to another app that must admit this one.",
   "Addresses are the boxes; arrows show which namespace sends to or receives from each one. Dashed arrows are what the gates allow, solid arrows what this app declares.": "Addresses are the boxes; arrows show which namespace sends to or receives from each one. Dashed arrows are what the gates allow, solid arrows what this app declares.",
   "All Metrics": "All Metrics",
   "Allow": "Allow",
@@ -104,6 +103,7 @@
   "Discard": "Discard",
   "Discard changes?": "Discard changes?",
   "Done": "Done",
+  "Drag onto the diagram": "Drag onto the diagram",
   "Durable subscription queue names created on the broker. Each becomes a fully qualified queue name in the format address::queue-name.": "Durable subscription queue names created on the broker. Each becomes a fully qualified queue name in the format address::queue-name.",
   "Durable subscription queue names for this address.": "Durable subscription queue names for this address.",
   "e.g., 250m": "e.g., 250m",
@@ -328,6 +328,7 @@
   "You do not have permission to update BrokerApps in this namespace.": "You do not have permission to update BrokerApps in this namespace.",
   "You do not have permission to update BrokerServices in this namespace.": "You do not have permission to update BrokerServices in this namespace.",
   "You don't have permission to see metrics for {{namespaces}}": "You don't have permission to see metrics for {{namespaces}}",
+  "Your certificate and your addresses sit in your box. Click an address to edit it, drag an arrow from your certificate to an address to produce, from an address to your certificate to consume, from an address to a namespace to let it consume, or drop a palette item on the diagram.": "Your certificate and your addresses sit in your box. Click an address to edit it, drag an arrow from your certificate to an address to produce, from an address to your certificate to consume, from an address to a namespace to let it consume, or drop a palette item on the diagram.",
   "Your YAML could not be converted to the form. Choose how to proceed.": "Your YAML could not be converted to the form. Choose how to proceed.",
   "Zoom in": "Zoom in",
   "Zoom out": "Zoom out"

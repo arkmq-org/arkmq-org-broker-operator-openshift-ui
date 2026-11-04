@@ -160,6 +160,34 @@ describe('AddressDataflowEditor — diagram and panel', () => {
   });
 });
 
+describe('AddressDataflowEditor — palette', () => {
+  beforeEach(() => render(<Wrapper />));
+
+  const dropItem = (item: string, target: HTMLElement) => {
+    fireEvent.drop(target, {
+      dataTransfer: { types: ['application/x-arkmq-dataflow'], getData: () => item },
+    });
+  };
+
+  it('offers draggable palette items', () => {
+    expect(screen.getByTestId('palette-address')).toHaveAttribute('draggable', 'true');
+    expect(screen.getByTestId('palette-namespace')).toHaveAttribute('draggable', 'true');
+  });
+
+  it('adds an address when the address item is dropped on the diagram', () => {
+    addNamed(0, 'orders.created');
+    dropItem('address', screen.getByTestId('address-list'));
+    expect(panel()).toBeInTheDocument();
+    expect(screen.getByText('New address')).toBeInTheDocument();
+  });
+
+  it('opens the address a namespace item is dropped on', () => {
+    addNamed(0, 'orders.created');
+    dropItem('namespace', nodeOf('orders.created'));
+    expect(screen.getByTestId('address-name-input-0')).toHaveValue('orders.created');
+  });
+});
+
 describe('AddressDataflowEditor — cancel discards changes', () => {
   beforeEach(() => render(<Wrapper />));
 

@@ -62,3 +62,75 @@ describe('connectionAction', () => {
     ).toBeNull();
   });
 });
+
+describe('connectionAction on gates', () => {
+  const universe = { namespaces: ['default', 'team-b'], appsByNamespace: { 'team-b': ['reader'] } };
+  const owned: Address[] = [
+    { address: 'orders', kind: 'owned', direction: 'produces' },
+    {
+      address: 'gated',
+      kind: 'owned',
+      direction: 'produces',
+      consumerGate: "app.metadata.namespace == 'team-b'",
+    },
+    {
+      address: 'custom',
+      kind: 'owned',
+      direction: 'produces',
+      consumerGate: "app.metadata.labels['t'] == 'x'",
+    },
+  ];
+
+  it('lets a namespace consume when the arrow goes from an address to its pill', () => {
+    expect(connectionAction(owned, self, 'addr:orders', { nodeId: 'ns:team-b' }, universe)).toEqual(
+      {
+        type: 'SET_ADDRESS_GATE',
+        payload: { index: 0, role: 'consumer', principals: [{ namespace: 'team-b' }] },
+      },
+    );
+  });
+
+  it('lets an app of a namespace produce when the arrow goes from its certificate to an address', () => {
+    expect(
+      connectionAction(owned, self, 'cred:team-b/reader', { nodeId: 'addr:orders' }, universe),
+    ).toEqual({
+      type: 'SET_ADDRESS_GATE',
+      payload: {
+        index: 0,
+        role: 'producer',
+        principals: [{ namespace: 'team-b', appName: 'reader' }],
+      },
+    });
+  });
+
+  it('adds to the parties a gate already admits', () => {
+    expect(
+      connectionAction(owned, self, 'addr:gated', { nodeId: 'any-namespace' }, universe),
+    ).toEqual({
+      type: 'SET_ADDRESS_GATE',
+      payload: {
+        index: 1,
+        role: 'consumer',
+        principals: [{ namespace: 'team-b' }, { namespace: '*' }],
+      },
+    });
+  });
+
+  it('does nothing for a party the gate already admits', () => {
+    expect(
+      connectionAction(owned, self, 'addr:gated', { nodeId: 'ns:team-b' }, universe),
+    ).toBeNull();
+  });
+
+  it('refuses to overwrite a custom gate', () => {
+    expect(
+      connectionAction(owned, self, 'addr:custom', { nodeId: 'ns:team-b' }, universe),
+    ).toBeNull();
+  });
+
+  it('ignores gates on a referenced address', () => {
+    expect(
+      connectionAction(addresses, self, 'addr:remote', { nodeId: 'ns:team-b' }, universe),
+    ).toBeNull();
+  });
+});

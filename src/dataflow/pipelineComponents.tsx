@@ -53,6 +53,10 @@ export const DATAFLOW_CLASS = 'plugin__arkmq-org-broker-operator-openshift-ui__d
 /** Where a connector drawn from a node was dropped. */
 export type ConnectorTarget = { nodeId: string } | { graph: true; x: number; y: number };
 
+/** MIME type of a palette item being dragged onto the canvas with the browser's own drag and drop. */
+export const PALETTE_TYPE = 'application/x-arkmq-dataflow';
+export type PaletteItem = 'address' | 'namespace';
+
 /**
  * What the editor lets the diagram do. Stored on the topology controller state, so
  * the renderers, which are created once per factory, read it from the element they
@@ -63,6 +67,8 @@ export interface DataflowEditing {
   onRemove: (nodeId: string) => void;
   /** A connector dragged from a node and dropped on another node or on the canvas. */
   onConnect: (sourceId: string, target: ConnectorTarget) => void;
+  /** A palette item dropped on the canvas, over the node `nodeId` when there is one. */
+  onDropPalette: (item: PaletteItem, nodeId?: string) => void;
   /** Labels for the context menu, already translated. */
   labels: { edit: string; remove: string };
 }
