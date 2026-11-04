@@ -74,7 +74,7 @@ describe('BrokerAppOverviewTab', () => {
     render(<BrokerAppOverviewTab obj={brokerApp} />);
     expect(screen.getByText('payment.transactions')).toBeInTheDocument();
     expect(screen.getByText('payment.requests')).toBeInTheDocument();
-    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
     expect(screen.getByText('External')).toBeInTheDocument();
   });
 

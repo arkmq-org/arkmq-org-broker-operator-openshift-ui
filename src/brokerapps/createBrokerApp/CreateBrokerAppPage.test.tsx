@@ -119,24 +119,10 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
     expect(result?.error).toContain('Duplicate address "orders"');
   });
 
-  it('rejects YAML with overlapping private and shared addresses on switch to form', () => {
-    const result = switchToForm(
-      buildYaml({
-        addresses: [{ address: 'overlap' }],
-        sharedAddresses: [{ address: 'overlap' }],
-      }),
-    );
-    expect(result?.ok).toBe(false);
-    expect(result?.error).toContain(
-      'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
-    );
-  });
-
   it('accepts valid YAML on switch to form', () => {
     const result = switchToForm(
       buildYaml({
-        addresses: [{ address: 'orders' }],
-        sharedAddresses: [{ address: 'events' }],
+        addresses: [{ address: 'orders' }, { address: 'events' }],
       }),
     );
     expect(result?.ok).toBe(true);
@@ -146,28 +132,9 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
 describe('CreateBrokerAppPage — YAML submit path', () => {
   beforeEach(() => render(<CreateBrokerAppPage />));
 
-  it('rejects YAML with overlapping private and shared addresses', () => {
-    expect(() =>
-      getOnYamlSave()(
-        buildYaml({
-          addresses: [{ address: 'overlap' }],
-          sharedAddresses: [{ address: 'overlap' }],
-        }),
-      ),
-    ).toThrow('Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses');
-  });
-
   it('rejects YAML with duplicate addresses in spec.addresses', () => {
     expect(() =>
       getOnYamlSave()(buildYaml({ addresses: [{ address: 'orders' }, { address: 'orders' }] })),
     ).toThrow('Duplicate address "orders"');
-  });
-
-  it('rejects YAML with duplicate addresses in spec.sharedAddresses', () => {
-    expect(() =>
-      getOnYamlSave()(
-        buildYaml({ sharedAddresses: [{ address: 'events' }, { address: 'events' }] }),
-      ),
-    ).toThrow('Duplicate address "events"');
   });
 });

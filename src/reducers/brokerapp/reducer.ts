@@ -1,6 +1,6 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
-import type { BrokerAppCR, BrokerAppSpec, MatchAddress, PrivateAddress } from '../../k8s/types';
+import type { BrokerAppCR, BrokerAppSpec, MatchAddress, AddressSpec } from '../../k8s/types';
 import { validateBrokerAppCR } from '../../validation/k8s';
 
 export interface MatchLabel {
@@ -9,7 +9,7 @@ export interface MatchLabel {
   value: string;
 }
 
-export type AddressOwnership = 'private' | 'shared' | 'external';
+export type AddressOwnership = 'owned' | 'external';
 export type AddressDirection = 'produces' | 'consumes' | 'both' | 'none';
 
 export interface Address {
@@ -22,6 +22,10 @@ export interface Address {
   appName?: string;
   /** Namespace of the remote BrokerApp that owns this address (external only). */
   appNamespace?: string;
+  /** CEL expression selecting which apps may produce to this address (owned only). */
+  producerOfAppSelector?: string;
+  /** CEL expression selecting which apps may consume from this address (owned only). */
+  consumerOfAppSelector?: string;
 }
 
 export interface BrokerAppFormState {
@@ -47,6 +51,8 @@ export type BrokerAppFormAction =
           | 'subscriptions'
           | 'appName'
           | 'appNamespace'
+          | 'producerOfAppSelector'
+          | 'consumerOfAppSelector'
         >
       >;
     }
@@ -96,22 +102,24 @@ const cleanupResources = (spec: BrokerAppSpec): void => {
 };
 
 /**
- * Maps the address list to the three CRD spec fields:
- * spec.addresses, spec.sharedAddresses, and spec.capabilities.
+ * Maps the address list to the two CRD spec fields:
+ * spec.addresses and spec.capabilities.
  */
 const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
-  const cleanAddress = (e: Address): PrivateAddress => {
-    const cleaned: PrivateAddress = { address: e.address.trim() };
+  const cleanAddress = (e: Address): AddressSpec => {
+    const cleaned: AddressSpec = { address: e.address.trim() };
     if (e.pubSub) cleaned.pubSub = e.pubSub;
     if (e.subscriptions?.length) cleaned.subscriptions = [...e.subscriptions];
+    if (e.producerOfAppSelector?.trim())
+      cleaned.producerOfAppSelector = e.producerOfAppSelector.trim();
+    if (e.consumerOfAppSelector?.trim())
+      cleaned.consumerOfAppSelector = e.consumerOfAppSelector.trim();
     return cleaned;
   };
 
   const validAddresses = addresses.filter((e) => e.address.trim());
 
-  const privateEntries = validAddresses.filter((e) => e.ownership === 'private').map(cleanAddress);
-
-  const sharedEntries = validAddresses.filter((e) => e.ownership === 'shared').map(cleanAddress);
+  const ownedEntries = validAddresses.filter((e) => e.ownership === 'owned').map(cleanAddress);
 
   const toCapabilityEntry = (e: Address, isConsumer: boolean): MatchAddress => {
     const entry: MatchAddress = { address: e.address.trim() };
@@ -130,16 +138,10 @@ const syncAddressesToCR = (cr: BrokerAppCR, addresses: Address[]): void => {
     .filter((e) => e.direction === 'consumes' || e.direction === 'both')
     .map((e) => toCapabilityEntry(e, true));
 
-  if (privateEntries.length) {
-    cr.spec.addresses = privateEntries;
+  if (ownedEntries.length) {
+    cr.spec.addresses = ownedEntries;
   } else {
     delete cr.spec.addresses;
-  }
-
-  if (sharedEntries.length) {
-    cr.spec.sharedAddresses = sharedEntries;
-  } else {
-    delete cr.spec.sharedAddresses;
   }
 
   if (producerEntries.length || consumerEntries.length) {
@@ -188,7 +190,7 @@ const mergeMatchLabelsWithYaml = (
 };
 
 /**
- * Reconstructs the address list from the three CRD spec fields
+ * Reconstructs the address list from the two CRD spec fields
  * when loading a CR from YAML or an existing resource.
  */
 export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
@@ -226,21 +228,12 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
     ownedAddressNames.add(entry.address);
     addresses.push({
       address: entry.address,
-      ownership: 'private',
+      ownership: 'owned',
       direction: resolveDirection(entry.address),
       pubSub: entry.pubSub,
       subscriptions: entry.subscriptions,
-    });
-  }
-
-  for (const entry of cr.spec.sharedAddresses ?? []) {
-    ownedAddressNames.add(entry.address);
-    addresses.push({
-      address: entry.address,
-      ownership: 'shared',
-      direction: resolveDirection(entry.address),
-      pubSub: entry.pubSub,
-      subscriptions: entry.subscriptions,
+      producerOfAppSelector: entry.producerOfAppSelector,
+      consumerOfAppSelector: entry.consumerOfAppSelector,
     });
   }
 
@@ -248,8 +241,6 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   for (const addr of [...producerNames, ...consumerNames]) {
     if (!seenCapability.has(addr) && !ownedAddressNames.has(addr)) {
       const capEntry = capabilityByAddress.get(addr);
-      // An external address is pub/sub when its producer says so, or when it is
-      // consumed through subscriptions, as the operator infers it.
       const subscriptions = consumerByAddress.get(addr)?.subscriptions;
       const pubSub = !!producerByAddress.get(addr)?.pubSub || !!subscriptions?.length;
       addresses.push({
@@ -283,7 +274,7 @@ export const brokerAppReducer = (
       break;
 
     case 'ADD_ADDRESS':
-      addresses = [...addresses, { address: '', ownership: 'private', direction: 'produces' }];
+      addresses = [...addresses, { address: '', ownership: 'owned', direction: 'produces' }];
       break;
 
     case 'REMOVE_ADDRESS':
@@ -301,6 +292,10 @@ export const brokerAppReducer = (
         if (changes.ownership && changes.ownership !== 'external') {
           updated.appName = undefined;
           updated.appNamespace = undefined;
+        }
+        if (changes.ownership && changes.ownership === 'external') {
+          updated.producerOfAppSelector = undefined;
+          updated.consumerOfAppSelector = undefined;
         }
         if (changes.pubSub === false) {
           updated.subscriptions = undefined;

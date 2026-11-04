@@ -28,14 +28,12 @@ import './AddressManager.css';
 const PREFIX = 'plugin__arkmq-org-broker-operator-openshift-ui__address-manager';
 
 const OWNERSHIP_COLORS = {
-  private: 'blue',
-  shared: 'yellow',
+  owned: 'blue',
   external: 'grey',
 } as const;
 
 const OWNERSHIP_LABELS = {
-  private: 'Private',
-  shared: 'Shared',
+  owned: 'Owned',
   external: 'External',
 } as const;
 
@@ -102,7 +100,7 @@ export const AddressManager: React.FC = () => {
       <HelperText>
         <HelperTextItem>
           {t(
-            'Manage the addresses for this app. Private and shared addresses are provisioned on the broker. External addresses reference addresses owned by other apps.',
+            'Manage the addresses for this app. Owned addresses are provisioned on the broker. External addresses reference addresses from other apps.',
           )}
         </HelperTextItem>
       </HelperText>
@@ -192,6 +190,28 @@ export const AddressManager: React.FC = () => {
                           </Label>
                         ))}
                       </LabelGroup>
+                    </StackItem>
+                  )}
+                  {entry.producerOfAppSelector && (
+                    <StackItem>
+                      <HelperText>
+                        <HelperTextItem data-test={`producer-selector-${String(index)}`}>
+                          <strong>{t('Producer selector:')}</strong>
+                          <br />
+                          {entry.producerOfAppSelector}
+                        </HelperTextItem>
+                      </HelperText>
+                    </StackItem>
+                  )}
+                  {entry.consumerOfAppSelector && (
+                    <StackItem>
+                      <HelperText>
+                        <HelperTextItem data-test={`consumer-selector-${String(index)}`}>
+                          <strong>{t('Consumer selector:')}</strong>
+                          <br />
+                          {entry.consumerOfAppSelector}
+                        </HelperTextItem>
+                      </HelperText>
                     </StackItem>
                   )}
                   {errorMessage && (

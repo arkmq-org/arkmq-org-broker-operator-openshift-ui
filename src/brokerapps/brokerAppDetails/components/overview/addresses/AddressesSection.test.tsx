@@ -8,13 +8,12 @@ const brokerAppWithAddresses: BrokerAppCR = {
   metadata: { name: 'test-app', namespace: 'default', resourceVersion: '100' },
   spec: {
     serviceSelector: {},
-    addresses: [{ address: 'orders.internal' }],
-    sharedAddresses: [{ address: 'events.shared', pubSub: true }],
+    addresses: [{ address: 'orders.internal' }, { address: 'events.topic', pubSub: true }],
     capabilities: [
       {
         producerOf: [
           { address: 'orders.internal' },
-          { address: 'events.shared' },
+          { address: 'events.topic' },
           {
             address: 'external.queue',
             appName: 'other-app',
@@ -53,17 +52,16 @@ describe('AddressesSection', () => {
     expect(screen.queryByTestId('address-list')).not.toBeInTheDocument();
   });
 
-  it('hydrates all three address types from the CR', () => {
+  it('hydrates both address types from the CR', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByText('orders.internal')).toBeInTheDocument();
-    expect(screen.getByText('events.shared')).toBeInTheDocument();
+    expect(screen.getByText('events.topic')).toBeInTheDocument();
     expect(screen.getByText('external.queue')).toBeInTheDocument();
   });
 
   it('shows ownership labels for each address type', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
-    expect(screen.getByText('Private')).toBeInTheDocument();
-    expect(screen.getByText('Shared')).toBeInTheDocument();
+    expect(screen.getAllByText('Owned').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('External')).toBeInTheDocument();
   });
 
@@ -78,7 +76,7 @@ describe('AddressesSection', () => {
     expect(screen.getByText('other-ns/other-app')).toBeInTheDocument();
   });
 
-  it('shows Pub/Sub label for shared address with pubSub enabled', () => {
+  it('shows Pub/Sub label for address with pubSub enabled', () => {
     render(<AddressesSection brokerApp={brokerAppWithAddresses} />);
     expect(screen.getByText('Pub/Sub')).toBeInTheDocument();
   });

@@ -5,7 +5,6 @@ import {
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
 } from './reducer';
-import type { AddressOwnership } from './reducer';
 import type { BrokerAppSpec } from '../../k8s/types';
 
 describe('brokerAppReducer', () => {
@@ -558,7 +557,7 @@ describe('address reducer actions', () => {
     expect(state.addresses).toHaveLength(1);
     expect(state.addresses[0]).toEqual({
       address: '',
-      ownership: 'private',
+      ownership: 'owned',
       direction: 'produces',
     });
   });
@@ -599,18 +598,6 @@ describe('address reducer actions', () => {
     expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([{ address: 'orders.private' }]);
   });
 
-  it('UPDATE_ADDRESS ownership to shared writes to spec.sharedAddresses', () => {
-    const state = applyActions(
-      { type: 'ADD_ADDRESS' },
-      {
-        type: 'UPDATE_ADDRESS',
-        payload: { index: 0, address: 'events.shared', ownership: 'shared' },
-      },
-    );
-    expect(state.cr.spec.addresses).toBeUndefined();
-    expect(state.cr.spec.sharedAddresses).toEqual([{ address: 'events.shared' }]);
-  });
-
   it('UPDATE_ADDRESS ownership to external only writes capabilities, not addresses', () => {
     const state = applyActions(
       { type: 'ADD_ADDRESS' },
@@ -620,7 +607,6 @@ describe('address reducer actions', () => {
       },
     );
     expect(state.cr.spec.addresses).toBeUndefined();
-    expect(state.cr.spec.sharedAddresses).toBeUndefined();
     expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([{ address: 'external.queue' }]);
   });
 
@@ -697,7 +683,6 @@ describe('address reducer actions', () => {
       },
     );
     expect(state.cr.spec.addresses).toBeUndefined();
-    expect(state.cr.spec.sharedAddresses).toBeUndefined();
     expect(state.cr.spec.capabilities).toEqual([
       {
         consumerOf: [
@@ -917,10 +902,69 @@ describe('subscription via UPDATE_ADDRESS', () => {
     expect(state.addresses[0].subscriptions).toEqual(['sub-b']);
     expect(state.cr.spec.addresses?.[0].subscriptions).toEqual(['sub-b']);
   });
+
+  it('UPDATE_ADDRESS with CEL selectors writes them to spec.addresses', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'orders.new',
+          producerOfAppSelector: "app.metadata.name == 'order-processor'",
+          consumerOfAppSelector: "app.metadata.namespace == 'team-b'",
+        },
+      },
+    );
+    expect(state.cr.spec.addresses?.[0].producerOfAppSelector).toBe(
+      "app.metadata.name == 'order-processor'",
+    );
+    expect(state.cr.spec.addresses?.[0].consumerOfAppSelector).toBe(
+      "app.metadata.namespace == 'team-b'",
+    );
+  });
+
+  it('UPDATE_ADDRESS clears CEL selectors when switching to external', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'orders.new',
+          producerOfAppSelector: "app.metadata.name == 'x'",
+          consumerOfAppSelector: "app.metadata.name == 'y'",
+        },
+      },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: { index: 0, ownership: 'external' },
+      },
+    );
+    expect(state.addresses[0].producerOfAppSelector).toBeUndefined();
+    expect(state.addresses[0].consumerOfAppSelector).toBeUndefined();
+  });
+
+  it('UPDATE_ADDRESS omits empty CEL selectors from spec.addresses', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: {
+          index: 0,
+          address: 'orders.new',
+          producerOfAppSelector: '  ',
+          consumerOfAppSelector: '',
+        },
+      },
+    );
+    expect(state.cr.spec.addresses?.[0].producerOfAppSelector).toBeUndefined();
+    expect(state.cr.spec.addresses?.[0].consumerOfAppSelector).toBeUndefined();
+  });
 });
 
 describe('SET_MODEL hydration', () => {
-  it('hydrates private addresses from spec.addresses', () => {
+  it('hydrates owned addresses from spec.addresses', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
@@ -933,35 +977,36 @@ describe('SET_MODEL hydration', () => {
     expect(state.addresses).toHaveLength(2);
     expect(state.addresses[0]).toMatchObject({
       address: 'orders.private',
-      ownership: 'private',
+      ownership: 'owned',
       direction: 'none',
     });
     expect(state.addresses[1]).toMatchObject({
       address: 'events.topic',
-      ownership: 'private',
+      ownership: 'owned',
       direction: 'none',
       pubSub: true,
       subscriptions: ['sub-a'],
     });
   });
 
-  it('hydrates shared addresses from spec.sharedAddresses', () => {
+  it('hydrates CEL selectors from spec.addresses', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
-        sharedAddresses: [{ address: 'shared.topic', pubSub: true }],
+        addresses: [
+          {
+            address: 'orders.new',
+            producerOfAppSelector: "app.metadata.name == 'order-processor'",
+            consumerOfAppSelector: "app.metadata.namespace == 'team-b'",
+          },
+        ],
       }),
     });
-    expect(state.addresses).toHaveLength(1);
-    expect(state.addresses[0]).toMatchObject({
-      address: 'shared.topic',
-      ownership: 'shared',
-      direction: 'none',
-      pubSub: true,
-    });
+    expect(state.addresses[0].producerOfAppSelector).toBe("app.metadata.name == 'order-processor'");
+    expect(state.addresses[0].consumerOfAppSelector).toBe("app.metadata.namespace == 'team-b'");
   });
 
-  it('hydrates external addresses from capabilities not in addresses/sharedAddresses', () => {
+  it('hydrates external addresses from capabilities not in addresses', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
@@ -976,7 +1021,7 @@ describe('SET_MODEL hydration', () => {
     });
   });
 
-  it('merges direction from capabilities onto private addresses', () => {
+  it('merges direction from capabilities onto owned addresses', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
@@ -986,7 +1031,7 @@ describe('SET_MODEL hydration', () => {
     });
     expect(state.addresses[0]).toMatchObject({
       address: 'orders',
-      ownership: 'private',
+      ownership: 'owned',
       direction: 'consumes',
     });
   });
@@ -1007,16 +1052,15 @@ describe('SET_MODEL hydration', () => {
     expect(state.addresses[0].direction).toBe('both');
   });
 
-  it('hydrates all three sources together', () => {
+  it('hydrates both sources together', () => {
     const state = applyActions({
       type: 'SET_MODEL',
       payload: makeCR('imported', {
-        addresses: [{ address: 'private.queue' }],
-        sharedAddresses: [{ address: 'shared.topic', pubSub: true }],
+        addresses: [{ address: 'private.queue' }, { address: 'owned.topic', pubSub: true }],
         capabilities: [
           {
             producerOf: [{ address: 'private.queue' }, { address: 'external.out' }],
-            consumerOf: [{ address: 'shared.topic' }],
+            consumerOf: [{ address: 'owned.topic' }],
           },
         ],
       }),
@@ -1024,12 +1068,12 @@ describe('SET_MODEL hydration', () => {
     expect(state.addresses).toHaveLength(3);
     expect(state.addresses[0]).toMatchObject({
       address: 'private.queue',
-      ownership: 'private',
+      ownership: 'owned',
       direction: 'produces',
     });
     expect(state.addresses[1]).toMatchObject({
-      address: 'shared.topic',
-      ownership: 'shared',
+      address: 'owned.topic',
+      ownership: 'owned',
       direction: 'consumes',
       pubSub: true,
     });
@@ -1216,7 +1260,6 @@ describe('appName/appNamespace on external addresses', () => {
   it('syncAddressesToCR writes appName/appNamespace to capability entries', () => {
     const state = applyActions({ type: 'ADD_ADDRESS' }, EXTERNAL_WITH_REF);
     expect(state.cr.spec.addresses).toBeUndefined();
-    expect(state.cr.spec.sharedAddresses).toBeUndefined();
     expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([
       { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
     ]);
@@ -1252,21 +1295,13 @@ describe('appName/appNamespace on external addresses', () => {
     expect(entry).not.toHaveProperty(absent);
   });
 
-  it.each<{ target: AddressOwnership; crField: string }>([
-    { target: 'private', crField: 'addresses' },
-    { target: 'shared', crField: 'sharedAddresses' },
-  ])(
-    'switching ownership from external to $target clears appName/appNamespace',
-    ({ target, crField }) => {
-      const state = applyActions({ type: 'ADD_ADDRESS' }, EXTERNAL_WITH_REF, {
-        type: 'UPDATE_ADDRESS',
-        payload: { index: 0, ownership: target },
-      });
-      expect(state.addresses[0].appName).toBeUndefined();
-      expect(state.addresses[0].appNamespace).toBeUndefined();
-      expect(state.cr.spec[crField as keyof typeof state.cr.spec]).toEqual([
-        { address: 'remote.queue' },
-      ]);
-    },
-  );
+  it('switching ownership from external to owned clears appName/appNamespace', () => {
+    const state = applyActions({ type: 'ADD_ADDRESS' }, EXTERNAL_WITH_REF, {
+      type: 'UPDATE_ADDRESS',
+      payload: { index: 0, ownership: 'owned' },
+    });
+    expect(state.addresses[0].appName).toBeUndefined();
+    expect(state.addresses[0].appNamespace).toBeUndefined();
+    expect(state.cr.spec.addresses).toEqual([{ address: 'remote.queue' }]);
+  });
 });

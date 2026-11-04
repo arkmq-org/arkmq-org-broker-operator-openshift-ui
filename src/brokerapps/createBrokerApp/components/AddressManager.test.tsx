@@ -66,7 +66,7 @@ describe('AddressManager — card layout', () => {
   it('shows ownership and direction labels on the card after adding', () => {
     addEntry();
     saveModal();
-    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
     expect(screen.getByText('Produces')).toBeInTheDocument();
   });
 
@@ -292,12 +292,12 @@ describe('AddressManager — direction validation', () => {
     saveModal();
   });
 
-  it('shows a warning but allows Done when both directions are unchecked for a private address', () => {
+  it('shows a warning but allows Done when both directions are unchecked for an owned address', () => {
     openEditModal(0);
     fireEvent.click(screen.getByTestId('address-direction-produces-0'));
     expect(
       screen.getByText(
-        'Without a direction this private address will only reserve the name on the broker',
+        'Without a direction this owned address will only reserve the name on the broker',
       ),
     ).toBeInTheDocument();
     expect(screen.getByTestId('modal-done-btn')).not.toBeDisabled();
@@ -559,15 +559,15 @@ const mockWatchResource = useK8sWatchResource as jest.Mock;
 const MOCK_BROKER_APPS = [
   {
     metadata: { name: 'order-generator', namespace: 'service-project' },
-    spec: { sharedAddresses: [{ address: 'ORDERS.NEW' }, { address: 'ORDERS.PROCESSED' }] },
+    spec: { addresses: [{ address: 'ORDERS.NEW' }, { address: 'ORDERS.PROCESSED' }] },
   },
   {
     metadata: { name: 'event-publisher', namespace: 'service-project' },
-    spec: { sharedAddresses: [{ address: 'EVENTS.TOPIC', pubSub: true }] },
+    spec: { addresses: [{ address: 'EVENTS.TOPIC', pubSub: true }] },
   },
   {
     metadata: { name: 'inventory-app', namespace: 'ns-alpha' },
-    spec: { sharedAddresses: [{ address: 'INVENTORY.UPDATES' }] },
+    spec: { addresses: [{ address: 'INVENTORY.UPDATES' }] },
   },
 ];
 
@@ -632,7 +632,7 @@ describe('AddressManager — external address typeahead', () => {
     expect(screen.getByLabelText('App name')).toBeInTheDocument();
   });
 
-  it('hides namespace and app name dropdowns for private ownership', () => {
+  it('hides namespace and app name dropdowns for owned ownership', () => {
     expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
   });
@@ -655,7 +655,7 @@ describe('AddressManager — external address typeahead', () => {
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
   });
 
-  it('shows shared addresses from the selected BrokerApp in the address typeahead', async () => {
+  it('shows addresses from the selected BrokerApp in the address typeahead', async () => {
     await selectExternalApp();
     await openTypeahead('Address');
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
@@ -754,37 +754,20 @@ describe('AddressManager — switching ownership away from external', () => {
     mockWatchResource.mockReset();
   });
 
-  it('hides namespace/app fields and clears cross-app label when switching to private', async () => {
+  it('hides namespace/app fields and clears cross-app label when switching to owned', async () => {
     await selectExternalApp();
     await selectTypeaheadOption('Address', 'ORDERS.NEW');
     saveModal();
     expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Edit address'));
-    fireEvent.click(screen.getByText('Private'));
+    fireEvent.click(screen.getByText('Owned'));
     expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
     saveModal();
 
     expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
-    expect(screen.getByText('Private')).toBeInTheDocument();
-    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
-  });
-
-  it('hides namespace/app fields and clears cross-app label when switching to shared', async () => {
-    await selectExternalApp();
-    await selectTypeaheadOption('Address', 'ORDERS.NEW');
-    saveModal();
-    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Edit address'));
-    fireEvent.click(screen.getByText('Shared'));
-    expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
-    saveModal();
-
-    expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
-    expect(screen.getByText('Shared')).toBeInTheDocument();
+    expect(screen.getByText('Owned')).toBeInTheDocument();
     expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
   });
 });
