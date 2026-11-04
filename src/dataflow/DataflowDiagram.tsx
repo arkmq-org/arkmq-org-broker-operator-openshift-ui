@@ -86,13 +86,16 @@ export const DataflowDiagram: React.FC<DataflowDiagramProps> = ({
 
   const model = useMemo(() => toPipelineModel(graph, labels), [graph, labels]);
 
-  // As the pipeline groups example does on every update: replace the model, do not
-  // merge it, so positions and parents are rebuilt from scratch by the layout.
+  // As the pipeline groups example updates its model: merge, then lay out. Merging
+  // keeps the elements the mounted pills hold (a replaced element throws "has no
+  // parent" from their render); the explicit layout gives the merged elements
+  // their new positions, which a merge alone does not.
   useEffect(() => {
     controller.fromModel(
       { ...model, graph: { id: 'g1', type: 'graph', layout: PIPELINE_LAYOUT } },
-      false,
+      true,
     );
+    controller.getGraph().layout();
   }, [controller, model]);
 
   useEffect(() => {
