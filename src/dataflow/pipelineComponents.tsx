@@ -191,6 +191,8 @@ const DataflowTask: React.FC<TaskProps> = observer(
       data.draft;
     const Icon = look.icon;
     const edits = Boolean(editing) && look.editable;
+    // a draft box has no arrow to start but can be taken back
+    const hasMenu = Boolean(editing) && (look.editable || Boolean(draft));
     const [hover, hoverRef] = useHover<SVGGElement>();
     const box = React.useRef<SVGGElement | null>(null);
     // the drop target's hit test needs an element to measure: this box
@@ -258,7 +260,7 @@ const DataflowTask: React.FC<TaskProps> = observer(
           status={look.status}
           showStatusState={Boolean(look.status)}
           truncateLength={40}
-          onContextMenu={edits ? onContextMenu : undefined}
+          onContextMenu={hasMenu ? onContextMenu : undefined}
           contextMenuOpen={contextMenuOpen}
         />
       </g>

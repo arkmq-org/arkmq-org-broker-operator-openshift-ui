@@ -240,6 +240,9 @@ export const AddressDataflowEditor: React.FC = () => {
         const index = indexOfNode(nodeId);
         if (index < 0) return;
         if (editing && (editing.index === index || editing.isNew)) setEditing(null);
+        // the entries after the removed one move up: the panel follows its entry
+        else if (editing && editing.index > index)
+          setEditing({ ...editing, index: editing.index - 1 });
         dispatch({ type: 'REMOVE_ADDRESS', payload: { index } });
       },
       onConnect: (sourceId: string, target: ConnectorTarget) => {

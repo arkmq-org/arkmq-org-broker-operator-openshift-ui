@@ -308,6 +308,14 @@ export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
 
 // --- reducer ---
 
+/**
+ * A reference dropped on the diagram that no arrow has given a flow yet. The CR does
+ * not carry it (a capability needs a direction), so it is only drawn because its
+ * owner's box is, and goes with that box.
+ */
+const isDraftReference = (entry: Address): boolean =>
+  entry.kind === 'referenced' && entry.direction === 'none';
+
 export const brokerAppReducer = (
   state: BrokerAppFormState,
   action: BrokerAppFormAction,
@@ -351,14 +359,20 @@ export const brokerAppReducer = (
         drafts: { ...state.drafts, namespaces: [...state.drafts.namespaces, name] },
       };
     }
-    case 'REMOVE_DRAFT_NAMESPACE':
+    // Removing a draft box takes what was dropped into it: a draft app box and a
+    // reference with no flow yet are only drawn because the box is, and left behind
+    // they would draw it again.
+    case 'REMOVE_DRAFT_NAMESPACE': {
+      const { name } = action.payload;
       return {
         ...state,
         drafts: {
-          ...state.drafts,
-          namespaces: state.drafts.namespaces.filter((n) => n !== action.payload.name),
+          namespaces: state.drafts.namespaces.filter((n) => n !== name),
+          apps: state.drafts.apps.filter((a) => a.namespace !== name),
         },
+        addresses: state.addresses.filter((e) => !isDraftReference(e) || e.appNamespace !== name),
       };
+    }
     case 'ADD_DRAFT_APP': {
       const app = { namespace: action.payload.namespace.trim(), name: action.payload.name.trim() };
       if (!app.namespace || !app.name) return state;
@@ -367,16 +381,19 @@ export const brokerAppReducer = (
       }
       return { ...state, drafts: { ...state.drafts, apps: [...state.drafts.apps, app] } };
     }
-    case 'REMOVE_DRAFT_APP':
+    case 'REMOVE_DRAFT_APP': {
+      const { namespace, name } = action.payload;
       return {
         ...state,
         drafts: {
           ...state.drafts,
-          apps: state.drafts.apps.filter(
-            (a) => a.namespace !== action.payload.namespace || a.name !== action.payload.name,
-          ),
+          apps: state.drafts.apps.filter((a) => a.namespace !== namespace || a.name !== name),
         },
+        addresses: state.addresses.filter(
+          (e) => !isDraftReference(e) || e.appNamespace !== namespace || e.appName !== name,
+        ),
       };
+    }
 
     case 'REMOVE_ADDRESS':
       addresses = addresses.filter((_, i) => i !== action.payload.index);

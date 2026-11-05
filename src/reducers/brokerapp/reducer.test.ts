@@ -1455,4 +1455,68 @@ describe('drafts and dropped addresses', () => {
     });
     expect(state.drafts).toEqual({ namespaces: [], apps: [] });
   });
+
+  const chain = (): ReturnType<typeof createInitialBrokerAppState> => {
+    let state = createInitialBrokerAppState(ns);
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_NAMESPACE',
+      payload: { name: 'acme-ident' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_APP',
+      payload: { namespace: 'acme-ident', name: 'matcher' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_DRAFT_APP',
+      payload: { namespace: 'acme-ident', name: 'registry' },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: {
+        address: 'IDENT.RESULTS',
+        kind: 'referenced',
+        appName: 'matcher',
+        appNamespace: 'acme-ident',
+      },
+    });
+    state = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: {
+        address: 'IDENT.REQUEST',
+        kind: 'referenced',
+        appName: 'matcher',
+        appNamespace: 'acme-ident',
+      },
+    });
+    // a reference that already flows is in the CR and stays whatever box goes
+    state = brokerAppReducer(state, {
+      type: 'UPDATE_ADDRESS',
+      payload: { index: 1, direction: 'consumes' },
+    });
+    // an owned address of this app is never a draft of another box
+    state = brokerAppReducer(state, {
+      type: 'ADD_ADDRESS',
+      payload: { address: 'orders.created', kind: 'owned' },
+    });
+    return state;
+  };
+
+  it('removing a draft app takes the flow-less references dropped into it', () => {
+    const state = brokerAppReducer(chain(), {
+      type: 'REMOVE_DRAFT_APP',
+      payload: { namespace: 'acme-ident', name: 'matcher' },
+    });
+    expect(state.drafts.apps).toEqual([{ namespace: 'acme-ident', name: 'registry' }]);
+    expect(state.addresses.map((e) => e.address)).toEqual(['IDENT.REQUEST', 'orders.created']);
+  });
+
+  it('removing a draft namespace takes its draft apps and their flow-less references', () => {
+    const state = brokerAppReducer(chain(), {
+      type: 'REMOVE_DRAFT_NAMESPACE',
+      payload: { name: 'acme-ident' },
+    });
+    expect(state.drafts).toEqual({ namespaces: [], apps: [] });
+    expect(state.addresses.map((e) => e.address)).toEqual(['IDENT.REQUEST', 'orders.created']);
+    expect(state.cr.spec.capabilities?.[0].consumerOf?.[0].address).toBe('IDENT.REQUEST');
+  });
 });

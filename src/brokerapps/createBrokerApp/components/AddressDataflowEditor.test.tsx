@@ -238,6 +238,51 @@ describe('AddressDataflowEditor — palette', () => {
     await nameDrop('acme-audit');
     expect(screen.getByTestId('dataflow-node-ns:acme-audit')).toBeInTheDocument();
   });
+
+  it('removes a dropped namespace with the app and the address dropped into it', async () => {
+    dropItem('namespace', canvas());
+    await nameDrop('acme-ident');
+    dropItem('app', screen.getByTestId('dataflow-node-ns:acme-ident'));
+    await nameDrop('matcher');
+    dropItem('topic', screen.getByTestId('dataflow-node-app:acme-ident/matcher'));
+    await nameDrop('IDENT.RESULTS');
+    fireEvent.click(screen.getByTestId('mock-remove-ns:acme-ident'));
+    expect(screen.queryByTestId('dataflow-node-ns:acme-ident')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dataflow-node-app:acme-ident/matcher')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dataflow-node-addr:IDENT.RESULTS')).not.toBeInTheDocument();
+  });
+
+  it('removes a dropped app and leaves its namespace box', async () => {
+    dropItem('namespace', canvas());
+    await nameDrop('acme-ident');
+    dropItem('app', screen.getByTestId('dataflow-node-ns:acme-ident'));
+    await nameDrop('matcher');
+    fireEvent.click(screen.getByTestId('mock-remove-app:acme-ident/matcher'));
+    expect(screen.queryByTestId('dataflow-node-app:acme-ident/matcher')).not.toBeInTheDocument();
+    expect(screen.getByTestId('dataflow-node-ns:acme-ident')).toBeInTheDocument();
+  });
+});
+
+describe('AddressDataflowEditor — removing from the diagram', () => {
+  beforeEach(() => render(<Wrapper />));
+
+  it('removes the address from its menu and closes its panel', () => {
+    addNamed(0, 'first');
+    openEntry('first');
+    fireEvent.click(screen.getByTestId('mock-remove-addr:first'));
+    expect(screen.queryByTestId('dataflow-node-addr:first')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mock-topology-sidebar')).not.toBeInTheDocument();
+  });
+
+  it('keeps the panel on the opened address when an earlier one is removed', () => {
+    addNamed(0, 'first');
+    addNamed(1, 'second');
+    openEntry('second');
+    fireEvent.click(screen.getByTestId('mock-remove-addr:first'));
+    expect(screen.queryByTestId('dataflow-node-addr:first')).not.toBeInTheDocument();
+    expect(nodeOf('second')).toBeInTheDocument();
+    expect(within(panel()).getByTestId('address-name-input-0')).toHaveValue('second');
+  });
 });
 
 describe('AddressDataflowEditor — cancel discards changes', () => {

@@ -93,9 +93,9 @@ export const VisualizationProvider: React.FC<{
   <ControllerContext.Provider value={controller}>{children}</ControllerContext.Provider>
 );
 
-export const VisualizationSurface: React.FC<{ state?: { selectedIds?: string[] } }> = ({
-  state,
-}) => {
+export const VisualizationSurface: React.FC<{
+  state?: { selectedIds?: string[]; editing?: { onRemove?: (nodeId: string) => void } };
+}> = ({ state }) => {
   const controller = useContext(ControllerContext);
   const [, setVersion] = useState(0);
   React.useEffect(() => {
@@ -128,6 +128,19 @@ export const VisualizationSurface: React.FC<{ state?: { selectedIds?: string[] }
             onKeyDown={() => undefined}
           >
             {node.label}
+            {state?.editing?.onRemove ? (
+              // the editor's Remove menu item, without the library's context menu
+              <button
+                type="button"
+                data-test={`mock-remove-${node.id}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  state.editing?.onRemove?.(node.id);
+                }}
+              >
+                remove
+              </button>
+            ) : null}
           </div>
         );
       })}
