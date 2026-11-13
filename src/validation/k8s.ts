@@ -1,4 +1,4 @@
-import { parse as celParse } from 'cel-js';
+import { parse as celParse } from '@marcbachmann/cel-js';
 import { type Document, parseDocument } from 'yaml';
 import type { BrokerAppCR, BrokerAppSpec, BrokerService } from '../k8s/types';
 
@@ -227,20 +227,20 @@ export const validateMemoryQuantity = (value: string): string | null => {
 };
 
 /**
- * Validates a CEL app selector expression using a proper AST parser (cel-js).
+ * Validates a CEL app selector expression using @marcbachmann/cel-js.
  * Empty expressions are valid (operator falls back to same-namespace-only default).
- * Uses the cel-js library to parse the expression into a CST, catching syntax
- * errors that simple regex or character-based checks would miss.
  *
  * @param expression - Raw CEL expression string from the form field
- * @returns First parse error message, or null when the expression is syntactically valid
+ * @returns Parse error message, or null when the expression is syntactically valid
  */
 export const validateCelExpression = (expression: string): string | null => {
   if (!expression.trim()) return null;
 
-  const result = celParse(expression);
-  if (!result.isSuccess) {
-    return result.errors[0] ?? 'Invalid CEL expression';
+  try {
+    celParse(expression);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Invalid CEL expression';
+    return message.split('\n')[0] ?? message;
   }
 
   return null;
