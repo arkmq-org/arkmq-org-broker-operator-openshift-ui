@@ -86,6 +86,9 @@ export const HorizontalNav: FC<{
 export const ResourceYAMLEditor: FC<{ initialResource: object; create?: boolean }> = () =>
   createElement('div', { 'data-test': 'resource-yaml-editor' });
 
+export const CodeEditor: FC<{ value?: string; language?: string }> = ({ value }) =>
+  createElement('textarea', { 'data-test': 'code-editor', defaultValue: value });
+
 export enum PrometheusEndpoint {
   LABEL = 'api/v1/label',
   QUERY = 'api/v1/query',
