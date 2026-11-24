@@ -53,28 +53,27 @@ describe('BrokerServiceOverviewTab', () => {
     expect(screen.getByTestId('broker-service-overview-tab')).toBeInTheDocument();
     expect(screen.queryByTestId('resource-labels-and-annotations')).not.toBeInTheDocument();
     expect(screen.queryByTestId('broker-service-loaded-apps')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('broker-service-rejected-apps')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('broker-service-pending-empty')).not.toBeInTheDocument();
     expect(screen.getByText('Metrics')).toBeInTheDocument();
     expect(screen.getByText('No conditions')).toBeInTheDocument();
   });
 
-  it('hides rejected apps when status.rejectedApps is absent', () => {
+  it('hides pending empty section when status.pendingEmpty is absent', () => {
     render(<BrokerServiceOverviewTab obj={brokerService} />);
-    expect(screen.queryByTestId('broker-service-rejected-apps')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('broker-service-pending-empty')).not.toBeInTheDocument();
   });
 
-  it('shows rejected apps when status.rejectedApps has entries', () => {
+  it('shows pending empty section when status.pendingEmpty has entries', () => {
     render(
       <BrokerServiceOverviewTab
         obj={{
           ...brokerService,
           status: {
             ...brokerService.status,
-            rejectedApps: [
+            pendingEmpty: [
               {
-                name: 'app-b',
-                namespace: 'default',
-                reason: 'does not match service labels',
+                app: 'default/app-b',
+                messages: { 'orders::orders': '42' },
               },
             ],
           },
@@ -82,9 +81,9 @@ describe('BrokerServiceOverviewTab', () => {
       />,
     );
 
-    expect(screen.getByTestId('broker-service-rejected-apps')).toBeInTheDocument();
-    expect(screen.getByTestId('rejected-app-reason-default-app-b')).toHaveTextContent(
-      'does not match service labels',
-    );
+    expect(screen.getByTestId('broker-service-pending-empty')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('pending-empty-count-default/app-b-orders::orders'),
+    ).toHaveTextContent('42');
   });
 });

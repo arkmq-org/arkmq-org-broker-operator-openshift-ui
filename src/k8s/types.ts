@@ -104,16 +104,19 @@ export interface BrokerServiceSpec {
 }
 
 /**
- * A BrokerApp the operator rejected during provisioning validation for a BrokerService.
- * Populated on BrokerService status when label/CEL (and similar) checks fail for a candidate app.
+ * Tracks message drain progress for addresses owned by a BrokerApp that is
+ * being deleted or whose addresses were removed from its spec.
+ * Entries are removed from status.pendingEmpty once all queues reach zero.
  */
-export interface RejectedApp {
-  /** Rejected BrokerApp name. */
-  name: string;
-  /** Rejected BrokerApp namespace. */
-  namespace: string;
-  /** Operator-supplied explanation of why provisioning was refused. */
-  reason: string;
+export interface PendingEmptyAddressStatus {
+  /** Identity of the BrokerApp that owns the draining addresses (e.g. `namespace/name`). */
+  app: string;
+  /**
+   * Maps each fully qualified queue name (`address::queue`) to its pending
+   * message count. A value of `"unknown"` means the count has not yet been
+   * queried (Jolokia not ready). Entries are removed once the count reaches zero.
+   */
+  messages?: Record<string, string>;
 }
 
 export type BrokerService = K8sResourceCommon & {
@@ -123,9 +126,9 @@ export type BrokerService = K8sResourceCommon & {
     /** BrokerApps applied to this service, each as `<namespace>/<name>@<generation>`. */
     provisionedApps?: string[];
     /**
-     * BrokerApps rejected during provisioning validation on this service.
-     * Absent or empty when there are no rejections to show.
+     * Addresses pending message drain before they can be fully removed.
+     * Absent or empty when no drain is in progress.
      */
-    rejectedApps?: RejectedApp[];
+    pendingEmpty?: PendingEmptyAddressStatus[];
   };
 };
