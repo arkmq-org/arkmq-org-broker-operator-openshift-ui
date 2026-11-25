@@ -25,6 +25,7 @@ export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService })
     Warning: t('Warning'),
     Failed: t('Failed'),
     Pending: t('Pending'),
+    Draining: t('Draining'),
   };
 
   return (
@@ -64,6 +65,7 @@ export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService })
                   app.status?.conditions,
                   'Deployed',
                   'Pending',
+                  !!app.metadata?.deletionTimestamp,
                 );
 
                 return (

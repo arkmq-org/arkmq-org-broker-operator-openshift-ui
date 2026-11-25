@@ -104,6 +104,21 @@ describe('BrokerAppDetailsPage', () => {
     );
   });
 
+  it('shows Draining status when deletionTimestamp is set', () => {
+    const draining: BrokerAppCR = {
+      ...brokerApp,
+      metadata: { ...brokerApp.metadata, deletionTimestamp: '2026-01-01T00:00:00Z' },
+    };
+    mockUseK8sWatchResource.mockImplementation((query: { isList?: boolean }) => {
+      if (query.isList) return [[], true, undefined];
+      return [draining, true, undefined];
+    });
+    render(<BrokerAppDetailsPage namespace="default" model={BrokerAppModel} />);
+    expect(
+      screen.getByTestId('broker-app-details-status-default-my-payment-app'),
+    ).toHaveTextContent('Draining');
+  });
+
   it('does not show the service link when the app is not provisioned', () => {
     const unprovisioned: BrokerAppCR = {
       ...brokerApp,

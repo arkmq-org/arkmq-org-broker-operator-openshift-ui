@@ -52,6 +52,7 @@ const BrokerServiceDetailsPage: FC<BrokerServiceDetailsPageProps> = ({ namespace
     Warning: t('Warning'),
     Failed: t('Failed'),
     Pending: t('Pending'),
+    Draining: t('Draining'),
   };
 
   const pages = [
@@ -127,6 +128,7 @@ const BrokerServiceDetailsPage: FC<BrokerServiceDetailsPageProps> = ({ namespace
               <ResourceStatusBadge
                 conditions={brokerService.status?.conditions}
                 statusLabels={statusLabels}
+                isDraining={!!brokerService.metadata?.deletionTimestamp}
                 dataTest={`broker-service-details-status-${namespace}-${name}`}
               />
             </FlexItem>

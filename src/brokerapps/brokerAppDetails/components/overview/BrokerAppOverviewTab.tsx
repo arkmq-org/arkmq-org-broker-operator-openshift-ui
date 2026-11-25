@@ -1,6 +1,8 @@
 import type { FC } from 'react';
-import { PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
+import { Alert, PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { BrokerServiceModel } from '../../../../k8s/models';
 import type { BrokerAppCR } from '../../../../k8s/types';
 import { ConditionsTable } from '../../../../shared-components/resourceDetails/ConditionsTable';
 import { ResourceLabelsAndAnnotations } from '../../../../shared-components/resourceDetails/ResourceLabelsAndAnnotations';
@@ -20,6 +22,30 @@ export const BrokerAppOverviewTab: FC<BrokerAppOverviewTabProps> = ({ obj }) => 
   return (
     <PageSection data-test="broker-app-overview-tab">
       <Stack hasGutter>
+        {obj?.metadata?.deletionTimestamp && (
+          <StackItem>
+            <Alert
+              variant="info"
+              isInline
+              title={t('This app is being deleted')}
+              data-test="drain-in-progress-alert"
+            >
+              {t(
+                'Message drain is in progress — the app will be removed once all pending messages are consumed.',
+              )}
+              {obj.status?.service && (
+                <>
+                  {' '}
+                  <Link
+                    to={`/k8s/ns/${obj.status.service.namespace}/${BrokerServiceModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerServiceModel.apiVersion}~${BrokerServiceModel.kind}/${obj.status.service.name}`}
+                  >
+                    {t('View drain progress')}
+                  </Link>
+                </>
+              )}
+            </Alert>
+          </StackItem>
+        )}
         <StackItem>
           <Title headingLevel="h2" className="pf-v6-u-mb-md">
             {t('BrokerApp details')}

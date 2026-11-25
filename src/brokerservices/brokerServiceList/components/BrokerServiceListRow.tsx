@@ -39,7 +39,12 @@ export const BrokerServiceListRow = (
   const namespace = service.metadata?.namespace;
   const labels = service.metadata?.labels ?? {};
   const labelEntries = Object.entries(labels);
-  const { labelKey, color } = getReadyConditionDisplay(service.status?.conditions);
+  const { labelKey, color } = getReadyConditionDisplay(
+    service.status?.conditions,
+    'Ready',
+    'Warning',
+    !!service.metadata?.deletionTimestamp,
+  );
   const listPath =
     name && namespace
       ? `/k8s/ns/${namespace}/${BrokerServiceModel.apiGroup ?? 'broker.arkmq.org'}~${BrokerServiceModel.apiVersion}~${BrokerServiceModel.kind}`

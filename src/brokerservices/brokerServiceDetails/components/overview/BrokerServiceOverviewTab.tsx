@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
+import { Alert, PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import type { BrokerService } from '../../../../k8s/types';
 import { ConditionsTable } from '../../../../shared-components/resourceDetails/ConditionsTable';
@@ -7,7 +7,7 @@ import { ResourceLabelsAndAnnotations } from '../../../../shared-components/reso
 import { BrokerServiceMetrics } from './Metrics/BrokerServiceMetrics';
 import { LoadedAppsSection } from './loadedApps/LoadedAppsSection';
 import { boundAppNamespaces } from './loadedApps/useBoundBrokerApps';
-import { RejectedAppsSection } from './rejectedApps/RejectedAppsSection';
+import { PendingEmptySection } from './pendingEmpty/PendingEmptySection';
 
 export interface BrokerServiceOverviewTabProps {
   /** Watched BrokerService CR passed through HorizontalNav. */
@@ -22,6 +22,20 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
   return (
     <PageSection data-test="broker-service-overview-tab">
       <Stack hasGutter>
+        {obj?.metadata?.deletionTimestamp && (
+          <StackItem>
+            <Alert
+              variant="info"
+              isInline
+              title={t('This service is being deleted')}
+              data-test="drain-in-progress-alert"
+            >
+              {t(
+                'Message drain is in progress — the service will be removed once all pending messages are consumed.',
+              )}
+            </Alert>
+          </StackItem>
+        )}
         <StackItem>
           <Title headingLevel="h2" className="pf-v6-u-mb-md">
             {t('BrokerService details')}
@@ -36,7 +50,7 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
           />
         </StackItem>
         <StackItem>{obj ? <LoadedAppsSection brokerService={obj} /> : null}</StackItem>
-        <StackItem>{obj ? <RejectedAppsSection brokerService={obj} /> : null}</StackItem>
+        <StackItem>{obj ? <PendingEmptySection brokerService={obj} /> : null}</StackItem>
         <StackItem>
           <ConditionsTable conditions={obj?.status?.conditions} />
         </StackItem>

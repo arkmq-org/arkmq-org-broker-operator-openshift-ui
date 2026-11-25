@@ -7,6 +7,7 @@ const statusLabels = {
   Warning: 'Warning',
   Failed: 'Failed',
   Pending: 'Pending',
+  Draining: 'Draining',
 };
 
 describe('ResourceStatusBadge', () => {
@@ -56,5 +57,16 @@ describe('ResourceStatusBadge', () => {
       />,
     );
     expect(screen.getByTestId('resource-status-badge')).toHaveTextContent('Warning');
+  });
+
+  it('shows Draining when isDraining is true', () => {
+    render(
+      <ResourceStatusBadge
+        conditions={[{ type: 'Ready', status: K8sResourceConditionStatus.True }]}
+        statusLabels={statusLabels}
+        isDraining
+      />,
+    );
+    expect(screen.getByTestId('resource-status-badge')).toHaveTextContent('Draining');
   });
 });

@@ -17,6 +17,7 @@ const DEFAULT_OPTIONS = {
     Warning: 'Warning',
     Failed: 'Failed',
     Pending: 'Pending',
+    Draining: 'Draining',
   },
 };
 

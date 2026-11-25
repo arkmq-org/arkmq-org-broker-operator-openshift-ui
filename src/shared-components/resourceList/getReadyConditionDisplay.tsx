@@ -1,8 +1,8 @@
 import { K8sResourceConditionStatus, type K8sResourceCondition } from '../../k8s/types';
 
-export type ReadyConditionLabelKey = 'Running' | 'Warning' | 'Failed' | 'Pending';
+export type ReadyConditionLabelKey = 'Running' | 'Warning' | 'Failed' | 'Pending' | 'Draining';
 
-export type ReadyConditionLabelColor = 'green' | 'orange' | 'red' | 'grey';
+export type ReadyConditionLabelColor = 'green' | 'orange' | 'red' | 'grey' | 'blue';
 
 export interface ReadyConditionDisplay {
   labelKey: ReadyConditionLabelKey;
@@ -15,7 +15,12 @@ export function getReadyConditionDisplay(
   conditions: K8sResourceCondition[] | undefined,
   conditionType = 'Ready',
   falseWithoutErrorAs: 'Warning' | 'Pending' = 'Warning',
+  isDraining = false,
 ): ReadyConditionDisplay {
+  if (isDraining) {
+    return { labelKey: 'Draining', color: 'blue' };
+  }
+
   const condition = conditions?.find((entry) => entry.type === conditionType);
 
   if (!condition) {

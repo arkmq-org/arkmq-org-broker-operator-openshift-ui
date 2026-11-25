@@ -13,6 +13,7 @@ const STATUS_LABELS = {
   Warning: 'Warning',
   Failed: 'Failed',
   Pending: 'Pending',
+  Draining: 'Draining',
 };
 
 const DEFAULT_OPTIONS = {

@@ -57,6 +57,7 @@ const BrokerAppDetailsPage: FC<BrokerAppDetailsPageProps> = ({ namespace }) => {
     Warning: t('Warning'),
     Failed: t('Failed'),
     Pending: t('Pending'),
+    Draining: t('Draining'),
   };
 
   const pages = [
@@ -139,6 +140,7 @@ const BrokerAppDetailsPage: FC<BrokerAppDetailsPageProps> = ({ namespace }) => {
                 statusLabels={statusLabels}
                 conditionType="Deployed"
                 falseWithoutErrorAs="Pending"
+                isDraining={!!brokerApp.metadata?.deletionTimestamp}
                 dataTest={`broker-app-details-status-${namespace}-${name}`}
               />
             </FlexItem>

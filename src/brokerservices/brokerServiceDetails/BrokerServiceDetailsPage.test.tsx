@@ -69,6 +69,21 @@ describe('BrokerServiceDetailsPage', () => {
     expect(screen.getByText('BrokerService not found')).toBeInTheDocument();
   });
 
+  it('shows Draining status when deletionTimestamp is set', () => {
+    const draining: BrokerService = {
+      ...brokerService,
+      metadata: { ...brokerService.metadata, deletionTimestamp: '2026-01-01T00:00:00Z' },
+    };
+    mockUseK8sWatchResource.mockImplementation((query: { isList?: boolean }) => {
+      if (query.isList) return [[], true, undefined];
+      return [draining, true, undefined];
+    });
+    render(<BrokerServiceDetailsPage namespace="default" model={BrokerServiceModel} />);
+    expect(
+      screen.getByTestId('broker-service-details-status-default-my-messaging-service'),
+    ).toHaveTextContent('Draining');
+  });
+
   it('renders title, status, tabs, and Overview content when loaded', () => {
     render(<BrokerServiceDetailsPage namespace="default" model={BrokerServiceModel} />);
 

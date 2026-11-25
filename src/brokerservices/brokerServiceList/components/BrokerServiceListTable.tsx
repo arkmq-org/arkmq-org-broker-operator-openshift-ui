@@ -43,6 +43,7 @@ export const BrokerServiceListTable: FC<BrokerServiceListTableProps> = ({
           Warning: t('Warning'),
           Failed: t('Failed'),
           Pending: t('Pending'),
+          Draining: t('Draining'),
         },
       }),
     [t],

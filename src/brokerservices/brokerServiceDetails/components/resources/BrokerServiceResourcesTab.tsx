@@ -75,6 +75,7 @@ function ownedResourceStatusLabel(
       Warning: t('Warning'),
       Failed: t('Failed'),
       Pending: t('Pending'),
+      Draining: t('Draining'),
     };
     return statusLabels[labelKey];
   }

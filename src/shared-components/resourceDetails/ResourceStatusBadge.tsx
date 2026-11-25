@@ -17,6 +17,8 @@ export interface ResourceStatusBadgeProps {
    * BrokerService defaults to Warning; BrokerApp uses Pending.
    */
   falseWithoutErrorAs?: 'Warning' | 'Pending';
+  /** Whether the resource is being deleted with pending message drain. */
+  isDraining?: boolean;
   /** Optional test id for the badge element. */
   dataTest?: string;
 }
@@ -31,12 +33,14 @@ export const ResourceStatusBadge: FC<ResourceStatusBadgeProps> = ({
   statusLabels,
   conditionType = 'Ready',
   falseWithoutErrorAs = 'Warning',
+  isDraining = false,
   dataTest,
 }) => {
   const { labelKey, color } = getReadyConditionDisplay(
     conditions,
     conditionType,
     falseWithoutErrorAs,
+    isDraining,
   );
 
   return (

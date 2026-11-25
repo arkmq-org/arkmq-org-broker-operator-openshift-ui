@@ -160,9 +160,54 @@ export function createNamespace(name: string): void {
 }
 
 /**
- * Delete a namespace
+ * Strip finalizers from every resource of the given types that still exists
+ * in the namespace. Returns the count of resources that were patched.
+ *
+ * The operator's reconciliation loop can re-create child resources or fail
+ * our patch via resourceVersion conflicts, so callers should invoke this in
+ * a retry loop.
+ */
+function stripFinalizers(namespace: string, resourceTypes: string): number {
+  const resources = kubectl(`get ${resourceTypes} -n ${namespace} -o name`, {
+    ignoreError: true,
+  });
+  const remaining = resources.split('\n').filter(Boolean);
+  remaining.forEach((resource) => {
+    kubectl(`patch ${resource} -n ${namespace} --type=merge -p '{"metadata":{"finalizers":[]}}'`, {
+      ignoreError: true,
+    });
+  });
+  return remaining.length;
+}
+
+/**
+ * Delete a namespace and all operator-managed resources within it.
+ *
+ * The BrokerService operator does not use ownerReferences on child resources
+ * (Brokers, Secrets, Services) — it manages their lifecycle through a
+ * finalizer-driven reconciliation loop. Directly patching the BrokerService
+ * finalizer bypasses the operator's cleanup path and orphans child resources.
+ *
+ * To avoid this race the function:
+ * 1. Marks all CRD resources for deletion (sets deletionTimestamp)
+ * 2. Strips BrokerApp finalizers first — the operator can then naturally
+ *    clear the BrokerService finalizer and delete its child resources
+ * 3. Retries finalizer stripping in a loop because the operator's concurrent
+ *    reconciliation can recreate resources or cause patch conflicts
+ * 4. Force-deletes any remaining resources and the namespace
  */
 export function deleteNamespace(name: string): void {
+  kubectl(`delete brokerservices,brokerapps,brokers -n ${name} --all --wait=false`, {
+    ignoreError: true,
+  });
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    stripFinalizers(name, 'brokerapps');
+    const remaining = stripFinalizers(name, 'brokerservices,brokerapps,brokers');
+    if (remaining === 0) break;
+    execSync('sleep 2');
+  }
+
   kubectl(`delete namespace ${name} --ignore-not-found=true`, { timeout: 120000 });
   console.log(`✓ Namespace ${name} deleted`);
 }

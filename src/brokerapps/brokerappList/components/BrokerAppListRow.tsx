@@ -53,6 +53,7 @@ export const BrokerAppListRow = (
     app.status?.conditions,
     'Deployed',
     'Pending',
+    !!app.metadata?.deletionTimestamp,
   );
 
   return [
